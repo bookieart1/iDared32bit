@@ -41,6 +41,9 @@ pub struct State {
     pub window_levels: Vec<(id, CGFloat)>,
     /// Strong root-view-controller property for each window.
     pub root_view_controllers: Vec<(id, id)>,
+    /// Views whose archived iPad frame was normalized for an iPhone launch.
+    /// Non-retaining; used to select the matching legacy rotation geometry.
+    normalized_legacy_views: Vec<id>,
 }
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -307,6 +310,49 @@ pub const CLASSES: ClassExports = objc_classes! {
             let view_frame: CGRect = msg![env; view frame];
             log_dbg!("Old view frame: {view_frame:?}");
 
+            let was_normalized = env
+                .framework_state
+                .uikit
+                .ui_view
+                .ui_window
+                .normalized_legacy_views
+                .contains(&view);
+
+            if was_normalized
+                && matches!(
+                    orientation,
+                    UIInterfaceOrientationLandscapeLeft | UIInterfaceOrientationLandscapeRight
+                )
+            {
+                // A landscape root view uses landscape logical bounds while
+                // its containing UIWindow remains in portrait screen
+                // coordinates on old iOS. Centering before rotation makes the
+                // transformed frame exactly cover the 320x480 window instead
+                // of pinning a magnified quadrant to one corner.
+                let window_bounds: CGRect = msg![env; this bounds];
+                let landscape_bounds = CGRect {
+                    origin: CGPoint { x: 0.0, y: 0.0 },
+                    size: crate::frameworks::core_graphics::CGSize {
+                        width: window_bounds.size.height,
+                        height: window_bounds.size.width,
+                    },
+                };
+                let center = CGPoint {
+                    x: window_bounds.origin.x + window_bounds.size.width / 2.0,
+                    y: window_bounds.origin.y + window_bounds.size.height / 2.0,
+                };
+                () = msg![env; view setBounds:landscape_bounds];
+                () = msg![env; view setCenter:center];
+                () = msg![env; view setTransform:transform];
+                log!(
+                    "Applied normalized landscape geometry to view {:?}: bounds={:?}, center={:?}",
+                    view,
+                    landscape_bounds,
+                    center
+                );
+                return;
+            }
+
             () = msg![env; view setTransform:transform];
 
             // Re-apply the view's old frame to compensate for the rotation
@@ -391,6 +437,15 @@ fn normalize_legacy_device_family_frame(env: &mut crate::Environment, view: id) 
             phone_bounds
         );
         () = msg![env; view setFrame:phone_bounds];
+        let normalized = &mut env
+            .framework_state
+            .uikit
+            .ui_view
+            .ui_window
+            .normalized_legacy_views;
+        if !normalized.contains(&view) {
+            normalized.push(view);
+        }
     }
 }
 

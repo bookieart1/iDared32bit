@@ -12,6 +12,7 @@
 //! by other threads. So we consider host functions to be atomic!
 
 use crate::dyld::FunctionExports;
+use crate::environment::ThreadBlock;
 use crate::export_c_func;
 use crate::mem::{MutPtr, MutVoidPtr};
 use crate::Environment;
@@ -86,6 +87,28 @@ fn OSMemoryBarrier(_env: &mut Environment) {
     // no-op
 }
 
+fn OSSpinLockTry(env: &mut Environment, lock: MutPtr<i32>) -> bool {
+    if env.mem.read(lock) != 0 {
+        return false;
+    }
+    // Guest threads are cooperatively scheduled, so this read/write sequence
+    // cannot be interrupted unless a host implementation explicitly yields.
+    env.mem.write(lock, 1);
+    true
+}
+
+fn OSSpinLockLock(env: &mut Environment, lock: MutPtr<i32>) {
+    while !OSSpinLockTry(env, lock) {
+        // Let the lock owner run instead of busy-spinning the single host
+        // thread forever.
+        env.yield_thread(ThreadBlock::NotBlocked);
+    }
+}
+
+fn OSSpinLockUnlock(env: &mut Environment, lock: MutPtr<i32>) {
+    env.mem.write(lock, 0);
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(OSAtomicAdd32(_, _)),
     export_c_func!(OSAtomicAdd32Barrier(_, _)),
@@ -95,4 +118,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(OSAtomicCompareAndSwapPtr(_, _, _)),
     export_c_func!(OSAtomicCompareAndSwapPtrBarrier(_, _, _)),
     export_c_func!(OSMemoryBarrier()),
+    export_c_func!(OSSpinLockTry(_)),
+    export_c_func!(OSSpinLockLock(_)),
+    export_c_func!(OSSpinLockUnlock(_)),
 ];

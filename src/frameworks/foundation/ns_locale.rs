@@ -243,6 +243,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+- (id)displayNameForKey:(id)key value:(id)value {
+    if value == nil {
+        return nil;
+    }
+
+    let key = ns_string::to_rust_string(env, key);
+    let value_string = ns_string::to_rust_string(env, value);
+    let display_name = locale_display_name(&key, &value_string);
+    let result = ns_string::from_rust_string(env, display_name);
+    autorelease(env, result)
+}
+
 @end
 
 };
@@ -258,9 +270,49 @@ fn parse_locale_identifier(identifier: &str) -> (String, Option<String>) {
     (language, country)
 }
 
+fn locale_display_name(key: &str, value: &str) -> String {
+    match key {
+        NSLocaleLanguageCode | kCFLocaleLanguageCode => match value.to_ascii_lowercase().as_str() {
+            "de" => "German".into(),
+            "en" => "English".into(),
+            "es" => "Spanish".into(),
+            "fr" => "French".into(),
+            "it" => "Italian".into(),
+            "ja" => "Japanese".into(),
+            "ko" => "Korean".into(),
+            "pt" => "Portuguese".into(),
+            "ru" => "Russian".into(),
+            "zh" => "Chinese".into(),
+            _ => value.into(),
+        },
+        NSLocaleCountryCode | kCFLocaleCountryCode => match value.to_ascii_uppercase().as_str() {
+            "AU" => "Australia".into(),
+            "BR" => "Brazil".into(),
+            "CA" => "Canada".into(),
+            "CN" => "China".into(),
+            "DE" => "Germany".into(),
+            "ES" => "Spain".into(),
+            "FR" => "France".into(),
+            "GB" | "UK" => "United Kingdom".into(),
+            "IT" => "Italy".into(),
+            "JP" => "Japan".into(),
+            "KR" => "South Korea".into(),
+            "RU" => "Russia".into(),
+            "US" => "United States".into(),
+            _ => value.into(),
+        },
+        // A useful non-nil fallback for identifiers and less common locale
+        // keys. Apps generally use this API for labels or feature selection;
+        // returning the supplied locale value is preferable to aborting.
+        _ => value.into(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse_locale_identifier;
+    use super::{
+        locale_display_name, parse_locale_identifier, NSLocaleCountryCode, NSLocaleLanguageCode,
+    };
 
     #[test]
     fn parses_common_locale_identifiers() {
@@ -276,6 +328,22 @@ mod tests {
         assert_eq!(
             parse_locale_identifier("zh-Hant-TW"),
             ("zh".into(), Some("TW".into()))
+        );
+    }
+
+    #[test]
+    fn supplies_common_locale_display_names_and_safe_fallbacks() {
+        assert_eq!(
+            locale_display_name(NSLocaleLanguageCode, "en"),
+            "English"
+        );
+        assert_eq!(
+            locale_display_name(NSLocaleCountryCode, "US"),
+            "United States"
+        );
+        assert_eq!(
+            locale_display_name("NSLocaleIdentifier", "en_US"),
+            "en_US"
         );
     }
 }
