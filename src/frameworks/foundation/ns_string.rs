@@ -532,6 +532,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this initWithBytes:c_string length:len encoding:encoding]
 }
 
+- (id)initWithBytesNoCopy:(MutPtr<u8>)bytes
+                   length:(NSUInteger)length
+                 encoding:(NSStringEncoding)encoding
+             freeWhenDone:(bool)free_when_done {
+    // Our backing representation owns its decoded contents, so it is safe to
+    // release a transferred guest buffer as soon as initialization finishes.
+    let new: id = msg![env; this initWithBytes:bytes.cast_const()
+                                    length:length
+                                  encoding:encoding];
+    if free_when_done && !bytes.is_null() {
+        env.mem.free(bytes.cast_void());
+    }
+    new
+}
+
 - (id)dataUsingEncoding:(NSStringEncoding)encoding {
     msg![env; this dataUsingEncoding:encoding allowLossyConversion:false]
 }
