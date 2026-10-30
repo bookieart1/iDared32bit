@@ -1435,12 +1435,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     new_str
 }
 - (())encodeWithCoder:(id)coder {
-    let string = to_rust_string(env, this);
-    assert!(string.as_bytes().iter().all(|byte| byte.is_ascii())); // TODO
-
-    // TODO: use some kind of substitution instead?
-    // See "Making Substitutions During Coding" in the doc https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Archiving/Articles/codingobjects.html
-    set_value_to_encode_for_current_key(env, coder, plist::Value::String(string.to_string()));
+    encode_with_coder_inner(env, this, coder)
 }
 
 - (id)initWithData:(id)data // NSData *
@@ -1714,6 +1709,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+// NSCoding implementation
+- (())encodeWithCoder:(id)coder {
+    encode_with_coder_inner(env, this, coder)
+}
+
 - (id)initWithCString:(ConstPtr<u8>)c_string
              encoding:(NSStringEncoding)encoding {
     assert!(C_STRING_FRIENDLY_ENCODINGS.contains(&encoding), "encoding {encoding}");
@@ -1755,6 +1755,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+/// Shared NSCoding implementation for the concrete immutable and mutable
+/// NSString subclasses.
+fn encode_with_coder_inner(env: &mut Environment, this: id, coder: id) {
+    let string = to_rust_string(env, this);
+
+    // TODO: use some kind of substitution instead?
+    // See "Making Substitutions During Coding" in the doc https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Archiving/Articles/codingobjects.html
+    set_value_to_encode_for_current_key(env, coder, plist::Value::String(string.to_string()));
+}
 
 /// This helper is used in `initWithFormat:` on our private subclasses
 /// _touchHLE_NSString and _touchHLE_NSMutableString
