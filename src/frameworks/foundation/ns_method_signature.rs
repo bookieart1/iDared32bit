@@ -12,8 +12,10 @@
 use crate::environment::Environment;
 use crate::frameworks::foundation::NSUInteger;
 use crate::libc::string::strncpy;
-use crate::mem::{ConstPtr, GuestUSize};
+use crate::mem::{ConstPtr, GuestUSize, MutPtr};
 use crate::objc::{autorelease, id, objc_classes, ClassExports, HostObject};
+use crate::dyld::FunctionExports;
+use crate::export_c_func;
 
 struct NSMethodSignatureHostObject {
     return_type: ConstPtr<u8>,
@@ -117,5 +119,181 @@ fn parse_signature_inner(env: &mut Environment, curr: ConstPtr<u8>) -> (GuestUSi
             (idx, 1, size)
         }
         _ => unimplemented!("parse_signature_inner: {}", c as char),
+    }
+}
+
+fn align_up(value: NSUInteger, alignment: NSUInteger) -> NSUInteger {
+    if alignment <= 1 {
+        value
+    } else {
+        (value + alignment - 1) & !(alignment - 1)
+    }
+}
+
+/// Parse one Objective-C type encoding and return the number of bytes consumed,
+/// its size and its alignment for the 32-bit iOS ABI.
+fn parse_type_layout(
+    env: &Environment,
+    type_ptr: ConstPtr<u8>,
+) -> (GuestUSize, NSUInteger, NSUInteger) {
+    let mut idx: GuestUSize = 0;
+
+    while matches!(
+        env.mem.read(type_ptr + idx),
+        b'r' | b'n' | b'N' | b'o' | b'O' | b'R' | b'V'
+    ) {
+        idx += 1;
+    }
+
+    let encoding = env.mem.read(type_ptr + idx);
+    idx += 1;
+    let (size, alignment) = match encoding {
+        b'v' => (0, 1),
+        b'c' | b'C' | b'B' => (1, 1),
+        b's' | b'S' => (2, 2),
+        b'i' | b'I' | b'l' | b'L' | b'f' => (4, 4),
+        b'q' | b'Q' | b'd' => (8, 8),
+        b'@' => {
+            // Blocks are encoded as @?, and an object may include a quoted
+            // class name. Both still have pointer layout.
+            if env.mem.read(type_ptr + idx) == b'?' {
+                idx += 1;
+            } else if env.mem.read(type_ptr + idx) == b'"' {
+                idx += 1;
+                while env.mem.read(type_ptr + idx) != b'"' {
+                    idx += 1;
+                }
+                idx += 1;
+            }
+            (4, 4)
+        }
+        b'#' | b':' | b'*' => (4, 4),
+        b'^' => {
+            let (scanned, _, _) = parse_type_layout(env, type_ptr + idx);
+            idx += scanned;
+            (4, 4)
+        }
+        b'[' => {
+            let mut count = 0;
+            while let digit @ b'0'..=b'9' = env.mem.read(type_ptr + idx) {
+                count = count * 10 + (digit - b'0') as NSUInteger;
+                idx += 1;
+            }
+            let (scanned, element_size, element_alignment) =
+                parse_type_layout(env, type_ptr + idx);
+            idx += scanned;
+            if env.mem.read(type_ptr + idx) == b']' {
+                idx += 1;
+            }
+            (
+                align_up(element_size, element_alignment) * count,
+                element_alignment,
+            )
+        }
+        b'{' | b'(' => {
+            let closing = if encoding == b'{' { b'}' } else { b')' };
+            while env.mem.read(type_ptr + idx) != b'='
+                && env.mem.read(type_ptr + idx) != closing
+            {
+                idx += 1;
+            }
+            if env.mem.read(type_ptr + idx) == b'=' {
+                idx += 1;
+            }
+
+            let is_union = encoding == b'(';
+            let mut aggregate_size = 0;
+            let mut aggregate_alignment = 1;
+            while env.mem.read(type_ptr + idx) != closing {
+                // Modern encodings may include quoted field names.
+                if env.mem.read(type_ptr + idx) == b'"' {
+                    idx += 1;
+                    while env.mem.read(type_ptr + idx) != b'"' {
+                        idx += 1;
+                    }
+                    idx += 1;
+                }
+                let (scanned, field_size, field_alignment) =
+                    parse_type_layout(env, type_ptr + idx);
+                idx += scanned;
+                aggregate_alignment = aggregate_alignment.max(field_alignment);
+                if is_union {
+                    aggregate_size = aggregate_size.max(field_size);
+                } else {
+                    aggregate_size = align_up(aggregate_size, field_alignment) + field_size;
+                }
+            }
+            idx += 1;
+            (
+                align_up(aggregate_size, aggregate_alignment),
+                aggregate_alignment,
+            )
+        }
+        b'b' => {
+            let mut bits = 0;
+            while let digit @ b'0'..=b'9' = env.mem.read(type_ptr + idx) {
+                bits = bits * 10 + (digit - b'0') as NSUInteger;
+                idx += 1;
+            }
+            ((bits + 7) / 8, 1)
+        }
+        b'?' => (0, 1),
+        other => {
+            log!(
+                "Warning: NSGetSizeAndAlignment encountered unknown type encoding {:?}",
+                other as char
+            );
+            (0, 1)
+        }
+    };
+
+    // Method encodings can append a stack offset to a type.
+    if matches!(env.mem.read(type_ptr + idx), b'+' | b'-') {
+        idx += 1;
+    }
+    while matches!(env.mem.read(type_ptr + idx), b'0'..=b'9') {
+        idx += 1;
+    }
+
+    (idx, size, alignment)
+}
+
+fn NSGetSizeAndAlignment(
+    env: &mut Environment,
+    type_ptr: ConstPtr<u8>,
+    size_ptr: MutPtr<NSUInteger>,
+    alignment_ptr: MutPtr<NSUInteger>,
+) -> ConstPtr<u8> {
+    let (scanned, size, alignment) = parse_type_layout(env, type_ptr);
+    if !size_ptr.is_null() {
+        env.mem.write(size_ptr, size);
+    }
+    if !alignment_ptr.is_null() {
+        env.mem.write(alignment_ptr, alignment);
+    }
+    type_ptr + scanned
+}
+
+pub const FUNCTIONS: FunctionExports = &[export_c_func!(NSGetSizeAndAlignment(_, _, _))];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn size_and_alignment_handles_nested_types() {
+        let mut env = Environment::new_fake_for_test();
+        let encoding = env
+            .mem
+            .alloc_and_write_cstr(b"{Example=c[3i]d}")
+            .cast_const();
+        let size = env.mem.alloc_and_write(0);
+        let alignment = env.mem.alloc_and_write(0);
+
+        let end = NSGetSizeAndAlignment(&mut env, encoding, size, alignment);
+
+        assert_eq!(env.mem.read(size), 24);
+        assert_eq!(env.mem.read(alignment), 8);
+        assert_eq!(env.mem.read(end), b'\0');
     }
 }

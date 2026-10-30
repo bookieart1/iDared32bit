@@ -44,7 +44,7 @@ pub use objects::{
 pub use properties::todo_objc_setter;
 pub use selectors::{selector, SEL};
 
-use crate::mem::{ConstVoidPtr, MutPtr};
+use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, Ptr};
 use crate::Environment;
 use classes::{
     class_getInstanceMethod, class_getInstanceSize, class_getMethodImplementation,
@@ -148,6 +148,9 @@ pub struct ObjC {
     /// GuestFunctions for class+selector combos
     cached_guest_functions: HashMap<(Class, SEL), GuestFunction>,
 
+    /// Stable C strings returned by object_getClassName().
+    class_name_cstrings: HashMap<Class, ConstPtr<u8>>,
+
     /// Temporary storage for optional type information when sending a message.
     /// Type information isn't part of the `objc_msgSend` ABI, so an alternative
     /// channel is needed.
@@ -165,6 +168,7 @@ impl ObjC {
             method_handles: HashMap::new(),
             metaclass_classes: HashMap::new(),
             cached_guest_functions: HashMap::new(),
+            class_name_cstrings: HashMap::new(),
             message_type_info: None,
         }
     }
@@ -201,6 +205,23 @@ fn _Block_object_dispose(_env: &mut Environment, object: ConstVoidPtr, flags: i3
     );
 }
 
+fn object_getClassName(env: &mut Environment, object: id) -> ConstPtr<u8> {
+    let class = object_getClass(env, object);
+    if class == nil {
+        return Ptr::null();
+    }
+    if let Some(&name) = env.objc.class_name_cstrings.get(&class) {
+        return name;
+    }
+    let class_name = env.objc.get_class_name(class).to_owned();
+    let name = env
+        .mem
+        .alloc_and_write_cstr(class_name.as_bytes())
+        .cast_const();
+    env.objc.class_name_cstrings.insert(class, name);
+    name
+}
+
 const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_getInstanceSize(_)),
     export_c_func!(class_getSuperclass(_)),
@@ -219,6 +240,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_sync_enter(_)),
     export_c_func!(objc_sync_exit(_)),
     export_c_func!(object_getClass(_)),
+    export_c_func!(object_getClassName(_)),
     export_c_func!(sel_registerName(_)),
     export_c_func!(_Block_object_dispose(_, _)),
 ];

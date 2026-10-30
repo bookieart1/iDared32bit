@@ -19,6 +19,7 @@ pub mod cxxabi;
 pub mod dirent;
 pub mod dlfcn;
 pub mod dns_sd;
+pub mod dispatch;
 pub mod errno;
 pub mod fnmatch;
 pub mod glob;
@@ -50,7 +51,12 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/usr/lib/libSystem.B.dylib",
     aliases: &["/usr/lib/libSystem.dylib"],
     class_exports: &[],
-    constant_exports: &[ctype::CONSTANTS, stdio::CONSTANTS, mach::init::CONSTANTS],
+    constant_exports: &[
+        ctype::CONSTANTS,
+        dispatch::CONSTANTS,
+        stdio::CONSTANTS,
+        mach::init::CONSTANTS,
+    ],
     function_exports: &[
         arpa::inet::FUNCTIONS,
         clocale::FUNCTIONS,
@@ -60,6 +66,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         dirent::FUNCTIONS,
         dlfcn::FUNCTIONS,
         dns_sd::FUNCTIONS,
+        dispatch::FUNCTIONS,
         errno::FUNCTIONS,
         fnmatch::FUNCTIONS,
         glob::FUNCTIONS,

@@ -138,6 +138,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_exception::FUNCTIONS,
         ns_file_manager::FUNCTIONS,
         ns_log::FUNCTIONS,
+        ns_method_signature::FUNCTIONS,
         ns_objc_runtime::FUNCTIONS,
     ],
 };

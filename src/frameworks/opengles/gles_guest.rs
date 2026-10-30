@@ -1694,10 +1694,42 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glGetFramebufferAttachmentParameterivOES(_, _, _, _)),
     export_c_func!(glGetRenderbufferParameterivOES(_, _, _)),
     export_c_func!(glCheckFramebufferStatusOES(_)),
-    // OpenGL ES 2 exposes this without the OES suffix. The framebuffer status
-    // values and target are compatible with the OES entry point used by our
-    // OpenGL ES backend.
-    export_c_func_aliased!("glCheckFramebufferStatus", glCheckFramebufferStatusOES(_)),
+    // OpenGL ES 2 exposes the same framebuffer API without the OES suffix.
+    // Its object names, enum values and behavior are compatible with the OES
+    // entry points used by our OpenGL ES backend.
+    export_c_func_aliased!("glGenFramebuffers", glGenFramebuffersOES(_, _)),
+    export_c_func_aliased!("glGenRenderbuffers", glGenRenderbuffersOES(_, _)),
+    export_c_func_aliased!("glIsFramebuffer", glIsFramebufferOES(_)),
+    export_c_func_aliased!("glIsRenderbuffer", glIsRenderbufferOES(_)),
+    export_c_func_aliased!("glBindFramebuffer", glBindFramebufferOES(_, _)),
+    export_c_func_aliased!("glBindRenderbuffer", glBindRenderbufferOES(_, _)),
+    export_c_func_aliased!(
+        "glRenderbufferStorage",
+        glRenderbufferStorageOES(_, _, _, _)
+    ),
+    export_c_func_aliased!(
+        "glFramebufferRenderbuffer",
+        glFramebufferRenderbufferOES(_, _, _, _)
+    ),
+    export_c_func_aliased!(
+        "glFramebufferTexture2D",
+        glFramebufferTexture2DOES(_, _, _, _, _)
+    ),
+    export_c_func_aliased!(
+        "glGetFramebufferAttachmentParameteriv",
+        glGetFramebufferAttachmentParameterivOES(_, _, _, _)
+    ),
+    export_c_func_aliased!(
+        "glGetRenderbufferParameteriv",
+        glGetRenderbufferParameterivOES(_, _, _)
+    ),
+    export_c_func_aliased!(
+        "glCheckFramebufferStatus",
+        glCheckFramebufferStatusOES(_)
+    ),
+    export_c_func_aliased!("glDeleteFramebuffers", glDeleteFramebuffersOES(_, _)),
+    export_c_func_aliased!("glDeleteRenderbuffers", glDeleteRenderbuffersOES(_, _)),
+    export_c_func_aliased!("glGenerateMipmap", glGenerateMipmapOES(_)),
     export_c_func!(glDeleteFramebuffersOES(_, _)),
     export_c_func!(glDeleteRenderbuffersOES(_, _)),
     export_c_func!(glDiscardFramebufferEXT(_, _, _)),
