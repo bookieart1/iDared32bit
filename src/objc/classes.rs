@@ -1110,10 +1110,7 @@ pub(super) fn class_copyPropertyList(
         env.mem.write(out_count, 0);
     }
     if cls != nil {
-        log_once!(
-            "TODO: class_copyPropertyList for class '{}' returns an empty list",
-            env.objc.get_class_name(cls)
-        );
+        log_once!("TODO: class_copyPropertyList returns an empty list");
     }
     Ptr::null()
 }
