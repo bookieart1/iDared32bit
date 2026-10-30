@@ -8,8 +8,8 @@
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::libc::mach::init::MACH_TASK_SELF;
 use crate::libc::mach::port::mach_port_t;
-use crate::libc::mach::thread_info::{kern_return_t, KERN_SUCCESS};
-use crate::mem::{MutPtr, Ptr, PAGE_SIZE_ALIGN_MASK};
+use crate::libc::mach::thread_info::{kern_return_t, KERN_NO_SPACE, KERN_SUCCESS};
+use crate::mem::{MutPtr, Ptr, VMAllocError, PAGE_SIZE_ALIGN_MASK};
 use crate::Environment;
 use std::collections::HashMap;
 
@@ -39,7 +39,10 @@ pub fn vm_allocate(
 
     let address = (flags & VM_FLAGS_ANYWHERE == 0).then(|| env.mem.read(address_ptr));
 
-    let allocated = env.mem.vm_alloc(address, size).unwrap();
+    let allocated = match env.mem.vm_alloc(address, size) {
+        Ok(allocated) => allocated,
+        Err(VMAllocError::AddressUnavailable | VMAllocError::NoSpace) => return KERN_NO_SPACE,
+    };
     let address = allocated.to_bits();
     assert!(address & PAGE_SIZE_ALIGN_MASK == 0);
     env.mem.write(address_ptr, address);
