@@ -636,6 +636,19 @@ fn vsnprintf(
     res.len().try_into().unwrap()
 }
 
+fn vsnprintf_l(
+    env: &mut Environment,
+    dest: MutPtr<u8>,
+    n: GuestUSize,
+    _locale: MutVoidPtr,
+    format: ConstPtr<u8>,
+    arg: VaList,
+) -> i32 {
+    // Formatting is currently locale-independent, so this has the same
+    // behavior as vsnprintf while still providing the Darwin API.
+    vsnprintf(env, dest, n, format, arg)
+}
+
 fn vsprintf(env: &mut Environment, dest: MutPtr<u8>, format: ConstPtr<u8>, arg: VaList) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -1333,6 +1346,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(vasprintf(_, _, _)),
     export_c_func!(vprintf(_, _)),
     export_c_func!(vsnprintf(_, _, _, _)),
+    export_c_func!(vsnprintf_l(_, _, _, _, _)),
     export_c_func!(vsprintf(_, _, _)),
     export_c_func!(__sprintf_chk(_, _, _, _, _)),
     export_c_func!(sprintf(_, _, _)),

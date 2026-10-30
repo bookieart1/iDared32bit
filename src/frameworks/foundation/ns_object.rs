@@ -216,6 +216,135 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // NSKeyValueCoding
 // https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/KeyValueCoding/SearchImplementation.html
+- (id)valueForKey:(id)key { // NSString*
+    let key_string = to_rust_string(env, key); // TODO: avoid copy?
+    assert!(key_string.is_ascii()); // TODO: do we have to handle non-ASCII keys?
+    if key_string.is_empty() {
+        let sel = env.objc.lookup_selector("valueForUndefinedKey:").unwrap();
+        return msg_send(env, (this, sel, key));
+    }
+    let camel_case_key_string = format!("{}{}", key_string.as_bytes()[0].to_ascii_uppercase() as char, &key_string[1..]);
+    let class: Class = msg![env; this class];
+
+    // Search the standard KVC getter names in order.
+    let getter = [
+        format!("get{camel_case_key_string}"),
+        key_string.to_string(),
+        format!("is{camel_case_key_string}"),
+        format!("_{key_string}"),
+    ].into_iter().find_map(|name| {
+        env.objc.lookup_selector(&name).filter(|&sel| env.objc.class_has_method(class, sel))
+    });
+
+    if let Some(sel) = getter {
+        let return_type = env.objc.class_get_method_types(class, sel)
+            .and_then(|types| types.chars().next())
+            .unwrap_or(TYPE_UNDEF);
+        return match return_type {
+            TYPE_ID | TYPE_CLASS => msg_send(env, (this, sel)),
+            TYPE_BOOL => {
+                let value: bool = msg_send(env, (this, sel));
+                msg_class![env; NSNumber numberWithBool:value]
+            },
+            TYPE_CHAR => {
+                let value: i8 = msg_send(env, (this, sel));
+                msg_class![env; NSNumber numberWithChar:value]
+            },
+            TYPE_UCHAR => {
+                let value: u8 = msg_send(env, (this, sel));
+                msg_class![env; NSNumber numberWithUnsignedInt:(value as u32)]
+            },
+            TYPE_SHORT => {
+                let value: i16 = msg_send(env, (this, sel));
+                msg_class![env; NSNumber numberWithShort:value]
+            },
+            TYPE_USHORT => {
+                let value: u16 = msg_send(env, (this, sel));
+                msg_class![env; NSNumber numberWithUnsignedShort:value]
+            },
+            TYPE_INT | TYPE_LONG => {
+                let value: i32 = msg_send(env, (this, sel));
+                msg_class![env; NSNumber numberWithInt:value]
+            },
+            TYPE_UINT | TYPE_ULONG => {
+                let value: u32 = msg_send(env, (this, sel));
+                msg_class![env; NSNumber numberWithUnsignedInt:value]
+            },
+            TYPE_LONGLONG => {
+                let value: i64 = msg_send(env, (this, sel));
+                msg_class![env; NSNumber numberWithLongLong:value]
+            },
+            TYPE_ULONGLONG => {
+                let value: u64 = msg_send(env, (this, sel));
+                msg_class![env; NSNumber numberWithUnsignedLongLong:value]
+            },
+            TYPE_FLOAT => {
+                let value: f32 = msg_send(env, (this, sel));
+                msg_class![env; NSNumber numberWithFloat:value]
+            },
+            TYPE_DOUBLE => {
+                let value: f64 = msg_send(env, (this, sel));
+                msg_class![env; NSNumber numberWithDouble:value]
+            },
+            _ => unimplemented!("valueForKey: getter {} has unsupported return type {}", sel.as_str(&env.mem), return_type),
+        };
+    }
+
+    // With direct ivar access enabled, use the standard KVC ivar search order.
+    let access_sel = env.objc.lookup_selector("accessInstanceVariablesDirectly").unwrap();
+    let access_ivars: bool = msg_send(env, (class, access_sel));
+    if access_ivars {
+        let ivar = env.objc.object_lookup_ivar(&env.mem, this, &format!("_{key_string}"))
+            .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &format!("_is{camel_case_key_string}")))
+            .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &key_string.to_string()))
+            .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &format!("is{camel_case_key_string}")))
+            .map(|(ivar_ptr, ivar_type)| (ivar_ptr, ivar_type.to_owned()));
+        if let Some((ivar_ptr, ivar_type)) = ivar {
+            return match ivar_type.chars().next().unwrap_or(TYPE_UNDEF) {
+                TYPE_ID | TYPE_CLASS => env.mem.read(ivar_ptr.cast()),
+                TYPE_BOOL => msg_class![env; NSNumber numberWithBool:(env.mem.read(ivar_ptr.cast()))],
+                TYPE_CHAR => msg_class![env; NSNumber numberWithChar:(env.mem.read(ivar_ptr.cast()))],
+                TYPE_UCHAR => msg_class![env; NSNumber numberWithUnsignedInt:(env.mem.read::<u8>(ivar_ptr.cast()) as u32)],
+                TYPE_SHORT => msg_class![env; NSNumber numberWithShort:(env.mem.read(ivar_ptr.cast()))],
+                TYPE_USHORT => msg_class![env; NSNumber numberWithUnsignedShort:(env.mem.read(ivar_ptr.cast()))],
+                TYPE_INT | TYPE_LONG => msg_class![env; NSNumber numberWithInt:(env.mem.read(ivar_ptr.cast()))],
+                TYPE_UINT | TYPE_ULONG => msg_class![env; NSNumber numberWithUnsignedInt:(env.mem.read(ivar_ptr.cast()))],
+                TYPE_LONGLONG => msg_class![env; NSNumber numberWithLongLong:(env.mem.read(ivar_ptr.cast()))],
+                TYPE_ULONGLONG => msg_class![env; NSNumber numberWithUnsignedLongLong:(env.mem.read(ivar_ptr.cast()))],
+                TYPE_FLOAT => msg_class![env; NSNumber numberWithFloat:(env.mem.read(ivar_ptr.cast()))],
+                TYPE_DOUBLE => msg_class![env; NSNumber numberWithDouble:(env.mem.read(ivar_ptr.cast()))],
+                ivar_type => unimplemented!("valueForKey: ivar {} has unsupported type {}", key_string, ivar_type),
+            };
+        }
+    }
+
+    let sel = env.objc.lookup_selector("valueForUndefinedKey:").unwrap();
+    msg_send(env, (this, sel, key))
+}
+
+- (id)dictionaryWithValuesForKeys:(id)keys { // NSArray*
+    let count: NSUInteger = msg![env; keys count];
+    let dictionary: id = msg_class![env; NSMutableDictionary dictionaryWithCapacity:count];
+    for index in 0..count {
+        let key: id = msg![env; keys objectAtIndex:index];
+        let mut value: id = msg![env; this valueForKey:key];
+        if value == nil {
+            value = msg_class![env; NSNull null];
+        }
+        () = msg![env; dictionary setObject:value forKey:key];
+    }
+    dictionary
+}
+
+- (id)valueForUndefinedKey:(id)key { // NSString*
+    // TODO: Raise NSUnknownKeyException.
+    let class: Class = ObjC::read_isa(this, &env.mem);
+    let class_name_string = env.objc.get_class_name(class).to_owned();
+    let key_string = to_rust_string(env, key);
+    panic!("Object {:?} of class {:?} ({:?}) does not have a value for {} ({:?})",
+        this, class_name_string, class, key_string, key);
+}
+
 - (())setValue:(id)value
        forKey:(id)key { // NSString*
     let key_string = to_rust_string(env, key); // TODO: avoid copy?

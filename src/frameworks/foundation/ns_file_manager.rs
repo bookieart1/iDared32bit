@@ -379,7 +379,11 @@ includingPropertiesForKeys:(id)_keys // NSArray*, only prefetching
                           error:(MutPtr<id>)error { // NSError**
     let contents: id = msg![env; this directoryContentsAtPath:path];
     if contents == nil && !error.is_null() {
-        todo!(); // TODO: create an NSError if requested
+        let domain = get_static_str(env, NSCocoaErrorDomain);
+        let file_error: id = msg_class![env; NSError errorWithDomain:domain
+                                                         code:NSFileReadNoSuchFileError
+                                                     userInfo:nil];
+        env.mem.write(error, file_error);
     }
     contents
 }
