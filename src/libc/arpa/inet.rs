@@ -24,6 +24,11 @@ struct in_addr {
 }
 unsafe impl SafeRead for in_addr {}
 
+#[derive(Default)]
+pub struct State {
+    inet_ntoa_buffer: Option<MutPtr<u8>>,
+}
+
 fn inet_addr(env: &mut Environment, str: ConstPtr<u8>) -> in_addr_t {
     let inet_addr_str = env.mem.cstr_at_utf8(str).unwrap();
     let address: Ipv4Addr = inet_addr_str.parse().unwrap();
@@ -71,6 +76,27 @@ fn inet_ntop(
     dst.cast_const()
 }
 
+fn inet_ntoa(env: &mut Environment, addr: in_addr) -> MutPtr<u8> {
+    let ipv4_addr = Ipv4Addr::from_bits(u32::from_be(addr.s_addr));
+    let address = ipv4_addr.to_string();
+    let address_bytes = address.as_bytes();
+
+    // inet_ntoa returns a pointer to a static buffer that is overwritten by
+    // each subsequent call. An IPv4 address needs at most 15 bytes plus NUL.
+    let buffer = *env
+        .libc_state
+        .inet
+        .inet_ntoa_buffer
+        .get_or_insert_with(|| env.mem.alloc(16).cast());
+    let len: GuestUSize = address_bytes.len().try_into().unwrap();
+    assert!(len < 16);
+    env.mem
+        .bytes_at_mut(buffer, len)
+        .copy_from_slice(address_bytes);
+    env.mem.write(buffer + len, b'\0');
+    buffer
+}
+
 fn inet_pton(env: &mut Environment, af: i32, src: ConstPtr<u8>, dst: MutVoidPtr) -> i32 {
     assert_eq!(af, AF_INET);
     let str = env.mem.cstr_at_utf8(src.cast()).unwrap();
@@ -87,6 +113,34 @@ fn inet_pton(env: &mut Environment, af: i32, src: ConstPtr<u8>, dst: MutVoidPtr)
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(inet_addr(_)),
     export_c_func!(inet_aton(_, _)),
+    export_c_func!(inet_ntoa(_)),
     export_c_func!(inet_ntop(_, _, _, _)),
     export_c_func!(inet_pton(_, _, _)),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inet_ntoa_formats_into_a_reused_buffer() {
+        let mut env = Environment::new_fake_for_test();
+
+        let first = inet_ntoa(
+            &mut env,
+            in_addr {
+                s_addr: u32::from_le_bytes([127, 0, 0, 1]),
+            },
+        );
+        assert_eq!(env.mem.cstr_at_utf8(first.cast_const()), Ok("127.0.0.1"));
+
+        let second = inet_ntoa(
+            &mut env,
+            in_addr {
+                s_addr: u32::from_le_bytes([192, 0, 2, 1]),
+            },
+        );
+        assert_eq!(second, first);
+        assert_eq!(env.mem.cstr_at_utf8(second.cast_const()), Ok("192.0.2.1"));
+    }
+}
