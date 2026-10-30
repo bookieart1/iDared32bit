@@ -586,6 +586,32 @@ fn glBufferSubData(
     })
 }
 
+// OES_vertex_array_object
+fn glBindVertexArrayOES(env: &mut Environment, array: GLuint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.BindVertexArrayOES(array)
+    })
+}
+fn glDeleteVertexArraysOES(env: &mut Environment, n: GLsizei, arrays: ConstPtr<GLuint>) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let n_usize: GuestUSize = n.try_into().unwrap();
+        let arrays = mem.ptr_at(arrays, n_usize);
+        unsafe { gles.DeleteVertexArraysOES(n, arrays) }
+    })
+}
+fn glGenVertexArraysOES(env: &mut Environment, n: GLsizei, arrays: MutPtr<GLuint>) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let n_usize: GuestUSize = n.try_into().unwrap();
+        let arrays = mem.ptr_at_mut(arrays, n_usize);
+        unsafe { gles.GenVertexArraysOES(n, arrays) }
+    })
+}
+fn glIsVertexArrayOES(env: &mut Environment, array: GLuint) -> GLboolean {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.IsVertexArrayOES(array)
+    })
+}
+
 // Non-pointers
 fn glColor4f(env: &mut Environment, red: GLfloat, green: GLfloat, blue: GLfloat, alpha: GLfloat) {
     with_ctx_and_mem(env, |gles, _mem| unsafe {
@@ -1562,6 +1588,11 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glBindBuffer(_, _)),
     export_c_func!(glBufferData(_, _, _, _)),
     export_c_func!(glBufferSubData(_, _, _, _)),
+    // OES_vertex_array_object
+    export_c_func!(glBindVertexArrayOES(_)),
+    export_c_func!(glDeleteVertexArraysOES(_, _)),
+    export_c_func!(glGenVertexArraysOES(_, _)),
+    export_c_func!(glIsVertexArrayOES(_)),
     // Non-pointers
     export_c_func!(glColor4f(_, _, _, _)),
     export_c_func!(glColor4x(_, _, _, _)),

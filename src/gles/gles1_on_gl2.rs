@@ -284,6 +284,8 @@ const GET_PARAMS: ParamTable = ParamTable(&[
     (gl21::VERTEX_ARRAY_SIZE, ParamType::Int, 1),
     (gl21::VERTEX_ARRAY_STRIDE, ParamType::Int, 1),
     (gl21::VERTEX_ARRAY_TYPE, ParamType::Int, 1),
+    // OES_vertex_array_object -> APPLE_vertex_array_object
+    (gl21::VERTEX_ARRAY_BINDING_APPLE, ParamType::Int, 1),
     // OES_framebuffer_object -> EXT_framebuffer_object
     (gl21::FRAMEBUFFER_BINDING_EXT, ParamType::Int, 1),
     (gl21::MAX_RENDERBUFFER_SIZE_EXT, ParamType::Int, 1),
@@ -2125,6 +2127,20 @@ impl GLES for GLES1OnGL2<'_> {
     }
     unsafe fn Translatex(&mut self, x: GLfixed, y: GLfixed, z: GLfixed) {
         gl21::Translatef(fixed_to_float(x), fixed_to_float(y), fixed_to_float(z));
+    }
+
+    // OES_vertex_array_object -> APPLE_vertex_array_object
+    unsafe fn BindVertexArrayOES(&mut self, array: GLuint) {
+        gl21::BindVertexArrayAPPLE(array)
+    }
+    unsafe fn DeleteVertexArraysOES(&mut self, n: GLsizei, arrays: *const GLuint) {
+        gl21::DeleteVertexArraysAPPLE(n, arrays)
+    }
+    unsafe fn GenVertexArraysOES(&mut self, n: GLsizei, arrays: *mut GLuint) {
+        gl21::GenVertexArraysAPPLE(n, arrays)
+    }
+    unsafe fn IsVertexArrayOES(&mut self, array: GLuint) -> GLboolean {
+        gl21::IsVertexArrayAPPLE(array)
     }
 
     // OES_framebuffer_object -> EXT_framebuffer_object

@@ -391,6 +391,12 @@ pub trait GLES {
     unsafe fn Translatef(&mut self, x: GLfloat, y: GLfloat, z: GLfloat);
     unsafe fn Translatex(&mut self, x: GLfixed, y: GLfixed, z: GLfixed);
 
+    // OES_vertex_array_object
+    unsafe fn BindVertexArrayOES(&mut self, array: GLuint);
+    unsafe fn DeleteVertexArraysOES(&mut self, n: GLsizei, arrays: *const GLuint);
+    unsafe fn GenVertexArraysOES(&mut self, n: GLsizei, arrays: *mut GLuint);
+    unsafe fn IsVertexArrayOES(&mut self, array: GLuint) -> GLboolean;
+
     // OES_framebuffer_object (incomplete)
     unsafe fn GenFramebuffersOES(&mut self, n: GLsizei, framebuffers: *mut GLuint);
     unsafe fn GenRenderbuffersOES(&mut self, n: GLsizei, renderbuffers: *mut GLuint);

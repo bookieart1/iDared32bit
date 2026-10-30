@@ -755,6 +755,20 @@ impl GLES for GLES1Native<'_> {
         gles11::Translatex(x, y, z)
     }
 
+    // OES_vertex_array_object
+    unsafe fn BindVertexArrayOES(&mut self, array: GLuint) {
+        gles11::BindVertexArrayOES(array)
+    }
+    unsafe fn DeleteVertexArraysOES(&mut self, n: GLsizei, arrays: *const GLuint) {
+        gles11::DeleteVertexArraysOES(n, arrays)
+    }
+    unsafe fn GenVertexArraysOES(&mut self, n: GLsizei, arrays: *mut GLuint) {
+        gles11::GenVertexArraysOES(n, arrays)
+    }
+    unsafe fn IsVertexArrayOES(&mut self, array: GLuint) -> GLboolean {
+        gles11::IsVertexArrayOES(array)
+    }
+
     // OES_framebuffer_object -> EXT_framebuffer_object
     unsafe fn GenFramebuffersOES(&mut self, n: GLsizei, framebuffers: *mut GLuint) {
         gles11::GenFramebuffersOES(n, framebuffers)
