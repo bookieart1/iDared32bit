@@ -415,7 +415,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         NSWeekOfMonthCalendarUnit => host.week_of_month = value,
         NSWeekOfYearCalendarUnit => host.week_of_year = value,
         NSYearForWeekOfYearCalendarUnit => host.year_for_week_of_year = value,
-        _ => log!("Warning: unknown NSCalendarUnit {:#x}", unit),
+        _ => {
+            log!("Warning: unknown NSCalendarUnit {:#x}", unit);
+        }
     }
 }
 
