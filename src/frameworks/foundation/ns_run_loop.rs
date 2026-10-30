@@ -200,7 +200,29 @@ pub const CLASSES: ClassExports = objc_classes! {
     run_run_loop(env, this, /* single_iteration: */ false, Some(time_limit));
 }
 
-// TODO: other run methods
+- (bool)runMode:(NSRunLoopMode)mode beforeDate:(id)date {
+    let default_mode = ns_string::get_static_str(env, NSDefaultRunLoopMode);
+    let common_modes = ns_string::get_static_str(env, NSRunLoopCommonModes);
+    if !msg![env; mode isEqualToString:default_mode]
+        && !msg![env; mode isEqualToString:common_modes]
+    {
+        // Custom modes are not distinguished internally yet, but running the
+        // loop is more compatible than aborting. Network/SDK worker threads in
+        // older games routinely use private mode strings.
+        log_dbg!(
+            "Treating custom NSRunLoop mode {:?} as the default mode",
+            ns_string::to_rust_string(env, mode)
+        );
+    }
+
+    let time_limit = if date == nil {
+        None
+    } else {
+        Some(msg![env; date timeIntervalSince1970])
+    };
+    run_run_loop(env, this, /* single_iteration: */ true, time_limit);
+    true
+}
 
 @end
 

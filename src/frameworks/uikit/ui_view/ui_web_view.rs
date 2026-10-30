@@ -7,6 +7,7 @@
 
 use crate::frameworks::core_graphics::CGRect;
 use crate::frameworks::foundation::ns_string::to_rust_string;
+use crate::frameworks::uikit::ui_view::UIViewHostObject;
 use crate::msg;
 use crate::objc::{id, msg_class, msg_super, nil, objc_classes, release, ClassExports};
 use crate::Environment;
@@ -34,8 +35,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setScalesPageToFit:(bool)_scales {
     // TODO
 }
-- (())setDelegate:(id)_delegate {
-    // TODO
+- (())setDelegate:(id)delegate {
+    // UIWebView's delegate property was assign (non-retaining) on old iOS.
+    env.objc.borrow_mut::<UIViewHostObject>(this).ui_web_view_delegate = delegate;
+}
+- (id)delegate {
+    env.objc.borrow::<UIViewHostObject>(this).ui_web_view_delegate
 }
 // Pages are never loaded (see loadRequest:), so nothing is ever loading.
 - (bool)isLoading {

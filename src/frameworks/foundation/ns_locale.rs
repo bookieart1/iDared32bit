@@ -27,7 +27,7 @@ pub const CONSTANTS: ConstantExports = &[
     ),
     (
         "_NSLocaleLanguageCode",
-        HostConstant::NSString(NSLocaleIdentifier),
+        HostConstant::NSString(NSLocaleLanguageCode),
     ),
     (
         "_NSLocaleIdentifier",
@@ -167,14 +167,25 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithLocaleIdentifier:(id)string { // NSString *
     let str = ns_string::to_rust_string(env, string);
     log_dbg!("[(NSLocale *){:?} initWithLocaleIdentifier:'{}']", this, str);
-    retain(env, string);
-    // Loosely assume 2-char lang code here
-    // TODO: locale identifier parsing
-    assert_eq!(2, str.len());
-    assert!(str.to_lowercase().eq(&str));
-    assert!(!str.contains('_') && !str.contains('-'));
-    assert!(env.objc.borrow::<NSLocaleHostObject>(this).language_code == nil);
-    env.objc.borrow_mut::<NSLocaleHostObject>(this).language_code = string;
+
+    // Locale identifiers commonly include a region (en_US / en-US), and may
+    // include a script or variant. Older games legitimately pass those forms.
+    // Keep the language and first region-like component needed by the accessors
+    // we expose instead of aborting on anything other than a two-letter code.
+    let (language, country) = parse_locale_identifier(&str);
+    let language = ns_string::from_rust_string(env, language);
+    let country = country
+        .map(|country| ns_string::from_rust_string(env, country))
+        .unwrap_or(nil);
+
+    let (old_language, old_country) = {
+        let host_object = env.objc.borrow_mut::<NSLocaleHostObject>(this);
+        let old_language = std::mem::replace(&mut host_object.language_code, language);
+        let old_country = std::mem::replace(&mut host_object.country_code, country);
+        (old_language, old_country)
+    };
+    release(env, old_language);
+    release(env, old_country);
     this
 }
 
@@ -208,13 +219,19 @@ pub const CLASSES: ClassExports = objc_classes! {
         // TODO: Define NSLocaleIdentifier _as_ kCFLocaleIdentifier
         NSLocaleIdentifier | kCFLocaleIdentifier => {
             let &NSLocaleHostObject { country_code, language_code } = env.objc.borrow(this);
-            assert!(country_code != nil); // TODO
-            assert!(language_code != nil); // TODO
-            let locale_id_str = format!(
-                "{}_{}",
-                ns_string::to_rust_string(env, language_code),
-                ns_string::to_rust_string(env, country_code)
-            );
+            if language_code == nil {
+                return nil;
+            }
+            let language = ns_string::to_rust_string(env, language_code);
+            let locale_id_str = if country_code == nil {
+                language.into_owned()
+            } else {
+                format!(
+                    "{}_{}",
+                    language,
+                    ns_string::to_rust_string(env, country_code)
+                )
+            };
             let res = ns_string::from_rust_string(env, locale_id_str);
             autorelease(env, res)
         },
@@ -229,3 +246,36 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+fn parse_locale_identifier(identifier: &str) -> (String, Option<String>) {
+    let mut components = identifier
+        .split(['_', '-'])
+        .filter(|component| !component.is_empty());
+    let language = components.next().unwrap_or("en").to_ascii_lowercase();
+    let country = components
+        .find(|component| component.len() == 2 || component.len() == 3)
+        .map(str::to_ascii_uppercase);
+    (language, country)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_locale_identifier;
+
+    #[test]
+    fn parses_common_locale_identifiers() {
+        assert_eq!(parse_locale_identifier("en"), ("en".into(), None));
+        assert_eq!(
+            parse_locale_identifier("en_US"),
+            ("en".into(), Some("US".into()))
+        );
+        assert_eq!(
+            parse_locale_identifier("pt-BR"),
+            ("pt".into(), Some("BR".into()))
+        );
+        assert_eq!(
+            parse_locale_identifier("zh-Hant-TW"),
+            ("zh".into(), Some("TW".into()))
+        );
+    }
+}

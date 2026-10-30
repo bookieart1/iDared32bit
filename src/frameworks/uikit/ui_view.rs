@@ -86,6 +86,10 @@ pub struct UIViewHostObject {
     superview: id,
     /// The view controller that controls this view. This is a weak reference
     view_controller: id,
+    /// Weak storage used by UIWebView's assign delegate property. Keeping this
+    /// on the common view host object avoids a parallel side table for the
+    /// subclass while leaving ordinary UIViews at nil.
+    pub(super) ui_web_view_delegate: id,
     tag: NSInteger,
     clears_context_before_drawing: bool,
     user_interaction_enabled: bool,
@@ -103,6 +107,7 @@ impl Default for UIViewHostObject {
             subviews: Vec::new(),
             superview: nil,
             view_controller: nil,
+            ui_web_view_delegate: nil,
             tag: 0,
             clears_context_before_drawing: true,
             user_interaction_enabled: true,
@@ -751,6 +756,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         superview,
         subviews,
         view_controller,
+        ui_web_view_delegate: _,
         tag: _,
         clears_context_before_drawing: _,
         user_interaction_enabled: _,

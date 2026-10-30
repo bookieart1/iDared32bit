@@ -25,6 +25,7 @@ use crate::frameworks::uikit::ui_device::{
 use crate::objc::{
     id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports,
 };
+use crate::window::DeviceFamily;
 
 #[derive(Default)]
 pub struct State {
@@ -78,6 +79,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     // says so (UIHidden), which Interface Builder does unless it's "Visible
     // at Launch". Some games never make their window visible themselves.
     let this = msg_super![env; this initWithCoder:coder];
+
+    normalize_legacy_device_family_frame(env, this);
 
     let state = &mut env.framework_state.uikit.ui_view.ui_window;
     state.windows.push(this);
@@ -228,6 +231,12 @@ pub const CLASSES: ClassExports = objc_classes! {
         return;
     }
 
+    // Some universal archives contain an iPad-sized root hierarchy even when
+    // UIKit has selected their iPhone family. Real UIKit adapts that archived
+    // full-screen hierarchy to the active screen; doing the same here prevents
+    // a 768x1024 view from being clipped and magnified on a 320x480 phone.
+    normalize_legacy_device_family_frame(env, view);
+
     let view_controller = env.objc.borrow::<UIViewHostObject>(view).view_controller;
     if env.bundle.bundle_identifier() == "com.majesticsoftware.blot" {
         let window_frame: CGRect = msg![env; this frame];
@@ -358,6 +367,32 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+fn normalize_legacy_device_family_frame(env: &mut crate::Environment, view: id) {
+    if env.window().device_family() != DeviceFamily::iPhone {
+        return;
+    }
+
+    let frame: CGRect = msg![env; view frame];
+    let is_ipad_full_screen = frame.origin.x == 0.0
+        && frame.origin.y == 0.0
+        && frame.size.width == 768.0
+        && frame.size.height == 1024.0;
+    if !is_ipad_full_screen {
+        return;
+    }
+
+    let screen: id = msg_class![env; UIScreen mainScreen];
+    let phone_bounds: CGRect = msg![env; screen bounds];
+    if phone_bounds.size.width == 320.0 && phone_bounds.size.height == 480.0 {
+        log!(
+            "Normalizing iPad-sized archived root view {:?} to iPhone bounds {:?}",
+            view,
+            phone_bounds
+        );
+        () = msg![env; view setFrame:phone_bounds];
+    }
+}
 
 /// Window life-cycle notifications
 /// TODO: more notifications
