@@ -5,7 +5,7 @@
  */
 //! The `NSValue` class cluster, including `NSNumber`.
 
-use super::ns_string::{from_rust_ordering, from_rust_string};
+use super::ns_string::{from_rust_ordering, from_rust_string, to_rust_string};
 use super::{
     _nib_archive_decoder, ns_keyed_unarchiver, NSComparisonResult, NSOrderedSame, NSUInteger,
 };
@@ -602,6 +602,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 // TODO: accessors etc
+
+@end
+
+@implementation NSDecimalNumber: NSNumber
+
++ (id)decimalNumberWithString:(id)string {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithString:string];
+    autorelease(env, new)
+}
+
+- (id)initWithString:(id)string {
+    let value = to_rust_string(env, string)
+        .trim()
+        .parse::<f64>()
+        .unwrap_or(f64::NAN);
+    msg![env; this initWithDouble:value]
+}
 
 @end
 
