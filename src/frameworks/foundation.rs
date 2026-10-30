@@ -32,6 +32,7 @@ pub mod ns_exception;
 pub mod ns_file_handle;
 pub mod ns_file_manager;
 pub mod ns_garbage_collector;
+pub mod ns_http_cookie_storage;
 pub mod ns_index_path;
 pub mod ns_invocation;
 pub mod ns_key_value_observing;
@@ -85,6 +86,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_file_handle::CLASSES,
         ns_file_manager::CLASSES,
         ns_garbage_collector::CLASSES,
+        ns_http_cookie_storage::CLASSES,
         ns_index_path::CLASSES,
         ns_invocation::CLASSES,
         ns_keyed_archiver::CLASSES,
@@ -120,6 +122,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_calendar::CONSTANTS,
         ns_exception::CONSTANTS,
         ns_file_manager::CONSTANTS,
+        ns_http_cookie_storage::CONSTANTS,
         ns_key_value_observing::CONSTANTS,
         ns_keyed_unarchiver::CONSTANTS,
         ns_locale::CONSTANTS,
@@ -139,6 +142,7 @@ pub struct State {
     ns_bundle: ns_bundle::State,
     ns_calendar: ns_calendar::State,
     ns_file_manager: ns_file_manager::State,
+    ns_http_cookie_storage: ns_http_cookie_storage::State,
     ns_key_value_observing: ns_key_value_observing::State,
     ns_locale: ns_locale::State,
     ns_notification_center: ns_notification_center::State,
