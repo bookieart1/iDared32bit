@@ -12,6 +12,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CMAKE: ${{ github.workspace }}/vendor/cmake/bin/cmake
 
 jobs:
   build-unsigned-ipa:
@@ -36,6 +37,29 @@ jobs:
 
       - name: Install the iOS Rust target
         run: rustup target add aarch64-apple-ios
+
+      # SDL's current CMake project still needs the pre-CMake-4 compatibility
+      # mode. This is the same known-good CMake release used by the repository's
+      # existing macOS lint/test workflow.
+      - name: Restore CMake 3.31.6
+        id: cache-cmake
+        uses: actions/cache@v6
+        with:
+          path: vendor/cmake
+          key: cmake-3.31.6-macos-universal
+
+      - name: Download CMake 3.31.6
+        if: steps.cache-cmake.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          curl --fail --location \
+            --output "$RUNNER_TEMP/cmake-3.31.6.tar.gz" \
+            "https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-macos-universal.tar.gz"
+          tar xzf "$RUNNER_TEMP/cmake-3.31.6.tar.gz" -C vendor
+          mv vendor/cmake-3.31.6-macos-universal/CMake.app/Contents vendor/cmake
+
+      - name: Verify CMake version
+        run: "$CMAKE" --version
 
       - name: Build the existing iOS app without signing
         run: |
