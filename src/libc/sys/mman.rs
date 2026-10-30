@@ -63,7 +63,21 @@ fn mmap(
                 log!("Warning: mmap could not allocate at hint {addr:?}, allocated at {ptr:?}",);
                 ptr
             }
-            result => result.unwrap(),
+            Err(VMAllocError::AddressUnavailable | VMAllocError::NoSpace) => {
+                // MAP_FIXED replaces any mappings that overlap the requested
+                // range. Free the range first so the allocator can install the
+                // replacement at the exact address.
+                env.mem.vm_free(addr, len);
+                env.libc_state.mman.mmap_allocations.remove(&addr);
+                env.mem
+                    .vm_alloc(Some(addr.to_bits()), len)
+                    .unwrap_or_else(|error| {
+                        panic!(
+                            "mmap MAP_FIXED could not replace {addr:?} ({len:#x} bytes): {error:?}"
+                        )
+                    })
+            }
+            Ok(ptr) => ptr,
         }
     };
 
