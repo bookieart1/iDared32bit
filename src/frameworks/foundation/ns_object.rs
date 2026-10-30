@@ -301,21 +301,54 @@ pub const CLASSES: ClassExports = objc_classes! {
             .map(|(ivar_ptr, ivar_type)| (ivar_ptr, ivar_type.to_owned()));
         if let Some((ivar_ptr, ivar_type)) = ivar {
             return match ivar_type.chars().next().unwrap_or(TYPE_UNDEF) {
-                TYPE_ID | TYPE_CLASS => env.mem.read(ivar_ptr.cast()),
-                TYPE_BOOL => msg_class![env; NSNumber numberWithBool:(env.mem.read(ivar_ptr.cast()))],
-                TYPE_CHAR => msg_class![env; NSNumber numberWithChar:(env.mem.read(ivar_ptr.cast()))],
+                TYPE_ID | TYPE_CLASS => {
+                    let value: id = env.mem.read(ivar_ptr.cast());
+                    value
+                },
+                TYPE_BOOL => {
+                    let value: bool = env.mem.read(ivar_ptr.cast());
+                    msg_class![env; NSNumber numberWithBool:value]
+                },
+                TYPE_CHAR => {
+                    let value: i8 = env.mem.read(ivar_ptr.cast());
+                    msg_class![env; NSNumber numberWithChar:value]
+                },
                 TYPE_UCHAR => {
                     let value: u8 = env.mem.read(ivar_ptr.cast());
                     msg_class![env; NSNumber numberWithUnsignedInt:(value as u32)]
                 },
-                TYPE_SHORT => msg_class![env; NSNumber numberWithShort:(env.mem.read(ivar_ptr.cast()))],
-                TYPE_USHORT => msg_class![env; NSNumber numberWithUnsignedShort:(env.mem.read(ivar_ptr.cast()))],
-                TYPE_INT | TYPE_LONG => msg_class![env; NSNumber numberWithInt:(env.mem.read(ivar_ptr.cast()))],
-                TYPE_UINT | TYPE_ULONG => msg_class![env; NSNumber numberWithUnsignedInt:(env.mem.read(ivar_ptr.cast()))],
-                TYPE_LONGLONG => msg_class![env; NSNumber numberWithLongLong:(env.mem.read(ivar_ptr.cast()))],
-                TYPE_ULONGLONG => msg_class![env; NSNumber numberWithUnsignedLongLong:(env.mem.read(ivar_ptr.cast()))],
-                TYPE_FLOAT => msg_class![env; NSNumber numberWithFloat:(env.mem.read(ivar_ptr.cast()))],
-                TYPE_DOUBLE => msg_class![env; NSNumber numberWithDouble:(env.mem.read(ivar_ptr.cast()))],
+                TYPE_SHORT => {
+                    let value: i16 = env.mem.read(ivar_ptr.cast());
+                    msg_class![env; NSNumber numberWithShort:value]
+                },
+                TYPE_USHORT => {
+                    let value: u16 = env.mem.read(ivar_ptr.cast());
+                    msg_class![env; NSNumber numberWithUnsignedShort:value]
+                },
+                TYPE_INT | TYPE_LONG => {
+                    let value: i32 = env.mem.read(ivar_ptr.cast());
+                    msg_class![env; NSNumber numberWithInt:value]
+                },
+                TYPE_UINT | TYPE_ULONG => {
+                    let value: u32 = env.mem.read(ivar_ptr.cast());
+                    msg_class![env; NSNumber numberWithUnsignedInt:value]
+                },
+                TYPE_LONGLONG => {
+                    let value: i64 = env.mem.read(ivar_ptr.cast());
+                    msg_class![env; NSNumber numberWithLongLong:value]
+                },
+                TYPE_ULONGLONG => {
+                    let value: u64 = env.mem.read(ivar_ptr.cast());
+                    msg_class![env; NSNumber numberWithUnsignedLongLong:value]
+                },
+                TYPE_FLOAT => {
+                    let value: f32 = env.mem.read(ivar_ptr.cast());
+                    msg_class![env; NSNumber numberWithFloat:value]
+                },
+                TYPE_DOUBLE => {
+                    let value: f64 = env.mem.read(ivar_ptr.cast());
+                    msg_class![env; NSNumber numberWithDouble:value]
+                },
                 ivar_type => unimplemented!("valueForKey: ivar {} has unsupported type {}", key_string, ivar_type),
             };
         }
