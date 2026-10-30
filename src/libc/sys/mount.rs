@@ -76,14 +76,11 @@ fn fake_statfs() -> statfs {
 
 /// Internal helper for `statfs`, not a part of the API.
 pub fn statfs_inner(env: &mut Environment, path: ConstPtr<u8>) -> Result<statfs, i32> {
-    // FIXME does directory matter?
-    assert!(env
-        .mem
-        .cstr_at_utf8(path)
-        .is_ok_and(|path| path.starts_with(env.fs.home_directory().join("Documents").as_str())));
-
-    // TODO: Handle additional errors
-    let path = env.mem.cstr_at_utf8(path).unwrap();
+    // statfs is valid for any path on the mounted filesystem, not only the
+    // app's Documents directory.
+    let Ok(path) = env.mem.cstr_at_utf8(path) else {
+        return Err(ENOENT);
+    };
     if !env.fs.exists(GuestPath::new(path)) {
         return Err(ENOENT);
     }

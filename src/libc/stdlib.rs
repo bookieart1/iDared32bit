@@ -24,6 +24,7 @@ pub struct State {
     rand: u32,
     random: u32,
     arc4random: u32,
+    rand48: u64,
     fcvt_buf: Option<MutPtr<u8>>,
 }
 
@@ -218,6 +219,33 @@ fn rand_r(env: &mut Environment, seed_ptr: MutPtr<u32>) -> i32 {
     seed = prng(seed);
     env.mem.write(seed_ptr, seed);
     (seed as i32) & RAND_MAX
+}
+
+const RAND48_MASK: u64 = (1u64 << 48) - 1;
+
+fn srand48(env: &mut Environment, seed: i32) {
+    // POSIX specifies that the low 16 bits are initialized to 0x330e.
+    env.libc_state.stdlib.rand48 = (((seed as u32 as u64) << 16) | 0x330e) & RAND48_MASK;
+}
+
+fn next_rand48(env: &mut Environment) -> u64 {
+    // The constants are specified by POSIX for the drand48 family.
+    let state = env.libc_state.stdlib.rand48;
+    let state = state.wrapping_mul(0x5deece66d).wrapping_add(0xb) & RAND48_MASK;
+    env.libc_state.stdlib.rand48 = state;
+    state
+}
+
+fn drand48(env: &mut Environment) -> f64 {
+    next_rand48(env) as f64 / (1u64 << 48) as f64
+}
+
+fn lrand48(env: &mut Environment) -> i32 {
+    (next_rand48(env) >> 17) as i32
+}
+
+fn mrand48(env: &mut Environment) -> i32 {
+    (next_rand48(env) >> 16) as u32 as i32
 }
 
 // BSD's "better" random number generator, with an implementation that is not
@@ -678,6 +706,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sranddev()),
     export_c_func!(rand()),
     export_c_func!(rand_r(_)),
+    export_c_func!(srand48(_)),
+    export_c_func!(drand48()),
+    export_c_func!(lrand48()),
+    export_c_func!(mrand48()),
     export_c_func!(srandom(_)),
     export_c_func!(random()),
     export_c_func!(arc4random()),

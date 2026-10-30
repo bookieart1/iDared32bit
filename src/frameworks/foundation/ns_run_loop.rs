@@ -114,11 +114,23 @@ pub const CLASSES: ClassExports = objc_classes! {
         ns_string::to_rust_string(env, mode),
     );
 
-    retain(env, timer);
+    // Scheduling an already-scheduled timer on the same run loop/mode is a
+    // no-op on iOS. Some older games do this during startup.
+    if env
+        .objc
+        .borrow::<NSRunLoopHostObject>(this)
+        .timers
+        .contains(&timer)
+    {
+        log_dbg!("Timer {:?} is already scheduled on run loop {:?}", timer, this);
+        return;
+    }
 
-    let host_object = env.objc.borrow_mut::<NSRunLoopHostObject>(this);
-    assert!(!host_object.timers.contains(&timer)); // TODO: what do we do here?
-    host_object.timers.push(timer);
+    retain(env, timer);
+    env.objc
+        .borrow_mut::<NSRunLoopHostObject>(this)
+        .timers
+        .push(timer);
     ns_timer::set_run_loop(env, timer, this);
 }
 

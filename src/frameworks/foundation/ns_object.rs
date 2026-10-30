@@ -123,6 +123,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Do nothing
 }
 
++ (())load {
+    // NSObject's implementation is effectively a no-op. A few older
+    // frameworks explicitly call [super load] from their own +load method.
+}
+
 - (id)init {
     this
 }

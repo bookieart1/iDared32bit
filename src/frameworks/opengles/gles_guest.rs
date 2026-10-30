@@ -17,7 +17,7 @@ use touchHLE_gl_bindings::gles11::{
     WRITE_ONLY_OES,
 };
 
-use crate::dyld::{export_c_func, FunctionExports};
+use crate::dyld::{export_c_func, export_c_func_aliased, FunctionExports};
 use crate::frameworks::opengles::eagl::EAGLContextHostObject;
 use crate::gles::{gles11_raw as gles11, GLES}; // constants only
 use crate::mem::{ConstPtr, ConstVoidPtr, GuestISize, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr};
@@ -1694,6 +1694,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glGetFramebufferAttachmentParameterivOES(_, _, _, _)),
     export_c_func!(glGetRenderbufferParameterivOES(_, _, _)),
     export_c_func!(glCheckFramebufferStatusOES(_)),
+    // OpenGL ES 2 exposes this without the OES suffix. The framebuffer status
+    // values and target are compatible with the OES entry point used by our
+    // OpenGL ES backend.
+    export_c_func_aliased!("glCheckFramebufferStatus", glCheckFramebufferStatusOES(_)),
     export_c_func!(glDeleteFramebuffersOES(_, _)),
     export_c_func!(glDeleteRenderbuffersOES(_, _)),
     export_c_func!(glDiscardFramebufferEXT(_, _, _)),

@@ -16,7 +16,8 @@ use crate::frameworks::core_foundation::cf_string::{
     CFStringRef,
 };
 use crate::frameworks::foundation::ns_string::{
-    get_static_str, to_rust_string, NSUTF8StringEncoding,
+    from_rust_string, get_static_str, to_rust_string, NSASCIIStringEncoding,
+    NSUTF8StringEncoding,
 };
 use crate::frameworks::foundation::NSUInteger;
 use crate::mem::{ConstPtr, MutPtr, Ptr};
@@ -135,6 +136,54 @@ fn CFURLCreateWithString(
     msg![env; url initWithString:url_string]
 }
 
+fn CFURLCreateStringByAddingPercentEscapes(
+    env: &mut Environment,
+    allocator: CFAllocatorRef,
+    original_string: CFStringRef,
+    characters_to_leave_unescaped: CFStringRef,
+    legal_url_characters_to_be_escaped: CFStringRef,
+    encoding: CFStringEncoding,
+) -> CFStringRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    let ns_encoding = CFStringConvertEncodingToNSStringEncoding(env, encoding);
+    assert!(ns_encoding == NSUTF8StringEncoding || ns_encoding == NSASCIIStringEncoding);
+
+    let original = to_rust_string(env, original_string);
+    let leave_unescaped = if characters_to_leave_unescaped.is_null() {
+        String::new()
+    } else {
+        to_rust_string(env, characters_to_leave_unescaped).into_owned()
+    };
+    let force_escaped = if legal_url_characters_to_be_escaped.is_null() {
+        String::new()
+    } else {
+        to_rust_string(env, legal_url_characters_to_be_escaped).into_owned()
+    };
+
+    // RFC 2396's unreserved and reserved URL characters. Existing percent
+    // escapes are preserved. Callers can explicitly add or remove characters
+    // from this set through the two optional arguments above.
+    const URL_SAFE: &[u8] = b"-_.!~*'();/?:@&=+$,#%";
+    let mut escaped = String::with_capacity(original.len());
+    for &byte in original.as_bytes() {
+        let ch = byte as char;
+        let must_escape = byte.is_ascii() && force_escaped.contains(ch);
+        let is_safe = byte.is_ascii_alphanumeric()
+            || URL_SAFE.contains(&byte)
+            || (byte.is_ascii() && leave_unescaped.contains(ch));
+        if is_safe && !must_escape {
+            escaped.push(ch);
+        } else {
+            use std::fmt::Write;
+            write!(&mut escaped, "%{byte:02X}").unwrap();
+        }
+    }
+
+    // The Create rule transfers ownership of this retained NSString to the
+    // caller, which is exactly what from_rust_string returns.
+    from_rust_string(env, escaped)
+}
+
 pub fn CFURLCopyPathExtension(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     let path = msg![env; url path];
     let ext = msg![env; path pathExtension];
@@ -200,6 +249,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLCreateWithBytes(_, _, _, _, _)),
     export_c_func!(CFURLCreateWithFileSystemPath(_, _, _, _)),
     export_c_func!(CFURLCreateWithString(_, _, _)),
+    export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, _, _, _, _)),
     export_c_func!(CFURLCopyPathExtension(_)),
     export_c_func!(CFURLCopyFileSystemPath(_, _)),
     export_c_func!(CFURLCreateCopyAppendingPathComponent(_, _, _, _)),
