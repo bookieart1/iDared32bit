@@ -28,7 +28,7 @@ use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, Class, ClassExports,
     HostObject, NSZonePtr,
 };
-use crate::{impl_HostObject_with_superclass, Environment};
+use crate::{impl_HostObject_with_superclass, msg_super, Environment};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
@@ -382,10 +382,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation NSDictionary: NSObject
 
 + (id)allocWithZone:(NSZonePtr)zone {
-    // NSDictionary might be subclassed by something which needs allocWithZone:
-    // to have the normal behaviour. Unimplemented: call superclass alloc then.
-    assert!(this == env.objc.get_known_class("NSDictionary", &mut env.mem));
-    msg_class![env; _touchHLE_NSDictionary allocWithZone:zone]
+    if this == env.objc.get_known_class("NSDictionary", &mut env.mem) {
+        msg_class![env; _touchHLE_NSDictionary allocWithZone:zone]
+    } else {
+        // Real subclasses must retain their class identity rather than being
+        // replaced with touchHLE's private concrete NSDictionary class.
+        msg_super![env; this allocWithZone:zone]
+    }
 }
 
 + (id)dictionary {

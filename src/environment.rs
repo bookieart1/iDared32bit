@@ -1645,6 +1645,25 @@ impl Environment {
     /// connected. Returns [true] if the CPU should step and then resume
     /// debugging, or [false] if it should resume normal execution.
     fn debug_cpu_error(&mut self, error: cpu::CpuError) {
+        if matches!(error, cpu::CpuError::MemoryError) {
+            // The CPU core reports memory faults after advancing the PC. Keep
+            // a small window around it so a device log contains the faulting
+            // instruction (including either 16- or 32-bit Thumb encodings).
+            let pc = self.cpu.regs()[cpu::Cpu::PC];
+            let cpsr = self.cpu.cpsr();
+            let start = pc.saturating_sub(4);
+            let ptr = mem::ConstVoidPtr::from_bits(start);
+            if let Some(bytes) = self.mem.get_bytes_fallible(ptr, 8) {
+                log_no_panic!(
+                    "CPU memory-fault context: pc={pc:#010x}, cpsr={cpsr:#010x}, bytes at {start:#010x}: {bytes:02x?}"
+                );
+            } else {
+                log_no_panic!(
+                    "CPU memory-fault context: pc={pc:#010x}, cpsr={cpsr:#010x}, instruction bytes unavailable"
+                );
+            }
+        }
+
         if matches!(error, cpu::CpuError::UndefinedInstruction)
             || matches!(error, cpu::CpuError::Breakpoint)
         {

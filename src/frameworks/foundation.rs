@@ -49,6 +49,7 @@ pub mod ns_objc_runtime;
 pub mod ns_object;
 pub mod ns_operation;
 pub mod ns_process_info;
+pub mod ns_predicate;
 pub mod ns_property_list_serialization;
 pub mod ns_run_loop;
 pub mod ns_scanner;
@@ -102,6 +103,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_object::CLASSES,
         ns_operation::CLASSES,
         ns_process_info::CLASSES,
+        ns_predicate::CLASSES,
         ns_property_list_serialization::CLASSES,
         ns_run_loop::CLASSES,
         ns_scanner::CLASSES,
