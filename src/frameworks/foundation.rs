@@ -62,6 +62,7 @@ pub mod ns_url;
 pub mod ns_url_cache;
 pub mod ns_url_connection;
 pub mod ns_url_request;
+pub mod ns_ubiquitous_key_value_store;
 pub mod ns_user_defaults;
 pub mod ns_value;
 pub mod ns_xml_parser;
@@ -113,6 +114,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_url_cache::CLASSES,
         ns_url_connection::CLASSES,
         ns_url_request::CLASSES,
+        ns_ubiquitous_key_value_store::CLASSES,
         ns_user_defaults::CLASSES,
         ns_value::CLASSES,
         ns_xml_parser::CLASSES,
@@ -127,6 +129,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_keyed_unarchiver::CONSTANTS,
         ns_locale::CONSTANTS,
         ns_run_loop::CONSTANTS,
+        ns_ubiquitous_key_value_store::CONSTANTS,
     ],
     function_exports: &[
         FUNCTIONS,
@@ -152,6 +155,7 @@ pub struct State {
     ns_thread: ns_thread::State,
     ns_time_zone: ns_time_zone::State,
     ns_url_cache: ns_url_cache::State,
+    ns_ubiquitous_key_value_store: ns_ubiquitous_key_value_store::State,
     ns_user_defaults: ns_user_defaults::State,
     ns_value: ns_value::State,
 }
