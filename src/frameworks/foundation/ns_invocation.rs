@@ -7,6 +7,7 @@
 
 use crate::abi::{extend_stack_for_args, write_next_arg, GuestArg};
 use crate::cpu::Cpu;
+use crate::frameworks::core_graphics::CGRect;
 use crate::frameworks::foundation::{NSInteger, NSUInteger};
 use crate::libc::string::strdup;
 use crate::mem::{ConstPtr, MutPtr, MutVoidPtr};
@@ -140,6 +141,15 @@ pub const CLASSES: ClassExports = objc_classes! {
         .argument_types
         .as_ref();
     let arg_type = argument_types.get(idx as usize).unwrap();
+    let selector = env
+        .objc
+        .borrow::<NSInvocationHostObject>(this)
+        .selector;
+    let is_init_with_frame_rect = arg_type == "?"
+        && idx == 2
+        && selector
+            .map(|selector| selector.as_str(&env.mem) == "initWithFrame:")
+            .unwrap_or(false);
     let new: MutVoidPtr = match arg_type.as_str() {
         "f" => {
             let arg_loc: MutPtr<f32> = arg_loc.cast();
@@ -161,6 +171,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         // pointer cases
         _ if arg_type.starts_with('^') => {
             let arg_loc: MutPtr<MutVoidPtr> = arg_loc.cast();
+            let arg = env.mem.read(arg_loc);
+            env.mem.alloc_and_write(arg).cast()
+        }
+        "?" if is_init_with_frame_rect => {
+            let arg_loc: MutPtr<CGRect> = arg_loc.cast();
             let arg = env.mem.read(arg_loc);
             env.mem.alloc_and_write(arg).cast()
         }
@@ -202,7 +217,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     // TODO: cross check against frame length from NSMethodSignature
     let mut reg_count = 0;
     let argument_types: &Vec<String> = env.objc.borrow::<NSInvocationHostObject>(this).argument_types.as_ref();
-    for arg_type in argument_types.iter() {
+    let selector = env.objc.borrow::<NSInvocationHostObject>(this).selector.unwrap();
+    for (index, arg_type) in argument_types.iter().enumerate() {
         // TODO: refactor and simplify
         reg_count += match arg_type.as_str() {
             "@" => <id as GuestArg>::REG_COUNT,
@@ -212,6 +228,9 @@ pub const CLASSES: ClassExports = objc_classes! {
             "*" => <MutPtr<u8> as GuestArg>::REG_COUNT,
             // pointer cases
             _ if arg_type.starts_with('^') => <MutVoidPtr as GuestArg>::REG_COUNT,
+            "?" if index == 2 && selector.as_str(&env.mem) == "initWithFrame:" => {
+                <CGRect as GuestArg>::REG_COUNT
+            }
             _ => unimplemented!("reg_count for {arg_type}")
         }
     }
@@ -275,6 +294,12 @@ pub const CLASSES: ClassExports = objc_classes! {
                 let arg_val = env.mem.read(arg);
                 let regs = env.cpu.regs_mut();
                 write_next_arg::<MutVoidPtr>(&mut reg_offset, regs, &mut env.mem, arg_val);
+            }
+            "?" if i == 2 && selector.as_str(&env.mem) == "initWithFrame:" => {
+                let arg: ConstPtr<CGRect> = arg_slot.cast().cast_const();
+                let arg_val = env.mem.read(arg);
+                let regs = env.cpu.regs_mut();
+                write_next_arg::<CGRect>(&mut reg_offset, regs, &mut env.mem, arg_val);
             }
             _ => unimplemented!("write_next_arg for {arg_type}")
         }

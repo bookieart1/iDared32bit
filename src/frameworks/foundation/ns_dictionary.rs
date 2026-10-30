@@ -26,9 +26,9 @@ use crate::fs::GuestPath;
 use crate::mem::{ConstPtr, MutPtr, Ptr, SafeRead};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, Class, ClassExports,
-    HostObject, NSZonePtr,
+    HostObject, NSZonePtr, TrivialHostObject,
 };
-use crate::{impl_HostObject_with_superclass, msg_super, Environment};
+use crate::{impl_HostObject_with_superclass, Environment};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
@@ -387,7 +387,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         // Real subclasses must retain their class identity rather than being
         // replaced with touchHLE's private concrete NSDictionary class.
-        msg_super![env; this allocWithZone:zone]
+        env.objc.alloc_object(this, Box::new(TrivialHostObject), &mut env.mem)
     }
 }
 

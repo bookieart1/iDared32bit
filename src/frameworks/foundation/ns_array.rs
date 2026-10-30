@@ -70,6 +70,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, array)
 }
 
+- (id)filteredArrayUsingPredicate:(id)predicate { // NSPredicate*
+    let count: NSUInteger = msg![env; this count];
+    let mut objects = Vec::new();
+    for index in 0..count {
+        let object: id = msg![env; this objectAtIndex:index];
+        let include: bool = msg![env; predicate evaluateWithObject:object];
+        if include {
+            retain(env, object);
+            objects.push(object);
+        }
+    }
+    let filtered = from_vec(env, objects);
+    autorelease(env, filtered)
+}
+
 // These probably comes from some category related to plists.
 + (id)arrayWithContentsOfFile:(id)path { // NSString*
     let array: id = msg![env; this alloc];
