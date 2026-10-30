@@ -67,6 +67,7 @@ SEL method_getName(Method m);
 
 // Foundation
 
+@class NSThread;
 @interface NSObject {
   Class isa;
 }
@@ -81,6 +82,10 @@ SEL method_getName(Method m);
 - (void)dealloc;
 - (NSUInteger)retainCount;
 - (id)performSelector:(SEL)selector;
+- (void)performSelector:(SEL)selector
+               onThread:(NSThread *)thread
+             withObject:(id)object
+          waitUntilDone:(BOOL)wait;
 - (BOOL)respondsToSelector:(SEL)selector;
 + (void (*)(void))instanceMethodForSelector:(SEL)selector;
 - (void (*)(void))methodForSelector:(SEL)selector;
@@ -637,7 +642,19 @@ typedef enum {
                        green:(CGFloat)g
                         blue:(CGFloat)b
                        alpha:(CGFloat)a;
++ (instancetype)colorWithHue:(CGFloat)h
+                  saturation:(CGFloat)s
+                  brightness:(CGFloat)b
+                       alpha:(CGFloat)a;
 + (instancetype)colorWithWhite:(CGFloat)w alpha:(CGFloat)a;
+- (instancetype)initWithHue:(CGFloat)h
+                  saturation:(CGFloat)s
+                  brightness:(CGFloat)b
+                       alpha:(CGFloat)a;
+- (BOOL)getRed:(CGFloat *)r
+         green:(CGFloat *)g
+          blue:(CGFloat *)b
+         alpha:(CGFloat *)a;
 + (instancetype)clearColor;
 + (instancetype)blackColor;
 + (instancetype)whiteColor;

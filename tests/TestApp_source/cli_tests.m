@@ -2673,6 +2673,22 @@ int test_setlocale() {
   return 0;
 }
 
+int test_strcoll_C_locale() {
+  if (strcoll("apple", "banana") >= 0)
+    return -1;
+  if (strcoll("same", "same") != 0)
+    return -2;
+  if (strcoll("zebra", "apple") <= 0)
+    return -3;
+  return 0;
+}
+
+int test_access_combined_mode() {
+  if (access("/", R_OK | X_OK) != 0)
+    return -1;
+  return 0;
+}
+
 const int PATH_BUF_SIZE = 256;
 // static array for path: not great, not terrible
 char path[PATH_BUF_SIZE];
@@ -6370,6 +6386,46 @@ int test_NSInvocation_returnValue() {
   return 0;
 }
 
+int test_NSObject_performSelector_onThread() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+  InvocationTarget *target = [InvocationTarget new];
+  NSObject *value = [NSObject new];
+
+  [target performSelector:NSSelectorFromString(@"storeValue:")
+                 onThread:[NSThread currentThread]
+               withObject:value
+            waitUntilDone:YES];
+
+  if (target->receivedValue != value) {
+    [pool drain];
+    return -1;
+  }
+
+  [pool drain];
+  return 0;
+}
+
+int test_UIColor_HSB() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+  UIColor *color = [UIColor colorWithHue:0.5
+                              saturation:1.0
+                              brightness:1.0
+                                   alpha:0.25];
+  CGFloat red = -1.0, green = -1.0, blue = -1.0, alpha = -1.0;
+  if (![color getRed:&red green:&green blue:&blue alpha:&alpha]) {
+    [pool drain];
+    return -1;
+  }
+  if (fabs(red) > 0.001 || fabs(green - 1.0) > 0.001 ||
+      fabs(blue - 1.0) > 0.001 || fabs(alpha - 0.25) > 0.001) {
+    [pool drain];
+    return -2;
+  }
+
+  [pool drain];
+  return 0;
+}
+
 @interface CharBufferObject : NSObject {
 @public
   char *buffer;
@@ -7590,6 +7646,8 @@ struct {
     FUNC_DEF(test_strncat),
     FUNC_DEF(test_strlcpy),
     FUNC_DEF(test_setlocale),
+    FUNC_DEF(test_strcoll_C_locale),
+    FUNC_DEF(test_access_combined_mode),
     FUNC_DEF(test_strtoul),
     FUNC_DEF(test_strtol),
     FUNC_DEF(test_wcstol),
@@ -7683,6 +7741,8 @@ struct {
     FUNC_DEF(test_NSInvocation_retainArguments),
     FUNC_DEF(test_NSInvocation_pointer),
     FUNC_DEF(test_NSInvocation_returnValue),
+    FUNC_DEF(test_NSObject_performSelector_onThread),
+    FUNC_DEF(test_UIColor_HSB),
     FUNC_DEF(test_Initialize),
     FUNC_DEF(test_NSNotificationCenter_addObserver_nilName),
     FUNC_DEF(test_NSNotificationCenter_addObserver_nilName_withObject),

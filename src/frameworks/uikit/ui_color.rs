@@ -79,6 +79,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)colorWithHue:(CGFloat)h
+        saturation:(CGFloat)s
+        brightness:(CGFloat)b
+             alpha:(CGFloat)a {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithHue:h saturation:s brightness:b alpha:a];
+    autorelease(env, new)
+}
+
 + (id)colorWithWhite:(CGFloat)w alpha:(CGFloat)a {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithWhite:w alpha:a];
@@ -130,6 +139,37 @@ pub const CLASSES: ClassExports = objc_classes! {
             alpha:(CGFloat)a {
     env.objc.borrow_mut::<UIColorHostObject>(this).cg_color = cg_color::from_rgba(env, (r, g, b, a));
     this
+}
+
+- (id)initWithHue:(CGFloat)h
+        saturation:(CGFloat)s
+        brightness:(CGFloat)b
+             alpha:(CGFloat)a {
+    let h = h.rem_euclid(1.0) * 6.0;
+    let s = s.clamp(0.0, 1.0);
+    let b = b.clamp(0.0, 1.0);
+    let a = a.clamp(0.0, 1.0);
+
+    let (r, g, blue) = if s == 0.0 {
+        (b, b, b)
+    } else {
+        let sector = h.floor() as u32;
+        let fraction = h - h.floor();
+        let p = b * (1.0 - s);
+        let q = b * (1.0 - s * fraction);
+        let t = b * (1.0 - s * (1.0 - fraction));
+        match sector % 6 {
+            0 => (b, t, p),
+            1 => (q, b, p),
+            2 => (p, b, t),
+            3 => (p, q, b),
+            4 => (t, p, b),
+            5 => (b, p, q),
+            _ => unreachable!(),
+        }
+    };
+
+    msg![env; this initWithRed:r green:g blue:blue alpha:a]
 }
 
 // NSCoding implementation

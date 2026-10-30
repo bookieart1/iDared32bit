@@ -75,49 +75,33 @@ fn isatty(env: &mut Environment, fd: FileDescriptor) -> i32 {
 }
 
 fn access(env: &mut Environment, path: ConstPtr<u8>, mode: i32) -> i32 {
-    // TODO: handle errno properly
     set_errno(env, 0);
 
     let binding = env.mem.cstr_at_utf8(path).unwrap();
     let guest_path = GuestPath::new(&binding);
     let (exists, read, write, execute) = env.fs.access(guest_path);
-    // TODO: support ORing
-    match mode {
-        F_OK => {
-            if exists {
-                0
-            } else {
-                set_errno(env, ENOENT);
-                -1
-            }
-        }
-        X_OK => {
-            if execute {
-                0
-            } else {
-                set_errno(env, EACCES);
-                -1
-            }
-        }
-        W_OK => {
-            if write {
-                0
-            } else {
-                set_errno(env, EROFS);
-                -1
-            }
-        }
-        R_OK => {
-            if read {
-                0
-            } else {
-                // TODO: is it the correct error?
-                set_errno(env, EACCES);
-                -1
-            }
-        }
-        _ => unimplemented!("{}", mode),
+
+    if mode & !(R_OK | W_OK | X_OK) != 0 {
+        set_errno(env, EINVAL);
+        return -1;
     }
+    if !exists {
+        set_errno(env, ENOENT);
+        return -1;
+    }
+
+    // POSIX permits any bitwise combination of R_OK, W_OK and X_OK. F_OK is
+    // zero, so reaching this point is already a successful existence check.
+    if mode & W_OK != 0 && !write {
+        set_errno(env, EROFS);
+        return -1;
+    }
+    if (mode & R_OK != 0 && !read) || (mode & X_OK != 0 && !execute) {
+        set_errno(env, EACCES);
+        return -1;
+    }
+
+    0
 }
 
 fn unlink(env: &mut Environment, path: ConstPtr<u8>) -> i32 {

@@ -17,8 +17,12 @@
 use super::ns_string::{from_rust_string, to_rust_string};
 use super::{ns_key_value_observing, NSTimeInterval, NSUInteger};
 use crate::abi::GuestFunction;
-use crate::frameworks::foundation::ns_run_loop::{add_perform_request, cancel_perform_requests};
-use crate::frameworks::foundation::ns_thread::detach_new_thread_inner;
+use crate::frameworks::foundation::ns_run_loop::{
+    add_perform_request, cancel_perform_requests, run_loop_for_thread,
+};
+use crate::frameworks::foundation::ns_thread::{
+    detach_new_thread_inner, thread_id_for_ns_thread,
+};
 use crate::libc::semaphore::{host_destroy_semaphore, sem_wait};
 use crate::mem::MutVoidPtr;
 use crate::objc::{
@@ -600,6 +604,38 @@ forUndefinedKey:(id)key { // NSString*
 - (())performSelector:(SEL)sel withObject:(id)arg afterDelay:(NSTimeInterval)delay {
     let run_loop: id = msg_class![env; NSRunLoop currentRunLoop];
     add_perform_request(env, run_loop, this, sel, arg, Some(delay), false);
+}
+
+- (())performSelector:(SEL)sel
+              onThread:(id)thread
+            withObject:(id)arg
+         waitUntilDone:(bool)wait {
+    log_dbg!(
+        "performSelector:{} onThread:{:?} withObject:{:?} waitUntilDone:{}",
+        sel.as_str(&env.mem),
+        thread,
+        arg,
+        wait
+    );
+
+    let thread_id = thread_id_for_ns_thread(env, thread)
+        .expect("performSelector:onThread: target NSThread has not been started");
+    if wait && thread_id == env.current_thread {
+        if sel.as_str(&env.mem).ends_with(':') {
+            () = msg_send_no_type_checking(env, (this, sel, arg));
+        } else {
+            () = msg_send(env, (this, sel));
+        }
+        return;
+    }
+
+    let run_loop_class = env.objc.get_known_class("NSRunLoop", &mut env.mem);
+    let run_loop = run_loop_for_thread(env, run_loop_class, thread_id);
+    let sem = add_perform_request(env, run_loop, this, sel, arg, None, wait);
+    if wait {
+        sem_wait(env, sem);
+        host_destroy_semaphore(env, sem);
+    }
 }
 
 - (())performSelectorOnMainThread:(SEL)sel withObject:(id)arg waitUntilDone:(bool)wait {
