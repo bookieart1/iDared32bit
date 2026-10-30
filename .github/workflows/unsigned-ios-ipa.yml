@@ -13,6 +13,10 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CMAKE: ${{ github.workspace }}/vendor/cmake/bin/cmake
+  # These are command-line build overrides only. The Xcode project keeps its
+  # original App Store identity, while this development IPA installs beside it.
+  DEV_BUNDLE_ID: com.bookieart1.idared32bit.dev
+  DEV_DISPLAY_NAME: iDared Dev
 
 jobs:
   build-unsigned-ipa:
@@ -62,7 +66,7 @@ jobs:
         run: |
           "$CMAKE" --version
 
-      - name: Build the existing iOS app without signing
+      - name: Build the separate iDared Dev app without signing
         run: |
           set -euo pipefail
           xcodebuild archive \
@@ -72,20 +76,24 @@ jobs:
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/iDared32bit.xcarchive" \
+            PRODUCT_BUNDLE_IDENTIFIER="$DEV_BUNDLE_ID" \
+            INFOPLIST_KEY_CFBundleDisplayName="$DEV_DISPLAY_NAME" \
+            INFOPLIST_KEY_CFBundleName="$DEV_DISPLAY_NAME" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
 
-      - name: Verify identity and package the unsigned IPA
+      - name: Verify separate identity and package the unsigned IPA
         run: |
           set -euo pipefail
 
           APP_PATH="$RUNNER_TEMP/iDared32bit.xcarchive/Products/Applications/iDared 32bit.app"
-          EXPECTED_BUNDLE_ID="org.alexmartin.idared32bit"
           ACTUAL_BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw "$APP_PATH/Info.plist")"
+          ACTUAL_DISPLAY_NAME="$(plutil -extract CFBundleDisplayName raw "$APP_PATH/Info.plist")"
 
           test -d "$APP_PATH"
-          test "$ACTUAL_BUNDLE_ID" = "$EXPECTED_BUNDLE_ID"
+          test "$ACTUAL_BUNDLE_ID" = "$DEV_BUNDLE_ID"
+          test "$ACTUAL_DISPLAY_NAME" = "$DEV_DISPLAY_NAME"
           test ! -e "$APP_PATH/embedded.mobileprovision"
 
           if codesign -dv "$APP_PATH" >/dev/null 2>&1; then
@@ -99,16 +107,16 @@ jobs:
 
           (
             cd build
-            /usr/bin/zip -qry iDared32bit-unsigned.ipa Payload
+            /usr/bin/zip -qry iDared32bit-dev-unsigned.ipa Payload
           )
 
-          test -s build/iDared32bit-unsigned.ipa
-          shasum -a 256 build/iDared32bit-unsigned.ipa
+          test -s build/iDared32bit-dev-unsigned.ipa
+          shasum -a 256 build/iDared32bit-dev-unsigned.ipa
 
-      - name: Upload the unsigned IPA
+      - name: Upload the separate unsigned IPA
         uses: actions/upload-artifact@v7
         with:
-          name: iDared32bit-unsigned-${{ github.sha }}
-          path: build/iDared32bit-unsigned.ipa
+          name: iDared32bit-dev-unsigned-${{ github.sha }}
+          path: build/iDared32bit-dev-unsigned.ipa
           if-no-files-found: error
           retention-days: 14
