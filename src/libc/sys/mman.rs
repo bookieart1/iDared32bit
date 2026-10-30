@@ -26,6 +26,18 @@ pub struct State {
     mmap_allocations: HashMap<MutVoidPtr, GuestUSize>,
 }
 
+impl State {
+    pub fn forget_overlapping(&mut self, address: MutVoidPtr, size: GuestUSize) {
+        let start = address.to_bits() as u64;
+        let end = start + size as u64;
+        self.mmap_allocations.retain(|allocation, allocation_size| {
+            let allocation_start = allocation.to_bits() as u64;
+            let allocation_end = allocation_start + *allocation_size as u64;
+            allocation_end <= start || end <= allocation_start
+        });
+    }
+}
+
 /// For files, our implementation of mmap is really simple:
 /// it's just load entirety of file in memory!
 fn mmap(
@@ -67,8 +79,11 @@ fn mmap(
                 // MAP_FIXED replaces any mappings that overlap the requested
                 // range. Free the range first so the allocator can install the
                 // replacement at the exact address.
+                env.libc_state.mman.forget_overlapping(addr, len);
+                env.libc_state
+                    .mach_vm
+                    .forget_overlapping(addr.to_bits(), len);
                 env.mem.vm_free(addr, len);
-                env.libc_state.mman.mmap_allocations.remove(&addr);
                 env.mem
                     .vm_alloc(Some(addr.to_bits()), len)
                     .unwrap_or_else(|error| {
@@ -111,12 +126,11 @@ fn munmap(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize) -> i32 {
         log!("Warning: munmap({:?}, {}) failed, returning -1", addr, len);
         return -1;
     }
-    assert_eq!(
-        *env.libc_state.mman.mmap_allocations.get(&addr).unwrap(),
-        len
-    );
+    env.libc_state.mman.forget_overlapping(addr, len);
+    env.libc_state
+        .mach_vm
+        .forget_overlapping(addr.to_bits(), len);
     env.mem.vm_free(addr, len);
-    env.libc_state.mman.mmap_allocations.remove(&addr);
     0 // success
 }
 

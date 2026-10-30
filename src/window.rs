@@ -2115,6 +2115,11 @@ impl Window {
 /// never shown, and the app hangs.
 pub static START_ERROR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
+/// Source location captured by the iOS/Android panic hook. The panic payload
+/// alone is often too generic to identify the failing emulator code.
+pub static LAST_PANIC_LOCATION: std::sync::Mutex<Option<String>> =
+    std::sync::Mutex::new(None);
+
 /// Set when the user picks "Return to App Picker" in the error messagebox.
 pub static RETURN_TO_APP_PICKER_AFTER_ERROR: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
@@ -2124,6 +2129,15 @@ pub static RETURN_TO_APP_PICKER_AFTER_ERROR: std::sync::atomic::AtomicBool =
 /// The window argument allows for passing in the parent window for the
 /// messagebox, which is not required but should be done if possible.
 pub fn show_error_messagebox(window: Option<&Window>, error_message: &str) {
+    let panic_location = LAST_PANIC_LOCATION
+        .lock()
+        .ok()
+        .and_then(|mut location| location.take());
+    let error_message = match panic_location {
+        Some(location) => format!("{error_message}\n\nSource: {location}"),
+        None => error_message.to_owned(),
+    };
+
     // On iOS, the app picker shows it instead, with an OK button, so the
     // game always returns there.
     if cfg!(target_os = "ios") {

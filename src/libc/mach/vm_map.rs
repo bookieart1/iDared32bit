@@ -26,6 +26,18 @@ pub struct State {
     allocations: HashMap<mach_vm_address_t, mach_vm_size_t>,
 }
 
+impl State {
+    pub fn forget_overlapping(&mut self, address: mach_vm_address_t, size: mach_vm_size_t) {
+        let start = address as u64;
+        let end = start + size as u64;
+        self.allocations.retain(|allocation, allocation_size| {
+            let allocation_start = *allocation as u64;
+            let allocation_end = allocation_start + *allocation_size as u64;
+            allocation_end <= start || end <= allocation_start
+        });
+    }
+}
+
 pub fn vm_allocate(
     env: &mut Environment,
     target_task: vm_map_t,
@@ -63,12 +75,11 @@ fn vm_deallocate(
 ) -> kern_return_t {
     assert_eq!(target_task, MACH_TASK_SELF);
 
-    assert_eq!(
-        *env.libc_state.mach_vm.allocations.get(&address).unwrap(),
-        size
-    );
+    env.libc_state
+        .mman
+        .forget_overlapping(Ptr::from_bits(address), size);
+    env.libc_state.mach_vm.forget_overlapping(address, size);
     env.mem.vm_free(Ptr::from_bits(address), size);
-    env.libc_state.mach_vm.allocations.remove(&address);
 
     KERN_SUCCESS
 }

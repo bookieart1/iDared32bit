@@ -76,6 +76,9 @@ fn install_panic_hook() {
             "(non-string payload)"
         };
         if let Some(location) = info.location() {
+            if let Ok(mut last_location) = window::LAST_PANIC_LOCATION.lock() {
+                *last_location = Some(location.to_string());
+            }
             echo!("Panic at {}: {}", location, payload);
         } else {
             echo!("Panic: {}", payload);
