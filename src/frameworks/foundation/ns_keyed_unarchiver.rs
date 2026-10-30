@@ -458,8 +458,13 @@ pub fn decode_current_number(env: &mut Environment, unarchiver: id) -> id {
     let bool_key = get_static_str(env, "NS.boolval");
     if let Some(value) = get_value_to_decode_for_key(env, unarchiver, int_key) {
         // TODO: deal with type coercion
-        let longlong = value.as_signed_integer().unwrap();
-        msg![env; num initWithLongLong:longlong]
+        if let Some(longlong) = value.as_signed_integer() {
+            msg![env; num initWithLongLong:longlong]
+        } else if let Some(unsigned_longlong) = value.as_unsigned_integer() {
+            msg![env; num initWithUnsignedLongLong:unsigned_longlong]
+        } else {
+            unreachable!()
+        }
     } else if let Some(value) = get_value_to_decode_for_key(env, unarchiver, dbl_key) {
         // TODO: deal with type coercion
         let double = value.as_real().unwrap();
