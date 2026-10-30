@@ -9,6 +9,7 @@ use super::{NSTimeInterval, NSUInteger};
 use crate::frameworks::foundation::ns_string;
 use crate::libc::mach::host::PHYSICAL_MEMORY;
 use crate::objc::{id, msg, msg_class, objc_classes, ClassExports};
+use crate::window::DeviceFamily;
 use crate::Environment;
 use std::time::Instant;
 
@@ -59,6 +60,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     assert_process_info_singleton(env, this); // TODO
     // Just returning 1 for now which matches early iPhones
     1
+}
+
+- (id)operatingSystemVersionString {
+    assert_process_info_singleton(env, this); // TODO
+    // Keep this consistent with UIDevice's emulated systemVersion.
+    let version = match env.options.device_family {
+        Some(DeviceFamily::iPad) => "Version 3.2 (Build 7B367)",
+        _ => "Version 2.0 (Build 5A347)",
+    };
+    ns_string::get_static_str(env, version)
 }
 
 - (id)processName {
