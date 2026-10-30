@@ -491,6 +491,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this objectForKey:key]
 }
 
+// Generic implementation for real NSDictionary subclasses. Concrete
+// touchHLE dictionaries override this with a direct, faster implementation.
+- (id)allKeys {
+    let keys: id = msg_class![env; NSMutableArray array];
+    let enumerator: id = msg![env; this keyEnumerator];
+    loop {
+        let key: id = msg![env; enumerator nextObject];
+        if key == nil {
+            break;
+        }
+        () = msg![env; keys addObject:key];
+    }
+    let immutable_keys: id = msg![env; keys copy];
+    autorelease(env, immutable_keys)
+}
+
 - (NSUInteger)hash {
     // TODO: define better hash
     msg![env; this count]

@@ -39,6 +39,48 @@ fn clock(env: &mut Environment) -> clock_t {
         .wrapping_mul(CLOCKS_PER_SEC)
 }
 
+#[allow(non_camel_case_types)]
+type posix_clock_t = u32;
+
+#[repr(C, packed)]
+#[derive(Copy, Clone)]
+struct tms {
+    tms_utime: posix_clock_t,
+    tms_stime: posix_clock_t,
+    tms_cutime: posix_clock_t,
+    tms_cstime: posix_clock_t,
+}
+unsafe impl SafeRead for tms {}
+
+const POSIX_CLOCK_TICKS_PER_SECOND: u64 = 100;
+
+fn times(env: &mut Environment, out: MutPtr<tms>) -> posix_clock_t {
+    // touchHLE does not yet distinguish guest user and system CPU time. A
+    // monotonic process-clock approximation preserves the API's timing and
+    // ordering guarantees without exposing host-specific process accounting.
+    let elapsed = Instant::now().duration_since(env.startup_time);
+    let ticks = elapsed
+        .as_secs()
+        .saturating_mul(POSIX_CLOCK_TICKS_PER_SECOND)
+        .saturating_add(
+            u64::from(elapsed.subsec_nanos()) * POSIX_CLOCK_TICKS_PER_SECOND / 1_000_000_000,
+        );
+    let ticks = ticks.min(u64::from(posix_clock_t::MAX)) as posix_clock_t;
+
+    if !out.is_null() {
+        env.mem.write(
+            out,
+            tms {
+                tms_utime: ticks,
+                tms_stime: 0,
+                tms_cutime: 0,
+                tms_cstime: 0,
+            },
+        );
+    }
+    ticks
+}
+
 fn time(env: &mut Environment, out: MutPtr<time_t>) -> time_t {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -779,6 +821,7 @@ pub fn strftime(
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(clock()),
+    export_c_func!(times(_)),
     export_c_func!(time(_)),
     export_c_func!(tzset()),
     export_c_func!(gmtime_r(_, _)),

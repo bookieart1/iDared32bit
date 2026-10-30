@@ -35,6 +35,7 @@
 #include <string.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
+#include <sys/times.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <time.h>
@@ -2405,7 +2406,8 @@ void *nsthread_status_pthread(void *arg) {
 int test_NSThread_isExecuting_isFinished() {
   // The main thread.
   NSThread *main_thread = [NSThread currentThread];
-  if (![main_thread isExecuting] || [main_thread isFinished])
+  if (![main_thread isExecuting] || [main_thread isFinished] ||
+      ![main_thread isMainThread] || ![NSThread isMainThread])
     return -1;
 
   // A thread started by NSThread.
@@ -2438,6 +2440,22 @@ int test_NSThread_isExecuting_isFinished() {
   if (pthread_result != 0)
     return -7;
 
+  return 0;
+}
+
+int test_times_sysconf_clock_ticks() {
+  if (sysconf(_SC_CLK_TCK) != 100)
+    return -1;
+
+  struct tms first = {0};
+  struct tms second = {0};
+  clock_t first_ticks = times(&first);
+  usleep(20000);
+  clock_t second_ticks = times(&second);
+
+  if (first_ticks == (clock_t)-1 || second_ticks < first_ticks ||
+      second.tms_utime < first.tms_utime)
+    return -2;
   return 0;
 }
 
@@ -7182,6 +7200,41 @@ int test_nil_path_or_key() {
   return 0;
 }
 
+@interface NSDictionarySubclassForAllKeysTest : NSDictionary
+@end
+
+@implementation NSDictionarySubclassForAllKeysTest
+- (id)init {
+  return self;
+}
+- (NSUInteger)count {
+  return 2;
+}
+- (id)objectForKey:(id)key {
+  if ([key isEqualToString:@"first"])
+    return @1;
+  if ([key isEqualToString:@"second"])
+    return @2;
+  return nil;
+}
+- (id)keyEnumerator {
+  return [[NSArray arrayWithObjects:@"first", @"second", nil]
+      objectEnumerator];
+}
+@end
+
+int test_NSDictionary_subclass_allKeys() {
+  NSDictionary *dict = [NSDictionarySubclassForAllKeysTest new];
+  NSArray *keys = [dict allKeys];
+  int result = 0;
+  if ([keys count] != 2 ||
+      ![[keys objectAtIndex:0] isEqualToString:@"first"] ||
+      ![[keys objectAtIndex:1] isEqualToString:@"second"])
+    result = -1;
+  [dict release];
+  return result;
+}
+
 int test_malloc_zone_basic() {
   malloc_zone_t *zone = malloc_create_zone(0, 0);
   unsigned char *p = malloc_zone_malloc(zone, 128);
@@ -7489,6 +7542,7 @@ struct {
     FUNC_DEF(test_NSConditionLock_producer_consumer),
     FUNC_DEF(test_NSThread_isExecuting_isFinished),
     FUNC_DEF(test_NSThread_exit_pthread_exit),
+    FUNC_DEF(test_times_sysconf_clock_ticks),
     FUNC_DEF(test_CFMutableDictionary_NullCallbacks),
     FUNC_DEF(test_CFMutableDictionary_CustomCallbacks_PrimitiveTypes),
     FUNC_DEF(test_CFMutableDictionary_CustomCallbacks_CFTypes),
@@ -7542,6 +7596,7 @@ struct {
     FUNC_DEF(test_NSDirectoryEnumerator),
     FUNC_DEF(test_methodForSelector),
     FUNC_DEF(test_nil_path_or_key),
+    FUNC_DEF(test_NSDictionary_subclass_allKeys),
     FUNC_DEF(test_malloc_zone_basic),
     FUNC_DEF(test_malloc_zone_struct_dispatch),
     FUNC_DEF(test_malloc_zone_statistics),

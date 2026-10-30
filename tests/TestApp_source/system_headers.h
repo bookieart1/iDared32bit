@@ -99,6 +99,7 @@ SEL method_getName(Method m);
 - (NSUInteger)count;
 - (ObjectType)objectAtIndex:(NSUInteger)index;
 - (BOOL)isEqualToArray:(NSArray *)otherArray;
+- (id)objectEnumerator;
 @end
 
 @interface NSMutableArray<ObjectType> : NSArray
@@ -120,6 +121,7 @@ SEL method_getName(Method m);
 - (NSUInteger)count;
 - (ObjectType)objectForKey:(KeyType)aKey;
 - (BOOL)isEqualToDictionary:(NSDictionary *)otherDictionary;
+- (NSArray<KeyType> *)allKeys;
 + (id)dictionaryWithContentsOfFile:(id)path;
 + (id)dictionaryWithContentsOfURL:(NSURL *)url;
 - (id)valueForKey:(id)key;
@@ -325,6 +327,7 @@ SEL NSSelectorFromString(NSString *);
 
 @interface NSThread : NSObject
 + (NSThread *)currentThread;
++ (BOOL)isMainThread;
 + (void)exit;
 - (instancetype)initWithTarget:(id)target
                       selector:(SEL)selector
@@ -332,6 +335,7 @@ SEL NSSelectorFromString(NSString *);
 - (void)start;
 - (BOOL)isExecuting;
 - (BOOL)isFinished;
+- (BOOL)isMainThread;
 @end
 
 // Core Graphics
