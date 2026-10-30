@@ -139,6 +139,15 @@ char *str_format(const char *format, ...) {
 int test_vsnprintf() {
   char *str;
 
+  // A zero value with both '+' and zero-padding is valid and must include
+  // the sign as part of the requested field width.
+  str = str_format("%+05d", 0);
+  if (strcmp(str, "+0000") != 0) {
+    free(str);
+    return -100;
+  }
+  free(str);
+
   // Test %s
   str = str_format("%s", "test");
   if (strcmp(str, "test") != 0) {
@@ -6027,6 +6036,8 @@ int test_wcsftime() {
 - (void)clearValue;
 - (void)storeCString:(const char *)str;
 - (void)storeIntPtr:(int *)ptr;
+- (id)returnObject;
+- (int)returnInteger;
 @end
 
 @implementation InvocationTarget
@@ -6041,6 +6052,12 @@ int test_wcsftime() {
 }
 - (void)storeIntPtr:(int *)ptr {
   intValue = *ptr;
+}
+- (id)returnObject {
+  return receivedValue;
+}
+- (int)returnInteger {
+  return 42;
 }
 @end
 
@@ -6297,6 +6314,56 @@ int test_NSInvocation_pointer() {
   if (target->intValue != 42) {
     [pool drain];
     return -1;
+  }
+
+  [pool drain];
+  return 0;
+}
+
+int test_NSInvocation_returnValue() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+  InvocationTarget *target = [InvocationTarget new];
+  target->receivedValue = target;
+
+  NSMethodSignature *objectSig =
+      [NSMethodSignature signatureWithObjCTypes:"@8@0:4"];
+  if ([objectSig methodReturnLength] != sizeof(id)) {
+    [pool drain];
+    return -1;
+  }
+  NSInvocation *objectInv =
+      [NSInvocation invocationWithMethodSignature:objectSig];
+  [objectInv setTarget:target];
+  [objectInv setSelector:NSSelectorFromString(@"returnObject")];
+  [objectInv invoke];
+  id objectResult = nil;
+  [objectInv getReturnValue:&objectResult];
+  if (objectResult != target) {
+    [pool drain];
+    return -2;
+  }
+
+  NSMethodSignature *integerSig =
+      [NSMethodSignature signatureWithObjCTypes:"i8@0:4"];
+  NSInvocation *integerInv =
+      [NSInvocation invocationWithMethodSignature:integerSig];
+  [integerInv setTarget:target];
+  [integerInv setSelector:NSSelectorFromString(@"returnInteger")];
+  [integerInv invoke];
+  int integerResult = 0;
+  [integerInv getReturnValue:&integerResult];
+  if (integerResult != 42) {
+    [pool drain];
+    return -3;
+  }
+
+  integerResult = 7;
+  [integerInv setReturnValue:&integerResult];
+  integerResult = 0;
+  [integerInv getReturnValue:&integerResult];
+  if (integerResult != 7) {
+    [pool drain];
+    return -4;
   }
 
   [pool drain];
@@ -7235,6 +7302,34 @@ int test_NSDictionary_subclass_allKeys() {
   return result;
 }
 
+int test_NSDictionary_keyEnumerator() {
+  NSDictionary *immutable =
+      [NSDictionary dictionaryWithObjects:[NSArray arrayWithObjects:@1, @2, nil]
+                                  forKeys:[NSArray arrayWithObjects:@"one", @"two", nil]];
+  NSEnumerator *immutableKeys = [immutable keyEnumerator];
+  if ([immutableKeys nextObject] == nil || [immutableKeys nextObject] == nil ||
+      [immutableKeys nextObject] != nil)
+    return -1;
+
+  NSMutableDictionary *mutable = [NSMutableDictionary dictionary];
+  [mutable setObject:@1 forKey:@"one"];
+  [mutable setObject:@2 forKey:@"two"];
+  NSEnumerator *mutableKeys = [mutable keyEnumerator];
+  if ([mutableKeys nextObject] == nil || [mutableKeys nextObject] == nil ||
+      [mutableKeys nextObject] != nil)
+    return -2;
+  return 0;
+}
+
+int test_NSCharacterSet_alphanumericCharacterSet() {
+  NSCharacterSet *set = [NSCharacterSet alphanumericCharacterSet];
+  if (![set characterIsMember:'A'] || ![set characterIsMember:'z'] ||
+      ![set characterIsMember:'7'] || ![set characterIsMember:0x00E9] ||
+      [set characterIsMember:'-'])
+    return -1;
+  return 0;
+}
+
 int test_malloc_zone_basic() {
   malloc_zone_t *zone = malloc_create_zone(0, 0);
   unsigned char *p = malloc_zone_malloc(zone, 128);
@@ -7587,6 +7682,7 @@ struct {
     FUNC_DEF(test_NSInvocation_invokeWithTarget),
     FUNC_DEF(test_NSInvocation_retainArguments),
     FUNC_DEF(test_NSInvocation_pointer),
+    FUNC_DEF(test_NSInvocation_returnValue),
     FUNC_DEF(test_Initialize),
     FUNC_DEF(test_NSNotificationCenter_addObserver_nilName),
     FUNC_DEF(test_NSNotificationCenter_addObserver_nilName_withObject),
@@ -7597,6 +7693,8 @@ struct {
     FUNC_DEF(test_methodForSelector),
     FUNC_DEF(test_nil_path_or_key),
     FUNC_DEF(test_NSDictionary_subclass_allKeys),
+    FUNC_DEF(test_NSDictionary_keyEnumerator),
+    FUNC_DEF(test_NSCharacterSet_alphanumericCharacterSet),
     FUNC_DEF(test_malloc_zone_basic),
     FUNC_DEF(test_malloc_zone_struct_dispatch),
     FUNC_DEF(test_malloc_zone_statistics),

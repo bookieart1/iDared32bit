@@ -22,6 +22,11 @@ struct NSInvocationHostObject {
     sig: id,
     /// Argument type strings resolved from `sig` at creation time
     argument_types: Vec<String>,
+    /// Objective-C return type resolved from `sig` at creation time.
+    return_type: String,
+    /// Most recent return value, in the representation exposed by
+    /// `getReturnValue:`.
+    return_value: Vec<u8>,
     target: id,
     selector: Option<SEL>,
     /// Per-slot owned buffer for each argument.
@@ -49,9 +54,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         let type_ptr: ConstPtr<u8> = msg![env; sig getArgumentTypeAtIndex:i];
         argument_types.push(env.mem.cstr_at_utf8(type_ptr).unwrap().to_string());
     }
+    let return_type_ptr: ConstPtr<u8> = msg![env; sig methodReturnType];
+    let return_type = env.mem.cstr_at_utf8(return_type_ptr).unwrap().to_string();
+    let return_length: NSUInteger = msg![env; sig methodReturnLength];
     let host_object = Box::new(NSInvocationHostObject {
         sig,
         argument_types,
+        return_type,
+        return_value: vec![0; return_length as usize],
         target: nil,
         selector: None,
         arguments: vec![None; num_of_args as usize],
@@ -201,16 +211,36 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this invoke];
 }
 
+- (())getReturnValue:(MutVoidPtr)buffer {
+    let return_value = &env.objc.borrow::<NSInvocationHostObject>(this).return_value;
+    if !return_value.is_empty() {
+        env.mem
+            .bytes_at_mut(buffer.cast(), return_value.len().try_into().unwrap())
+            .copy_from_slice(return_value);
+    }
+}
+
+- (())setReturnValue:(MutVoidPtr)buffer {
+    let return_length = env
+        .objc
+        .borrow::<NSInvocationHostObject>(this)
+        .return_value
+        .len();
+    if return_length != 0 {
+        let new_value = env
+            .mem
+            .bytes_at(buffer.cast(), return_length.try_into().unwrap())
+            .to_vec();
+        env.objc.borrow_mut::<NSInvocationHostObject>(this).return_value = new_value;
+    }
+}
+
 - (())invoke {
     // Safeguard: all arguments must be set (except first two)
     let arguments: &Vec<Option<MutVoidPtr>> = env.objc.borrow::<NSInvocationHostObject>(this).arguments.as_ref();
     let set_count = arguments.iter().flatten().count();
     let all_count = arguments.len();
     assert_eq!(set_count + 2, all_count);
-
-    let sig = env.objc.borrow::<NSInvocationHostObject>(this).sig;
-    let ret_type: ConstPtr<u8> = msg![env; sig methodReturnType];
-    assert!(env.mem.read(ret_type) == b'v'); // TODO
 
     // `call_from_host` re-use
     // TODO: retval_ptr
@@ -309,9 +339,40 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &NSInvocationHostObject { target, selector, .. } = env.objc.borrow::<NSInvocationHostObject>(this);
     objc_msgSend(env, target, selector.unwrap());
 
+    // Scalar and object return values on 32-bit ARM use r0, or r0-r1 for
+    // eight-byte values. NSMethodSignature currently accepts these same
+    // encodings, so preserve the raw ABI representation for getReturnValue:.
+    // Larger aggregate returns need an implicit result pointer and remain a
+    // separate implementation task.
+    let return_length = env
+        .objc
+        .borrow::<NSInvocationHostObject>(this)
+        .return_value
+        .len();
+    if return_length != 0 {
+        let return_type = env
+            .objc
+            .borrow::<NSInvocationHostObject>(this)
+            .return_type
+            .clone();
+        assert!(
+            return_length <= 8,
+            "NSInvocation aggregate return type {return_type:?} ({return_length} bytes) is not supported"
+        );
+        let regs = env.cpu.regs();
+        let mut raw_return = [0u8; 8];
+        raw_return[..4].copy_from_slice(&regs[0].to_le_bytes());
+        if return_length > 4 {
+            raw_return[4..].copy_from_slice(&regs[1].to_le_bytes());
+        }
+        env.objc
+            .borrow_mut::<NSInvocationHostObject>(this)
+            .return_value
+            .copy_from_slice(&raw_return[..return_length]);
+    }
+
     let regs = env.cpu.regs_mut(); // re-borrow
     regs[Cpu::SP] = old_sp;
-    // TODO: non-void return
 }
 
 - (())dealloc {

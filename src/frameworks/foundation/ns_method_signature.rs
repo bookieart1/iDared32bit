@@ -51,6 +51,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<NSMethodSignatureHostObject>(this).return_type
 }
 
+- (NSUInteger)methodReturnLength {
+    let return_type = env.objc.borrow::<NSMethodSignatureHostObject>(this).return_type;
+    let (_, size, _) = parse_type_layout(env, return_type);
+    size
+}
+
 - (())dealloc {
     let host_obj = env.objc.borrow::<NSMethodSignatureHostObject>(this);
     env.mem.free(host_obj.return_type.cast_mut().cast());

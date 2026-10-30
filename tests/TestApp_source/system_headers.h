@@ -116,18 +116,26 @@ SEL method_getName(Method m);
 @end
 
 @interface NSDictionary<KeyType, ObjectType> : NSObject
++ (instancetype)dictionary;
 + (instancetype)dictionaryWithObjects:(NSArray<ObjectType> *)objects
                               forKeys:(NSArray<KeyType> *)keys;
 - (NSUInteger)count;
 - (ObjectType)objectForKey:(KeyType)aKey;
 - (BOOL)isEqualToDictionary:(NSDictionary *)otherDictionary;
 - (NSArray<KeyType> *)allKeys;
+- (id)keyEnumerator;
 + (id)dictionaryWithContentsOfFile:(id)path;
 + (id)dictionaryWithContentsOfURL:(NSURL *)url;
 - (id)valueForKey:(id)key;
 @end
 
 @interface NSMutableDictionary<KeyType, ObjectType> : NSDictionary
+- (void)setObject:(ObjectType)object forKey:(KeyType)key;
+@end
+
+@interface NSCharacterSet : NSObject
++ (instancetype)alphanumericCharacterSet;
+- (BOOL)characterIsMember:(unichar)aCharacter;
 @end
 
 @interface NSSet<ObjectType> : NSObject
@@ -282,6 +290,7 @@ SEL NSSelectorFromString(NSString *);
 - (NSUInteger)numberOfArguments;
 - (const char *)getArgumentTypeAtIndex:(NSUInteger)idx;
 - (const char *)methodReturnType;
+- (NSUInteger)methodReturnLength;
 @end
 
 @interface NSInvocation : NSObject
@@ -292,6 +301,8 @@ SEL NSSelectorFromString(NSString *);
 - (void)retainArguments;
 - (void)invoke;
 - (void)invokeWithTarget:(id)target;
+- (void)getReturnValue:(void *)retLoc;
+- (void)setReturnValue:(void *)retLoc;
 @end
 
 @interface NSNotification : NSObject

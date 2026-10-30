@@ -92,6 +92,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)alphanumericCharacterSet {
+    // NSCharacterSet operates on UTF-16 code units. Build the set from every
+    // valid Unicode scalar in the Basic Multilingual Plane; surrogate code
+    // units are deliberately excluded because they are not characters on
+    // their own.
+    let set = (0..=u16::MAX)
+        .filter(|&code_unit| {
+            char::from_u32(code_unit.into()).is_some_and(char::is_alphanumeric)
+        })
+        .collect();
+
+    let new: id = msg![env; this alloc];
+    env.objc.borrow_mut::<CharacterSetHostObject>(new).set = set;
+
+    autorelease(env, new)
+}
+
 + (id)newlineCharacterSet {
     let set = HashSet::from(NEWLINE_CHARACTERS.map(|c| unichar::try_from(c).unwrap()));
 

@@ -294,9 +294,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     let pad_width = pad_width as usize;
                     if pad_char == '0' && precision.is_none() {
                         if prepend_sign {
-                            assert!(int != 0); // TODO
                             assert!(pad_width > 0);
-                            if int > 0 {
+                            if int >= 0 {
                                 write!(&mut res, "+{:0>1$}", int, pad_width - 1).unwrap();
                             } else {
                                 write!(&mut res, "-{:0>1$}", int.abs(), pad_width - 1).unwrap();
