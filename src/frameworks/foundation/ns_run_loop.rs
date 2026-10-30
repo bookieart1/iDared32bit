@@ -150,23 +150,40 @@ pub const CLASSES: ClassExports = objc_classes! {
             || msg![env; mode isEqualToString:common_modes]
     );
 
-    let ports = &mut env.objc.borrow_mut::<NSRunLoopHostObject>(this).ports;
-    if ports.contains(&port) {
+    if env
+        .objc
+        .borrow::<NSRunLoopHostObject>(this)
+        .ports
+        .contains(&port)
+    {
         return;
     }
     retain(env, port);
-    ports.push(port);
+    env.objc
+        .borrow_mut::<NSRunLoopHostObject>(this)
+        .ports
+        .push(port);
 }
 
 - (())removePort:(id)port
           forMode:(NSRunLoopMode)mode {
     let default_mode = ns_string::get_static_str(env, NSDefaultRunLoopMode);
     let common_modes = ns_string::get_static_str(env, NSRunLoopCommonModes);
-    assert!(msg![env; mode isEqualToString:default_mode] || msg![env; mode isEqualToString:common_modes]);
+    assert!(
+        msg![env; mode isEqualToString:default_mode]
+            || msg![env; mode isEqualToString:common_modes]
+    );
 
-    let ports = &mut env.objc.borrow_mut::<NSRunLoopHostObject>(this).ports;
-    if let Some(idx) = ports.iter().position(|&candidate| candidate == port) {
-        ports.remove(idx);
+    let removed = {
+        let ports = &mut env.objc.borrow_mut::<NSRunLoopHostObject>(this).ports;
+        if let Some(idx) = ports.iter().position(|&candidate| candidate == port) {
+            ports.remove(idx);
+            true
+        } else {
+            false
+        }
+    };
+    if removed {
         release(env, port);
     }
 }
