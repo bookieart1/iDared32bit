@@ -17,13 +17,20 @@ use crate::frameworks::core_foundation::cf_number::{
 use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_keyed_archiver::get_value_to_encode_for_current_key;
 use crate::frameworks::foundation::NSInteger;
-use crate::mem::{ConstVoidPtr, MutVoidPtr};
+use crate::mem::{ConstPtr, ConstVoidPtr, MutVoidPtr};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, Class, ClassExports,
     HostObject, NSZonePtr,
 };
 use crate::Environment;
 use std::cmp::Ordering;
+use std::collections::HashMap;
+
+#[derive(Default)]
+pub struct State {
+    /// Permanently allocated, null-terminated Objective-C type encodings.
+    objc_type_encodings: HashMap<u8, ConstPtr<u8>>,
+}
 
 #[derive(Debug)]
 pub(super) enum NSValueHostObject {
@@ -100,6 +107,40 @@ impl NSNumberHostObject {
     impl_AsValue!(as_unsigned_short, u16);
     impl_AsValue!(as_char, i8);
     impl_AsValue!(as_i128, i128);
+}
+
+fn objc_type(env: &mut Environment, number: id) -> ConstPtr<u8> {
+    let encoding = match env.objc.borrow::<NSNumberHostObject>(number) {
+        NSNumberHostObject::Bool(_) | NSNumberHostObject::Char(_) => b'c',
+        NSNumberHostObject::UnsignedLongLong(_) => b'Q',
+        NSNumberHostObject::UnsignedInt(_) => b'I',
+        NSNumberHostObject::Int(_) => b'i',
+        NSNumberHostObject::LongLong(_) => b'q',
+        NSNumberHostObject::Float(_) => b'f',
+        NSNumberHostObject::Double(_) => b'd',
+        NSNumberHostObject::Short(_) => b's',
+        NSNumberHostObject::UnsignedShort(_) => b'S',
+    };
+
+    if let Some(&ptr) = env
+        .framework_state
+        .foundation
+        .ns_value
+        .objc_type_encodings
+        .get(&encoding)
+    {
+        return ptr;
+    }
+
+    // Apple's API returns a pointer that remains valid for the lifetime of the
+    // NSNumber. Keep one process-lifetime C string for each type encoding.
+    let ptr = env.mem.alloc_and_write_cstr(&[encoding]).cast_const();
+    env.framework_state
+        .foundation
+        .ns_value
+        .objc_type_encodings
+        .insert(encoding, ptr);
+    ptr
 }
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -456,6 +497,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (i8)charValue {
     env.objc.borrow::<NSNumberHostObject>(this).as_char()
+}
+
+- (ConstPtr<u8>)objCType {
+    objc_type(env, this)
 }
 
 - (id)description {
