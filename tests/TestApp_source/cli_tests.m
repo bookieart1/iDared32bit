@@ -96,6 +96,44 @@ int test_CGGeometry() {
   return 0;
 }
 
+int test_UIView_insertSubview_aboveSubview() {
+  UIView *parent = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  UIView *first = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 10)];
+  UIView *second = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 10)];
+  UIView *inserted = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 10, 10)];
+
+  [parent addSubview:first];
+  [parent addSubview:second];
+  [parent insertSubview:inserted aboveSubview:first];
+
+  NSArray *subviews = [parent subviews];
+  int result = ([subviews count] == 3 && [subviews objectAtIndex:0] == first &&
+                [subviews objectAtIndex:1] == inserted &&
+                [subviews objectAtIndex:2] == second)
+                   ? 0
+                   : -1;
+
+  [inserted release];
+  [second release];
+  [first release];
+  [parent release];
+  return result;
+}
+
+int test_NSMachPort_runLoop_lifecycle() {
+  NSMachPort *port = [NSMachPort port];
+  if (port == nil || ![port isValid])
+    return -1;
+
+  NSRunLoop *runLoop = [NSRunLoop currentRunLoop];
+  [runLoop addPort:port forMode:NSDefaultRunLoopMode];
+  [runLoop addPort:port forMode:NSDefaultRunLoopMode];
+  [runLoop removePort:port forMode:NSDefaultRunLoopMode];
+
+  [port invalidate];
+  return [port isValid] ? -2 : 0;
+}
+
 int int_compar(const void *a, const void *b) { return *(int *)a - *(int *)b; }
 
 int sort_and_check(int nel, int *arr, int *expected_arr) {
@@ -7714,6 +7752,8 @@ struct {
     FUNC_DEF(test_CFNumberCompare_extended),
     FUNC_DEF(test_memset_pattern),
     FUNC_DEF(test_CGGeometry),
+    FUNC_DEF(test_UIView_insertSubview_aboveSubview),
+    FUNC_DEF(test_NSMachPort_runLoop_lifecycle),
     FUNC_DEF(test_CFURLHasDirectoryPath),
     FUNC_DEF(test_CGImage_JPEG),
     FUNC_DEF(test_NSMutableString_deleteCharactersInRange),

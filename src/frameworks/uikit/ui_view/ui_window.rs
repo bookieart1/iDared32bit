@@ -223,7 +223,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())addSubview:(id)view {
     log_dbg!("[(UIWindow*){:?} addSubview:{:?}] => ()", this, view);
 
-    if view == nil || env.objc.borrow::<UIViewHostObject>(view).view_controller == nil {
+    if view == nil {
+        () = msg_super![env; this addSubview:view];
+        return;
+    }
+
+    let view_controller = env.objc.borrow::<UIViewHostObject>(view).view_controller;
+    if env.bundle.bundle_identifier() == "com.majesticsoftware.blot" {
+        let window_frame: CGRect = msg![env; this frame];
+        let view_frame: CGRect = msg![env; view frame];
+        let view_bounds: CGRect = msg![env; view bounds];
+        log!(
+            "Blot display diagnostic: UIWindow addSubview window_frame={window_frame:?}, view_frame={view_frame:?}, view_bounds={view_bounds:?}, view_controller={view_controller:?}"
+        );
+    }
+
+    if view_controller == nil {
         () = msg_super![env; this addSubview:view];
         return;
     }
@@ -237,7 +252,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         log!("TODO: case of existing view hidden by another view for sending view[Will,Did]Appear");
     }
 
-    let vc = env.objc.borrow::<UIViewHostObject>(view).view_controller;
+    let vc = view_controller;
     () = msg![env; vc viewWillAppear:false];
     () = msg_super![env; this addSubview:view];
     () = msg![env; vc viewDidAppear:false];

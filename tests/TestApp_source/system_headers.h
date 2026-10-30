@@ -214,6 +214,23 @@ typedef double NSTimeInterval;
 - (NSTimeInterval)systemUptime;
 @end
 
+@class NSRunLoop;
+@interface NSPort : NSObject
++ (instancetype)port;
+- (BOOL)isValid;
+- (void)invalidate;
+- (void)scheduleInRunLoop:(NSRunLoop *)runLoop forMode:(NSString *)mode;
+- (void)removeFromRunLoop:(NSRunLoop *)runLoop forMode:(NSString *)mode;
+@end
+@interface NSMachPort : NSPort
+@end
+@interface NSRunLoop : NSObject
++ (instancetype)currentRunLoop;
+- (void)addPort:(NSPort *)port forMode:(NSString *)mode;
+- (void)removePort:(NSPort *)port forMode:(NSString *)mode;
+@end
+extern NSString *const NSDefaultRunLoopMode;
+
 @interface NSTimer : NSObject
 + (instancetype)timerWithTimeInterval:(NSTimeInterval)interval
                                target:(id)target
@@ -695,6 +712,7 @@ typedef enum {
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event;
 - (UIWindow *)window;
 - (void)addSubview:(UIView *)view;
+- (void)insertSubview:(UIView *)view aboveSubview:(UIView *)siblingSubview;
 - (void)removeFromSuperview;
 - (NSArray<UIView *> *)subviews;
 - (void)layoutSubviews;

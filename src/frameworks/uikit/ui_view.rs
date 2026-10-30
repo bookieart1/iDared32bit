@@ -644,6 +644,36 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; view setNeedsLayout];
 }
 
+- (())insertSubview:(id)view aboveSubview:(id)sibling {
+    assert!(view != nil);
+    assert!(sibling != nil);
+
+    retain(env, view);
+    () = msg![env; view removeFromSuperview];
+
+    let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
+    subview_obj.superview = this;
+    let subview_layer = subview_obj.layer;
+
+    let &mut UIViewHostObject {
+        ref mut subviews,
+        layer: this_layer,
+        ..
+    } = env.objc.borrow_mut(this);
+
+    let sibling_idx = subviews
+        .iter()
+        .position(|&candidate| candidate == sibling)
+        .expect("insertSubview:aboveSubview: sibling is not a child of the receiver");
+    let insertion_idx = sibling_idx + 1;
+    subviews.insert(insertion_idx, view);
+
+    // Keep the CALayer order exactly parallel with UIView's subview order.
+    () = msg![env; this_layer insertSublayer:subview_layer atIndex:(insertion_idx as u32)];
+    () = msg![env; this setNeedsLayout];
+    () = msg![env; view setNeedsLayout];
+}
+
 - (())bringSubviewToFront:(id)subview {
     if subview == nil {
         // This happens in Touch & Go LITE. It's probably due to the ad classes
@@ -865,6 +895,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setContentMode:(NSInteger)content_mode { // should be UIViewContentMode
+    if env.bundle.bundle_identifier() == "com.majesticsoftware.blot" {
+        let frame: CGRect = msg![env; this frame];
+        let bounds: CGRect = msg![env; this bounds];
+        log!(
+            "Blot display diagnostic: UIView {:?} setContentMode:{} frame={frame:?} bounds={bounds:?}",
+            this,
+            content_mode,
+        );
+    }
     todo_objc_setter!(this, content_mode);
 }
 

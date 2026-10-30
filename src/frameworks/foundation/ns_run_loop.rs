@@ -60,6 +60,10 @@ struct NSRunLoopHostObject {
     /// Strong references to `NSTimer*` in no particular order. Timers are owned
     /// by the run loop. The timer must remove itself when invalidated.
     timers: Vec<id>,
+    /// Strong references to `NSPort*` objects scheduled on this run loop.
+    /// Mach-message delivery is not emulated yet, but retaining the ports and
+    /// keeping the loop alive matches the lifecycle older apps expect.
+    ports: Vec<id>,
     /// Set by `CFRunLoopStop`, cleared when the run loop stops.
     stopped: bool,
 }
@@ -105,7 +109,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     let default_mode = ns_string::get_static_str(env, NSDefaultRunLoopMode);
     let common_modes = ns_string::get_static_str(env, NSRunLoopCommonModes);
     // TODO: handle other modes
-    assert!(msg![env; mode isEqualToString:default_mode] || msg![env; mode isEqualToString:common_modes]);
+    assert!(
+        msg![env; mode isEqualToString:default_mode]
+            || msg![env; mode isEqualToString:common_modes]
+    );
 
     log_dbg!(
         "Adding timer {:?} to run loop {:?} with mode {:?}",
@@ -132,6 +139,36 @@ pub const CLASSES: ClassExports = objc_classes! {
         .timers
         .push(timer);
     ns_timer::set_run_loop(env, timer, this);
+}
+
+- (())addPort:(id)port
+       forMode:(NSRunLoopMode)mode {
+    let default_mode = ns_string::get_static_str(env, NSDefaultRunLoopMode);
+    let common_modes = ns_string::get_static_str(env, NSRunLoopCommonModes);
+    assert!(
+        msg![env; mode isEqualToString:default_mode]
+            || msg![env; mode isEqualToString:common_modes]
+    );
+
+    let ports = &mut env.objc.borrow_mut::<NSRunLoopHostObject>(this).ports;
+    if ports.contains(&port) {
+        return;
+    }
+    retain(env, port);
+    ports.push(port);
+}
+
+- (())removePort:(id)port
+          forMode:(NSRunLoopMode)mode {
+    let default_mode = ns_string::get_static_str(env, NSDefaultRunLoopMode);
+    let common_modes = ns_string::get_static_str(env, NSRunLoopCommonModes);
+    assert!(msg![env; mode isEqualToString:default_mode] || msg![env; mode isEqualToString:common_modes]);
+
+    let ports = &mut env.objc.borrow_mut::<NSRunLoopHostObject>(this).ports;
+    if let Some(idx) = ports.iter().position(|&candidate| candidate == port) {
+        ports.remove(idx);
+        release(env, port);
+    }
 }
 
 - (())run {
@@ -534,6 +571,7 @@ pub(super) fn run_loop_for_thread(
             audio_queues: Vec::new(),
             selector_objects: VecDeque::new(),
             timers: Vec::new(),
+            ports: Vec::new(),
             stopped: false,
         });
         // TODO: is it OK to allocate static object for all threads,

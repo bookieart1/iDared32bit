@@ -48,17 +48,36 @@ fn dispatch_group_create(env: &mut Environment) -> MutVoidPtr {
     new_queue_object(env)
 }
 
-fn dispatch_async(env: &mut Environment, _queue: MutVoidPtr, block: MutPtr<BlockLiteral>) {
+fn invoke_block_synchronously(env: &mut Environment, block: MutPtr<BlockLiteral>) {
     assert!(!block.is_null());
     let invoke = env.mem.read(block).invoke;
     assert_ne!(invoke.addr_without_thumb_bit(), 0);
 
+    () = invoke.call_from_host(env, (block.cast_void(),));
+}
+
+fn dispatch_async(env: &mut Environment, _queue: MutVoidPtr, block: MutPtr<BlockLiteral>) {
     // A full GCD implementation needs to copy stack blocks and schedule them
     // on a queue. Until that machinery exists, invoking before this function
     // returns is the safest lifetime-correct fallback: captured stack data is
     // still valid, and callers still get the work performed.
     log_once!("TODO: dispatch_async executes its block synchronously");
-    () = invoke.call_from_host(env, (block.cast_void(),));
+    invoke_block_synchronously(env, block);
+}
+
+fn dispatch_group_async(
+    env: &mut Environment,
+    _group: MutVoidPtr,
+    _queue: MutVoidPtr,
+    block: MutPtr<BlockLiteral>,
+) {
+    // Running the block before returning also gives the minimal group
+    // semantics needed by callers: its work is complete by the time a later
+    // group wait or notification can observe it. This deliberately mirrors
+    // dispatch_async's lifetime-safe fallback until real queue scheduling is
+    // implemented.
+    log_once!("TODO: dispatch_group_async executes its block synchronously");
+    invoke_block_synchronously(env, block);
 }
 
 pub const CONSTANTS: ConstantExports = &[(
@@ -70,4 +89,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(dispatch_queue_create(_, _)),
     export_c_func!(dispatch_group_create()),
     export_c_func!(dispatch_async(_, _)),
+    export_c_func!(dispatch_group_async(_, _, _)),
 ];
