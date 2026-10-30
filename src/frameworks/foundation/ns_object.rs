@@ -304,7 +304,10 @@ pub const CLASSES: ClassExports = objc_classes! {
                 TYPE_ID | TYPE_CLASS => env.mem.read(ivar_ptr.cast()),
                 TYPE_BOOL => msg_class![env; NSNumber numberWithBool:(env.mem.read(ivar_ptr.cast()))],
                 TYPE_CHAR => msg_class![env; NSNumber numberWithChar:(env.mem.read(ivar_ptr.cast()))],
-                TYPE_UCHAR => msg_class![env; NSNumber numberWithUnsignedInt:(env.mem.read::<u8>(ivar_ptr.cast()) as u32)],
+                TYPE_UCHAR => {
+                    let value: u8 = env.mem.read(ivar_ptr.cast());
+                    msg_class![env; NSNumber numberWithUnsignedInt:(value as u32)]
+                },
                 TYPE_SHORT => msg_class![env; NSNumber numberWithShort:(env.mem.read(ivar_ptr.cast()))],
                 TYPE_USHORT => msg_class![env; NSNumber numberWithUnsignedShort:(env.mem.read(ivar_ptr.cast()))],
                 TYPE_INT | TYPE_LONG => msg_class![env; NSNumber numberWithInt:(env.mem.read(ivar_ptr.cast()))],
