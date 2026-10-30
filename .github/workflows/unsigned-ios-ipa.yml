@@ -16,12 +16,14 @@ env:
 jobs:
   build-unsigned-ipa:
     name: Build unsigned IPA on macOS
-    runs-on: macos-15
+    # The app uses SwiftUI APIs from the iOS 26 SDK. macos-26 currently ships
+    # with Xcode 26 as its default, while macos-15 still defaults to Xcode 16.
+    runs-on: macos-26
     timeout-minutes: 60
 
     steps:
       - name: Check out the fork
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
           fetch-depth: 1
@@ -79,7 +81,7 @@ jobs:
           shasum -a 256 build/iDared32bit-unsigned.ipa
 
       - name: Upload the unsigned IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: iDared32bit-unsigned-${{ github.sha }}
           path: build/iDared32bit-unsigned.ipa
