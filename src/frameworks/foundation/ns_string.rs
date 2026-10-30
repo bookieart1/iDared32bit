@@ -538,7 +538,8 @@ pub const CLASSES: ClassExports = objc_classes! {
              freeWhenDone:(bool)free_when_done {
     // Our backing representation owns its decoded contents, so it is safe to
     // release a transferred guest buffer as soon as initialization finishes.
-    let new: id = msg![env; this initWithBytes:bytes.cast_const()
+    let bytes_const = bytes.cast_const();
+    let new: id = msg![env; this initWithBytes:bytes_const
                                     length:length
                                   encoding:encoding];
     if free_when_done && !bytes.is_null() {
