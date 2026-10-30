@@ -22,7 +22,9 @@ use crate::frameworks::uikit::ui_device::{
     UIDeviceOrientationLandscapeLeft, UIDeviceOrientationLandscapeRight,
     UIDeviceOrientationPortraitUpsideDown,
 };
-use crate::objc::{id, msg, msg_class, msg_super, nil, objc_classes, ClassExports};
+use crate::objc::{
+    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports,
+};
 
 #[derive(Default)]
 pub struct State {
@@ -36,6 +38,8 @@ pub struct State {
     /// Window levels per window (UIWindowLevel).
     /// Non-retaining!
     pub window_levels: Vec<(id, CGFloat)>,
+    /// Strong root-view-controller property for each window.
+    pub root_view_controllers: Vec<(id, id)>,
 }
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -57,6 +61,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     state.windows.push(this);
     // Default to normal window level (0.0 on iOS)
     state.window_levels.push((this, 0.0));
+    state.root_view_controllers.push((this, nil));
 
     log_dbg!(
         "New window: {:?}. New list of all windows: {:?}",
@@ -77,6 +82,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let state = &mut env.framework_state.uikit.ui_view.ui_window;
     state.windows.push(this);
     state.window_levels.push((this, 0.0));
+    state.root_view_controllers.push((this, nil));
 
     log_dbg!(
         "New window: {:?}. New list of all windows: {:?}",
@@ -88,26 +94,39 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let state = &mut env.framework_state.uikit.ui_view.ui_window;
+    let root = {
+        let state = &mut env.framework_state.uikit.ui_view.ui_window;
 
-    if let Some(key_window) = state.key_window {
-        if key_window == this {
-            state.key_window = None;
+        if let Some(key_window) = state.key_window {
+            if key_window == this {
+                state.key_window = None;
+            }
         }
-    }
 
-    let list = &mut state.windows;
-    let idx = list.iter().position(|&w| w == this).unwrap();
-    list.remove(idx);
+        let list = &mut state.windows;
+        let idx = list.iter().position(|&w| w == this).unwrap();
+        list.remove(idx);
 
-    // Remove window level entry for this window
-    state.window_levels.retain(|(w, _)| *w != this);
+        // Remove window level entry for this window
+        state.window_levels.retain(|(w, _)| *w != this);
 
-    log_dbg!(
-        "Deallocating window {:?}. New list of all windows: {:?}",
-        this,
-        list,
-    );
+        let root = state
+            .root_view_controllers
+            .iter()
+            .find(|(window, _)| *window == this)
+            .map_or(nil, |(_, root)| *root);
+        state
+            .root_view_controllers
+            .retain(|(window, _)| *window != this);
+
+        log_dbg!(
+            "Deallocating window {:?}. New list of all windows: {:?}",
+            this,
+            state.windows,
+        );
+        root
+    };
+    release(env, root);
     msg_super![env; this dealloc]
 }
 
@@ -142,6 +161,48 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // TODO: post UIWindowDidBecomeVisibleNotification
     () = msg![env; this setHidden:false];
+}
+
+- (id)rootViewController {
+    env.framework_state
+        .uikit
+        .ui_view
+        .ui_window
+        .root_view_controllers
+        .iter()
+        .find(|(window, _)| *window == this)
+        .map_or(nil, |(_, controller)| *controller)
+}
+
+- (())setRootViewController:(id)controller {
+    let old = msg![env; this rootViewController];
+    if old == controller {
+        return;
+    }
+
+    retain(env, controller);
+    let entry = env
+        .framework_state
+        .uikit
+        .ui_view
+        .ui_window
+        .root_view_controllers
+        .iter_mut()
+        .find(|(window, _)| *window == this)
+        .unwrap();
+    entry.1 = controller;
+
+    if old != nil {
+        let old_view: id = msg![env; old view];
+        () = msg![env; old_view removeFromSuperview];
+    }
+    if controller != nil {
+        let view: id = msg![env; controller view];
+        let bounds: CGRect = msg![env; this bounds];
+        () = msg![env; view setFrame:bounds];
+        () = msg![env; this addSubview:view];
+    }
+    release(env, old);
 }
 
 // We only model the single main screen

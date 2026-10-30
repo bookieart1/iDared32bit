@@ -1047,6 +1047,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; res stringByAppendingString:right]
 }
 
+- (id)stringByReplacingCharactersInRange:(NSRange)range
+                               withString:(id)replacement { // NSString*
+    assert_ne!(replacement, nil);
+    let end = range.location.checked_add(range.length).unwrap();
+    let length: NSUInteger = msg![env; this length];
+    assert!(end <= length);
+
+    let left: id = msg![env; this substringToIndex:range.location];
+    let right: id = msg![env; this substringFromIndex:end];
+    let result: id = msg![env; left stringByAppendingString:replacement];
+    msg![env; result stringByAppendingString:right]
+}
+
 - (id)stringByAppendingString:(id)other { // NSString*
     assert!(other != nil); // TODO: raise exception
 

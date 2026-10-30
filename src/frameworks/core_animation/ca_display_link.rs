@@ -5,9 +5,10 @@
  */
 //! `CADisplayLink`
 
+use crate::frameworks::core_animation::CACurrentMediaTime;
 use crate::frameworks::foundation::ns_run_loop::NSRunLoopMode;
 use crate::frameworks::foundation::ns_timer::set_time_interval;
-use crate::frameworks::foundation::NSInteger;
+use crate::frameworks::foundation::{NSInteger, NSTimeInterval};
 use crate::objc::{
     autorelease, id, msg, msg_class, msg_send, nil, objc_classes, release, retain, ClassExports,
     HostObject, NSZonePtr, SEL,
@@ -22,6 +23,7 @@ struct CADisplayLinkHostObject {
     /// this pointer must not be used.
     ns_timer: id,
     paused: bool,
+    timestamp: NSTimeInterval,
 }
 impl HostObject for CADisplayLinkHostObject {}
 
@@ -60,6 +62,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setPaused:(bool)paused {
     env.objc.borrow_mut::<CADisplayLinkHostObject>(this).paused = paused;
+}
+
+- (NSTimeInterval)timestamp {
+    env.objc.borrow::<CADisplayLinkHostObject>(this).timestamp
+}
+
+- (NSTimeInterval)duration {
+    1.0 / 60.0
 }
 
 - (())setFrameInterval:(NSInteger)frameInterval {
@@ -102,6 +112,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         // but just not passing the actual call.
         return;
     }
+    let timestamp = CACurrentMediaTime(env);
+    env.objc.borrow_mut::<CADisplayLinkHostObject>(this).timestamp = timestamp;
     // Signature is `- (void) selector:(CADisplayLink *)sender;`
     () = msg_send(env, (target, selector.unwrap(), this));
 }

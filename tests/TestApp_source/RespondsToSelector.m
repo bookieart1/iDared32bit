@@ -45,11 +45,7 @@ static SEL test_method_name(Method method) {
 }
 
 static void *test_method_imp(Method method) {
-#ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
   return (void *)method_getImplementation(method);
-#else
-  return ((struct method_layout *)method)->imp;
-#endif
 }
 
 int test_class_getInstanceMethod(void) {
@@ -59,6 +55,9 @@ int test_class_getInstanceMethod(void) {
   Method method = class_getInstanceMethod([TestClass class], answer_sel);
   if (method == 0 || test_method_name(method) != answer_sel) {
     return -1;
+  }
+  if (method_getImplementation(0) != 0) {
+    return -6;
   }
   if (((int (*)(id, SEL))test_method_imp(method))(instance, answer_sel) != 42) {
     return -2;

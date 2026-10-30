@@ -10,7 +10,7 @@
 //! Resources:
 //! - [[objc explain]: Classes and metaclasses](http://www.sealiesoftware.com/blog/archive/2009/04/14/objc_explain_Classes_and_metaclasses.html), especially [the PDF diagram](http://www.sealiesoftware.com/blog/class%20diagram.pdf)
 
-use super::methods::Method;
+use super::methods::{GuestIMP, Method};
 use super::properties::IVar;
 use super::{
     id, ivar_list_t, method_list_t, method_t, nil, objc_object, AnyHostObject, HostIMP, HostObject,
@@ -1184,6 +1184,16 @@ pub(super) fn class_getInstanceMethod(
     let ptr = env.mem.alloc_and_write(method);
     env.objc.method_handles.insert((class, name), ptr);
     ptr
+}
+
+pub(super) fn method_getImplementation(
+    env: &mut Environment,
+    method: ConstPtr<method_t>,
+) -> GuestIMP {
+    if method.is_null() {
+        return GuestIMP::from_addr_with_thumb_bit(0);
+    }
+    env.mem.read(method).imp
 }
 
 pub(super) fn class_getMethodImplementation(env: &mut Environment, cls: Class, name: SEL) -> IMP {

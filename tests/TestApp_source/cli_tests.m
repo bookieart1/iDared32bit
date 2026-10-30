@@ -5568,6 +5568,31 @@ int test_NSString_stringByReplacingOccurrencesOfString() {
   return 0;
 }
 
+int test_NSString_stringByReplacingCharactersInRange() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+  NSString *source = [NSString stringWithUTF8String:"hello world"];
+  NSString *replacement = [NSString stringWithUTF8String:"touchHLE"];
+  NSString *result =
+      [source stringByReplacingCharactersInRange:NSMakeRange(6, 5)
+                                       withString:replacement];
+  NSString *expected = [NSString stringWithUTF8String:"hello touchHLE"];
+  if (![result isEqualToString:expected]) {
+    [pool drain];
+    return -1;
+  }
+
+  result = [source stringByReplacingCharactersInRange:NSMakeRange(5, 1)
+                                           withString:
+                                               [NSString stringWithUTF8String:""]];
+  expected = [NSString stringWithUTF8String:"helloworld"];
+  if (![result isEqualToString:expected]) {
+    [pool drain];
+    return -2;
+  }
+  [pool drain];
+  return 0;
+}
+
 int test_NSString_stringByReplacingOccurrencesOfString_options_range() {
   NSAutoreleasePool *pool = [NSAutoreleasePool new];
 
@@ -7199,6 +7224,16 @@ int test_malloc_zone_struct_dispatch() {
   return 0;
 }
 
+int test_malloc_zone_statistics() {
+  malloc_statistics_t statistics = {1, 2, 3, 4};
+  malloc_zone_statistics(malloc_default_zone(), &statistics);
+  if (statistics.blocks_in_use != 0 || statistics.size_in_use != 0 ||
+      statistics.max_size_in_use != 0 || statistics.size_allocated != 0) {
+    return -1;
+  }
+  return 0;
+}
+
 int test_fcvt() {
   char *buf;
   int dec, sign;
@@ -7476,6 +7511,7 @@ struct {
     FUNC_DEF(test_CGImage_JPEG),
     FUNC_DEF(test_NSMutableString_deleteCharactersInRange),
     FUNC_DEF(test_NSString_stringByReplacingOccurrencesOfString),
+    FUNC_DEF(test_NSString_stringByReplacingCharactersInRange),
     FUNC_DEF(test_NSString_stringByReplacingOccurrencesOfString_options_range),
     FUNC_DEF(test_NSString_pathWithComponents),
     FUNC_DEF(test_strptime),
@@ -7508,6 +7544,7 @@ struct {
     FUNC_DEF(test_nil_path_or_key),
     FUNC_DEF(test_malloc_zone_basic),
     FUNC_DEF(test_malloc_zone_struct_dispatch),
+    FUNC_DEF(test_malloc_zone_statistics),
     FUNC_DEF(test_fcvt),
     FUNC_DEF(test_tempfile),
 };

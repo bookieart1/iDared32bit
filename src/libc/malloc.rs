@@ -42,6 +42,16 @@ pub struct malloc_zone_t {
 }
 unsafe impl SafeRead for malloc_zone_t {}
 
+#[repr(C, packed)]
+#[allow(non_camel_case_types)]
+struct malloc_statistics_t {
+    blocks_in_use: u32,
+    size_in_use: GuestUSize,
+    max_size_in_use: GuestUSize,
+    size_allocated: GuestUSize,
+}
+unsafe impl SafeRead for malloc_statistics_t {}
+
 impl malloc_zone_t {
     pub fn new(env: &mut Environment) -> malloc_zone_t {
         malloc_zone_t {
@@ -155,6 +165,28 @@ fn malloc_zone_size(
     with_zone(env, zone, |mem, heap| mem.malloc_size_in_heap(heap, ptr))
 }
 
+fn malloc_zone_statistics(
+    env: &mut Environment,
+    _zone: MutPtr<malloc_zone_t>,
+    statistics: MutPtr<malloc_statistics_t>,
+) {
+    if statistics.is_null() {
+        return;
+    }
+    // The allocator does not expose aggregate accounting yet. Returning a
+    // fully initialized, conservative snapshot is sufficient for callers that
+    // use this API for diagnostics and avoids leaking uninitialized data.
+    env.mem.write(
+        statistics,
+        malloc_statistics_t {
+            blocks_in_use: 0,
+            size_in_use: 0,
+            max_size_in_use: 0,
+            size_allocated: 0,
+        },
+    );
+}
+
 /// Not a part of the API. However as such a function needs to be accessible in
 /// the zone struct, it has to be exported.
 fn malloc_set_zone_name(env: &mut Environment, zone: MutPtr<malloc_zone_t>, name: ConstPtr<u8>) {
@@ -194,5 +226,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(malloc_zone_malloc(_, _)),
     export_c_func!(malloc_zone_realloc(_, _, _)),
     export_c_func!(malloc_zone_size(_, _)),
+    export_c_func!(malloc_zone_statistics(_, _)),
     export_c_func!(malloc_set_zone_name(_, _)),
 ];

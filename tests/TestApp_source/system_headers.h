@@ -60,10 +60,9 @@ static inline NSRange NSMakeRange(NSUInteger loc, NSUInteger len) {
 
 typedef struct objc_method *Method;
 Method class_getInstanceMethod(Class cls, SEL name);
+void (*method_getImplementation(Method m))(void);
 #ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
 SEL method_getName(Method m);
-// Returns IMP, which isn't declared here.
-void (*method_getImplementation(Method m))(void);
 #endif
 
 // Foundation
@@ -148,6 +147,8 @@ typedef enum {
                                            options:
                                                (NSStringCompareOptions)options
                                              range:(NSRange)range;
+- (NSString *)stringByReplacingCharactersInRange:(NSRange)range
+                                       withString:(NSString *)replacement;
 - (BOOL)isEqualToString:(NSString *)other;
 - (const char *)UTF8String;
 @end

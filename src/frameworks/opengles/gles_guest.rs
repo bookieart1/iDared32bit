@@ -1299,6 +1299,25 @@ fn glRenderbufferStorageOES(
         gles.RenderbufferStorageOES(target, internalformat, width, height)
     })
 }
+
+fn glRenderbufferStorageMultisampleAPPLE(
+    env: &mut Environment,
+    target: GLenum,
+    _samples: GLsizei,
+    internalformat: GLenum,
+    width: GLsizei,
+    height: GLsizei,
+) {
+    // Multisampled renderbuffers are not exposed by every host backend. Use a
+    // normal renderbuffer as a compatibility fallback; drawing remains
+    // correct, but without multisample anti-aliasing.
+    glRenderbufferStorageOES(env, target, internalformat, width, height);
+}
+
+fn glResolveMultisampleFramebufferAPPLE(_env: &mut Environment) {
+    // The fallback above renders directly into a single-sample framebuffer,
+    // so there is nothing to resolve here.
+}
 fn glFramebufferRenderbufferOES(
     env: &mut Environment,
     target: GLenum,
@@ -1668,6 +1687,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glBindFramebufferOES(_, _)),
     export_c_func!(glBindRenderbufferOES(_, _)),
     export_c_func!(glRenderbufferStorageOES(_, _, _, _)),
+    export_c_func!(glRenderbufferStorageMultisampleAPPLE(_, _, _, _, _)),
+    export_c_func!(glResolveMultisampleFramebufferAPPLE()),
     export_c_func!(glFramebufferRenderbufferOES(_, _, _, _)),
     export_c_func!(glFramebufferTexture2DOES(_, _, _, _, _)),
     export_c_func!(glGetFramebufferAttachmentParameterivOES(_, _, _, _)),

@@ -88,6 +88,46 @@ pub const CLASSES: ClassExports = objc_classes! {
     nil
 }
 
++ (id)bundleWithPath:(id)path { // NSString*
+    if path == nil {
+        return nil;
+    }
+
+    let main_bundle: id = msg![env; this mainBundle];
+    let main_path: id = msg![env; main_bundle bundlePath];
+    if msg![env; path isEqualToString:main_path] {
+        return main_bundle;
+    }
+
+    let info_name = ns_string::get_static_str(env, "Info.plist");
+    let info_path: id = msg![env; path stringByAppendingPathComponent:info_name];
+    let info: id = msg_class![env; NSDictionary dictionaryWithContentsOfFile:info_path];
+    if info == nil {
+        log!(
+            "Warning: [NSBundle bundleWithPath:{:?}] could not find a valid Info.plist",
+            ns_string::to_rust_string(env, path)
+        );
+        return nil;
+    }
+
+    let identifier_key = ns_string::get_static_str(env, "CFBundleIdentifier");
+    let identifier: id = msg![env; info objectForKey:identifier_key];
+    retain(env, path);
+    retain(env, identifier);
+    retain(env, info);
+    let host_object = NSBundleHostObject {
+        bundle: None,
+        bundle_path: path,
+        bundle_identifier: identifier,
+        bundle_url: None,
+        info_dictionary: Some(info),
+    };
+    let bundle = env
+        .objc
+        .alloc_object(this, Box::new(host_object), &mut env.mem);
+    autorelease(env, bundle)
+}
+
 + (id)preferredLocalizationsFromArray:(id)localizations_array { // NSArray<NSString *> *
     let preferredLocalizations = CFBundleCopyPreferredLocalizationsFromArray(env, localizations_array);
     autorelease(env, preferredLocalizations)
@@ -96,11 +136,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())dealloc {
     let &NSBundleHostObject {
         bundle: _,
-        bundle_path: _, // FIXME?
-        bundle_identifier: _, // FIXME?
+        bundle_path,
+        bundle_identifier,
         bundle_url,
         info_dictionary,
     } = env.objc.borrow(this);
+    release(env, bundle_path);
+    release(env, bundle_identifier);
     if let Some(bundle_url) = bundle_url {
         release(env, bundle_url);
     }

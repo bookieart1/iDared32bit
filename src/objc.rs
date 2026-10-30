@@ -48,8 +48,8 @@ use crate::mem::{ConstVoidPtr, MutPtr};
 use crate::Environment;
 use classes::{
     class_getInstanceMethod, class_getInstanceSize, class_getMethodImplementation,
-    class_getProperty, class_getSuperclass, class_replaceMethod, objc_getClass, ClassHostObject,
-    FakeClass, UnimplementedClass,
+    class_getProperty, class_getSuperclass, class_replaceMethod, method_getImplementation,
+    objc_getClass, ClassHostObject, FakeClass, UnimplementedClass,
 };
 pub(crate) use messages::objc_msgSend;
 use messages::{objc_msgSendSuper2, objc_msgSend_stret, MsgSendSignature, MsgSendSuperSignature};
@@ -206,6 +206,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_getSuperclass(_)),
     export_c_func!(class_getProperty(_, _)),
     export_c_func!(class_getInstanceMethod(_, _)),
+    export_c_func!(method_getImplementation(_)),
     export_c_func!(class_getMethodImplementation(_, _)),
     export_c_func!(class_replaceMethod(_, _, _, _)),
     export_c_func!(objc_msgSend(_, _)),
