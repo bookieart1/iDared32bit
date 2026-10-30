@@ -100,6 +100,7 @@ macro_rules! impl_HostIMP {
                 // TODO: VERY INCOMPLETE! Include each type's offsets
                 String::from_iter(&[
                     type_char(TypeId::of::<R>()),
+                    type_char(TypeId::of::<id>()),
                     type_char(TypeId::of::<SEL>()),
                     $(type_char(TypeId::of::<$P>()),)*
                 ])
@@ -118,6 +119,7 @@ macro_rules! impl_HostIMP {
                 // TODO: VERY INCOMPLETE! Include each type's offsets
                 String::from_iter(&[
                     type_char(TypeId::of::<R>()),
+                    type_char(TypeId::of::<id>()),
                     type_char(TypeId::of::<SEL>()),
                     $(type_char(TypeId::of::<$P>()),)*
                     '?', // TODO: Varargs
@@ -254,6 +256,26 @@ impl ObjC {
             } = self.borrow(class);
             if methods.contains_key(&sel) {
                 return guest_method_signatures.get(&sel);
+            } else if superclass == nil {
+                return None;
+            } else {
+                class = superclass;
+            }
+        }
+    }
+
+    /// Returns the Objective-C type encoding for a method, including host
+    /// methods implemented by touchHLE itself.
+    pub fn class_get_method_types(&self, class: Class, sel: SEL) -> Option<&str> {
+        let mut class = class;
+        loop {
+            let &ClassHostObject {
+                superclass,
+                ref methods,
+                ..
+            } = self.borrow(class);
+            if let Some(method) = methods.get(&sel) {
+                return Some(&method.types);
             } else if superclass == nil {
                 return None;
             } else {

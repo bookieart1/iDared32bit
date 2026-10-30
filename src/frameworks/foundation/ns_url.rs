@@ -105,8 +105,17 @@ pub const CLASSES: ClassExports = objc_classes! {
         return nil;
     }
 
-    // FIXME: this should parse the URL
-    assert!(!to_rust_string(env, url).starts_with("file:")); // TODO
+    let url_string = to_rust_string(env, url);
+    if let Some(path) = file_url_to_path(&url_string) {
+        let ns_string = from_rust_string(env, path);
+        *env.objc.borrow_mut(this) = NSURLHostObject::FileURL {
+            ns_string,
+            working_directory: env.fs.working_directory().into(),
+        };
+        return this;
+    }
+
+    // FIXME: non-file URLs are otherwise stored without full parsing.
     let url: id = msg![env; url copy];
     *env.objc.borrow_mut(this) = NSURLHostObject::OtherURL { ns_string: url };
     this
@@ -241,6 +250,37 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+fn file_url_to_path(url: &str) -> Option<String> {
+    let mut path = url.strip_prefix("file:")?;
+    if let Some(rest) = path.strip_prefix("//") {
+        path = rest;
+        if let Some(rest) = path.strip_prefix("localhost") {
+            path = rest;
+        }
+    }
+    if path.contains(['?', '#']) {
+        return None;
+    }
+
+    let bytes = path.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let high = (bytes[i + 1] as char).to_digit(16);
+            let low = (bytes[i + 2] as char).to_digit(16);
+            if let (Some(high), Some(low)) = (high, low) {
+                decoded.push(((high << 4) | low) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        decoded.push(bytes[i]);
+        i += 1;
+    }
+    Some(String::from_utf8_lossy(&decoded).into_owned())
+}
 
 /// Shortcut for host code, provides a view of a URL as a path.
 /// TODO: Try to avoid allocating a new GuestPathBuf in more cases.

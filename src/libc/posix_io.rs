@@ -975,6 +975,33 @@ fn truncate(env: &mut Environment, path_ptr: ConstPtr<u8>, len: off_t) -> i32 {
     res
 }
 
+/// Extended attributes are primarily used by older iOS apps to mark files as
+/// excluded from backup. The host-side virtual filesystem does not preserve
+/// xattrs, but accepting the request is preferable to failing an otherwise
+/// valid save operation.
+fn setxattr(
+    env: &mut Environment,
+    path: ConstPtr<u8>,
+    name: ConstPtr<u8>,
+    _value: ConstVoidPtr,
+    size: GuestUSize,
+    position: u32,
+    options: i32,
+) -> i32 {
+    let path = env.mem.cstr_at_utf8(path).unwrap_or("<invalid path>");
+    let name = env.mem.cstr_at_utf8(name).unwrap_or("<invalid name>");
+    log_dbg!(
+        "setxattr({:?}, {:?}, {} bytes, position {}, options {:#x}) ignored",
+        path,
+        name,
+        size,
+        position,
+        options
+    );
+    set_errno(env, 0);
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(open(_, _, _)),
     export_c_func!(read(_, _, _)),
@@ -991,6 +1018,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(fsync(_)),
     export_c_func!(ftruncate(_, _)),
     export_c_func!(truncate(_, _)),
+    export_c_func!(setxattr(_, _, _, _, _, _)),
 ];
 
 /// Helper function, not part of API

@@ -11,6 +11,7 @@ use crate::objc::{id, msg, msg_class, objc_classes, ClassExports, TrivialHostObj
 #[derive(Default)]
 pub struct State {
     main_screen: Option<id>,
+    current_mode: Option<id>,
 }
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -71,6 +72,39 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (CGFloat)scale {
     // TODO: support retina
+    1.0
+}
+
+- (id)currentMode {
+    if let Some(mode) = env.framework_state.uikit.ui_screen.current_mode {
+        mode
+    } else {
+        let mode: id = msg_class![env; UIScreenMode new];
+        env.framework_state.uikit.ui_screen.current_mode = Some(mode);
+        mode
+    }
+}
+
+- (id)availableModes {
+    let mode: id = msg![env; this currentMode];
+    msg_class![env; NSArray arrayWithObject:mode]
+}
+
+@end
+
+@implementation UIScreenMode: NSObject
+
+// UIScreen owns this singleton for the lifetime of the application.
+- (id)retain { this }
+- (())release {}
+- (id)autorelease { this }
+
+- (CGSize)size {
+    let (width, height) = env.window().portrait_size();
+    CGSize { width: width as f32, height: height as f32 }
+}
+
+- (CGFloat)pixelAspectRatio {
     1.0
 }
 

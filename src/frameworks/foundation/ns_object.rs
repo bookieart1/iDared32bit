@@ -36,12 +36,19 @@ fn method_signature(env: &mut Environment, class: Class, sel: SEL) -> id {
     if !env.objc.class_has_method(class, sel) {
         return nil;
     }
-    // TODO: support `host` method signatures
-    let Some(&sig) = env.objc.class_get_method_signature(class, sel) else {
-        panic!(
-            "TODO: method signature of host method {}",
-            sel.as_str(&env.mem)
-        );
+    let sig = if let Some(&sig) = env.objc.class_get_method_signature(class, sel) {
+        sig
+    } else {
+        // Host methods carry a compact type encoding generated from their Rust
+        // signature. NSMethodSignature copies the encoding, so this temporary
+        // guest C string can be released immediately after construction.
+        let Some(types) = env.objc.class_get_method_types(class, sel).map(str::to_owned) else {
+            return nil;
+        };
+        let sig = env.mem.alloc_and_write_cstr(types.as_bytes()).cast_const();
+        let result = msg_class![env; NSMethodSignature signatureWithObjCTypes:sig];
+        env.mem.free(sig.cast_mut().cast());
+        return result;
     };
     log_dbg!(
         "method signature: '{}' -> {:?}",

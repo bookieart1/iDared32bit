@@ -6,12 +6,14 @@
 //! CommonCrypto and friends
 
 use crate::dyld::FunctionExports;
-use crate::mem::{ConstVoidPtr, MutPtr, SafeRead};
+use crate::mem::{ConstVoidPtr, MutPtr, MutVoidPtr, SafeRead};
 use crate::{export_c_func, Environment};
+use aes::cipher::{generic_array::GenericArray as CipherArray, BlockDecrypt, BlockEncrypt, KeyInit};
+use aes::{Aes128, Aes192, Aes256};
 use digest::Digest;
 use md5::Md5;
 use sha1::Sha1;
-use sha2::digest::generic_array::GenericArray;
+use sha2::digest::generic_array::GenericArray as DigestArray;
 use sha2::Sha256;
 use std::collections::HashMap;
 
@@ -111,7 +113,7 @@ impl CC_SHA256_CTX {
             used += n;
             data = &data[n..];
             if used == 64 {
-                sha2::compress256(&mut hash, &[GenericArray::clone_from_slice(&wbuf)]);
+                sha2::compress256(&mut hash, &[DigestArray::clone_from_slice(&wbuf)]);
                 used = 0;
             }
         }
@@ -165,6 +167,160 @@ fn CC_SHA256_Final(env: &mut Environment, md: MutPtr<u8>, c: MutPtr<CC_SHA256_CT
     1
 }
 
+type CCCryptorStatus = i32;
+const K_CC_SUCCESS: CCCryptorStatus = 0;
+const K_CC_PARAM_ERROR: CCCryptorStatus = -4300;
+const K_CC_BUFFER_TOO_SMALL: CCCryptorStatus = -4301;
+const K_CC_ALIGNMENT_ERROR: CCCryptorStatus = -4303;
+const K_CC_DECODE_ERROR: CCCryptorStatus = -4304;
+const K_CC_UNIMPLEMENTED: CCCryptorStatus = -4305;
+
+const K_CC_ENCRYPT: u32 = 0;
+const K_CC_DECRYPT: u32 = 1;
+const K_CC_ALGORITHM_AES128: u32 = 0;
+const K_CC_OPTION_PKCS7_PADDING: u32 = 1;
+const K_CC_OPTION_ECB_MODE: u32 = 2;
+const AES_BLOCK_SIZE: usize = 16;
+
+fn aes_crypt<C>(
+    key: &[u8],
+    iv: &[u8; AES_BLOCK_SIZE],
+    input: &[u8],
+    encrypt: bool,
+    ecb: bool,
+    pkcs7: bool,
+) -> Result<Vec<u8>, CCCryptorStatus>
+where
+    C: BlockEncrypt + BlockDecrypt + KeyInit,
+{
+    let cipher = C::new_from_slice(key).map_err(|_| K_CC_PARAM_ERROR)?;
+    if !encrypt && (input.is_empty() || !input.len().is_multiple_of(AES_BLOCK_SIZE)) {
+        return Err(K_CC_ALIGNMENT_ERROR);
+    }
+
+    let mut output = input.to_vec();
+    if encrypt {
+        if pkcs7 {
+            let padding = AES_BLOCK_SIZE - output.len() % AES_BLOCK_SIZE;
+            output.resize(output.len() + padding, padding as u8);
+        } else if !output.len().is_multiple_of(AES_BLOCK_SIZE) {
+            return Err(K_CC_ALIGNMENT_ERROR);
+        }
+
+        let mut previous = *iv;
+        for chunk in output.chunks_exact_mut(AES_BLOCK_SIZE) {
+            if !ecb {
+                for (byte, previous_byte) in chunk.iter_mut().zip(previous) {
+                    *byte ^= previous_byte;
+                }
+            }
+            let block = CipherArray::from_mut_slice(chunk);
+            cipher.encrypt_block(block);
+            if !ecb {
+                previous.copy_from_slice(chunk);
+            }
+        }
+    } else {
+        let mut previous = *iv;
+        for chunk in output.chunks_exact_mut(AES_BLOCK_SIZE) {
+            let mut encrypted_block = [0u8; AES_BLOCK_SIZE];
+            encrypted_block.copy_from_slice(chunk);
+            let block = CipherArray::from_mut_slice(chunk);
+            cipher.decrypt_block(block);
+            if !ecb {
+                for (byte, previous_byte) in chunk.iter_mut().zip(previous) {
+                    *byte ^= previous_byte;
+                }
+                previous = encrypted_block;
+            }
+        }
+        if pkcs7 {
+            let Some(&padding) = output.last() else {
+                return Err(K_CC_DECODE_ERROR);
+            };
+            let padding = padding as usize;
+            if padding == 0
+                || padding > AES_BLOCK_SIZE
+                || output.len() < padding
+                || !output[output.len() - padding..]
+                    .iter()
+                    .all(|&byte| byte as usize == padding)
+            {
+                return Err(K_CC_DECODE_ERROR);
+            }
+            output.truncate(output.len() - padding);
+        }
+    }
+    Ok(output)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn CCCrypt(
+    env: &mut Environment,
+    operation: u32,
+    algorithm: u32,
+    options: u32,
+    key: ConstVoidPtr,
+    key_length: u32,
+    iv: ConstVoidPtr,
+    data_in: ConstVoidPtr,
+    data_in_length: u32,
+    data_out: MutVoidPtr,
+    data_out_available: u32,
+    data_out_moved: MutPtr<u32>,
+) -> CCCryptorStatus {
+    if !data_out_moved.is_null() {
+        env.mem.write(data_out_moved, 0);
+    }
+    if algorithm != K_CC_ALGORITHM_AES128
+        || !matches!(operation, K_CC_ENCRYPT | K_CC_DECRYPT)
+        || options & !(K_CC_OPTION_PKCS7_PADDING | K_CC_OPTION_ECB_MODE) != 0
+    {
+        return K_CC_UNIMPLEMENTED;
+    }
+    if key.is_null() || data_out.is_null() || (data_in.is_null() && data_in_length != 0) {
+        return K_CC_PARAM_ERROR;
+    }
+
+    let key = env.mem.bytes_at(key.cast(), key_length).to_vec();
+    let input = if data_in_length == 0 {
+        Vec::new()
+    } else {
+        env.mem.bytes_at(data_in.cast(), data_in_length).to_vec()
+    };
+    let iv = if iv.is_null() {
+        [0; AES_BLOCK_SIZE]
+    } else {
+        env.mem
+            .bytes_at(iv.cast(), AES_BLOCK_SIZE as u32)
+            .try_into()
+            .unwrap()
+    };
+    let encrypt = operation == K_CC_ENCRYPT;
+    let ecb = options & K_CC_OPTION_ECB_MODE != 0;
+    let pkcs7 = options & K_CC_OPTION_PKCS7_PADDING != 0;
+    let result = match key.len() {
+        16 => aes_crypt::<Aes128>(&key, &iv, &input, encrypt, ecb, pkcs7),
+        24 => aes_crypt::<Aes192>(&key, &iv, &input, encrypt, ecb, pkcs7),
+        32 => aes_crypt::<Aes256>(&key, &iv, &input, encrypt, ecb, pkcs7),
+        _ => return K_CC_PARAM_ERROR,
+    };
+    let output = match result {
+        Ok(output) => output,
+        Err(status) => return status,
+    };
+    if output.len() > data_out_available as usize {
+        return K_CC_BUFFER_TOO_SMALL;
+    }
+    env.mem
+        .bytes_at_mut(data_out.cast(), output.len().try_into().unwrap())
+        .copy_from_slice(&output);
+    if !data_out_moved.is_null() {
+        env.mem.write(data_out_moved, output.len().try_into().unwrap());
+    }
+    K_CC_SUCCESS
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CC_MD5_Init(_)),
     export_c_func!(CC_MD5_Update(_, _, _)),
@@ -175,4 +331,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CC_SHA256_Init(_)),
     export_c_func!(CC_SHA256_Update(_, _, _)),
     export_c_func!(CC_SHA256_Final(_, _)),
+    export_c_func!(CCCrypt(_, _, _, _, _, _, _, _, _, _, _)),
 ];

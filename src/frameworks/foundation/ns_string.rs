@@ -602,49 +602,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (NSRange)rangeOfString:(id)search_string
                  options:(NSStringCompareOptions)options { // NSString *
-    log_dbg!(
-        "[(NSString *){} rangeOfString:{} options:{}]",
-        to_rust_string(env, this), to_rust_string(env, search_string), options
-    );
     let len: NSUInteger = msg![env; this length];
-    let len_search: NSUInteger = msg![env; search_string length];
-    if len_search == 0 {
-        return NSRange { location: NSNotFound as NSUInteger, length: 0 };
-    }
-    // TODO: other search options
-    // TODO: OR'ing of options
-    match options {
-        // 0 is for default options, which is NSLiteralSearch
-        NSLiteralSearch | 0 => {
-            for i in 0..len {
-                if is_match_at_position(env, this, search_string, i, len, len_search, |a, b| a == b) {
-                    return NSRange { location: i, length: len_search }
-                }
-            }
-        },
-        NSCaseInsensitiveSearch => {
-            let compare = |a, b| {
-                let (Some(a_c), Some(b_c)) = (char::from_u32(a as u32), char::from_u32(b as u32)) else {
-                    panic!("Invalid chars in the strings!");
-                };
-                a_c.to_lowercase().eq(b_c.to_lowercase())
-            };
-            for i in 0..len {
-                if is_match_at_position(env, this, search_string, i, len, len_search, compare) {
-                    return NSRange { location: i, length: len_search }
-                }
-            }
-        },
-        NSBackwardsSearch => {
-            for i in (0..len).rev() {
-                if is_match_at_position(env, this, search_string, i, len, len_search, |a, b| a == b) {
-                    return NSRange { location: i, length: len_search }
-                }
-            }
-        },
-        _ => unimplemented!("options {}", options)
-    }
-    NSRange { location: NSNotFound as NSUInteger, length: 0 }
+    range_of_string(env, this, search_string, options, NSRange { location: 0, length: len })
+}
+
+- (NSRange)rangeOfString:(id)search_string
+                 options:(NSStringCompareOptions)options
+                   range:(NSRange)range { // NSString *
+    range_of_string(env, this, search_string, options, range)
 }
 
 - (NSRange)rangeOfCharacterFromSet:(id)set { // NSCharacterSet *
@@ -1979,6 +1944,64 @@ fn is_match_at_position<F: Fn(u16, u16) -> bool>(
             false
         }
     })
+}
+
+fn range_of_string(
+    env: &mut Environment,
+    string: id,
+    search_string: id,
+    options: NSStringCompareOptions,
+    range: NSRange,
+) -> NSRange {
+    log_dbg!(
+        "[(NSString *){} rangeOfString:{} options:{} range:{:?}]",
+        to_rust_string(env, string),
+        to_rust_string(env, search_string),
+        options,
+        range
+    );
+    let len: NSUInteger = msg![env; string length];
+    let range_end = range.location.checked_add(range.length).unwrap();
+    assert!(range_end <= len, "rangeOfString range is out of bounds");
+    let len_search: NSUInteger = msg![env; search_string length];
+    if len_search == 0 || len_search > range.length {
+        return NSRange { location: NSNotFound as NSUInteger, length: 0 };
+    }
+
+    let unsupported = options & !(NSCaseInsensitiveSearch | NSLiteralSearch | NSBackwardsSearch);
+    if unsupported != 0 {
+        log!("Warning: ignoring unsupported NSString search option bits {:#x}", unsupported);
+    }
+    let case_insensitive = options & NSCaseInsensitiveSearch != 0;
+    let backwards = options & NSBackwardsSearch != 0;
+    let last_start = range_end - len_search;
+
+    let matches = |env: &mut Environment, i| {
+        is_match_at_position(env, string, search_string, i, range_end, len_search, |a, b| {
+            if !case_insensitive {
+                return a == b;
+            }
+            let (Some(a), Some(b)) = (char::from_u32(a as u32), char::from_u32(b as u32)) else {
+                return a == b;
+            };
+            a.to_lowercase().eq(b.to_lowercase())
+        })
+    };
+
+    if backwards {
+        for i in (range.location..=last_start).rev() {
+            if matches(env, i) {
+                return NSRange { location: i, length: len_search };
+            }
+        }
+    } else {
+        for i in range.location..=last_start {
+            if matches(env, i) {
+                return NSRange { location: i, length: len_search };
+            }
+        }
+    }
+    NSRange { location: NSNotFound as NSUInteger, length: 0 }
 }
 
 /// Helper function for shared `doubleValue` and `floatValue` implementations.
