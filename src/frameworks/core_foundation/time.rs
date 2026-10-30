@@ -133,6 +133,24 @@ fn days_from_date(year: i64, month: i64, day: i64) -> i64 {
     era * 146097 + day_of_era - 719468 - DAYS_FROM_UNIX_TO_APPLE_EPOCHS
 }
 
+/// Convert Gregorian date components to an absolute time relative to Apple's
+/// 2001 reference date. Foundation's calendar implementation uses this to
+/// construct `NSDate` objects without exposing Core Foundation internals to
+/// the guest.
+pub(crate) fn absolute_time_from_gregorian(
+    year: i64,
+    month: i64,
+    day: i64,
+    hour: i64,
+    minute: i64,
+    second: f64,
+) -> CFAbsoluteTime {
+    days_from_date(year, month, day) as f64 * DAY_SECONDS
+        + hour as f64 * 3600.0
+        + minute as f64 * 60.0
+        + second
+}
+
 /// The Gregorian (year, month, day) of a day since the absolute reference
 /// date. The inverse of [days_from_date].
 fn date_from_days(days: i64) -> (i64, i64, i64) {
@@ -161,7 +179,10 @@ fn CFAbsoluteTimeAddGregorianUnits(
 
 /// Like Apple's: years and months move the date, keeping the time of day and
 /// clamping the day to the new month's length. The rest are added as seconds.
-fn add_gregorian_units(at: CFAbsoluteTime, units: CFGregorianUnits) -> CFAbsoluteTime {
+pub(crate) fn add_gregorian_units(
+    at: CFAbsoluteTime,
+    units: CFGregorianUnits,
+) -> CFAbsoluteTime {
     let days = (at / DAY_SECONDS).floor();
     let time_of_day = at - days * DAY_SECONDS;
     let (year, month, day) = date_from_days(days as i64);

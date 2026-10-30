@@ -19,6 +19,7 @@ pub mod _nib_archive_decoder;
 pub mod ns_array;
 pub mod ns_autorelease_pool;
 pub mod ns_bundle;
+pub mod ns_calendar;
 pub mod ns_character_set;
 pub mod ns_coder;
 pub mod ns_data;
@@ -72,6 +73,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_array::CLASSES,
         ns_autorelease_pool::CLASSES,
         ns_bundle::CLASSES,
+        ns_calendar::CLASSES,
         ns_character_set::CLASSES,
         ns_coder::CLASSES,
         ns_data::CLASSES,
@@ -115,6 +117,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     ],
     constant_exports: &[
         ns_error::CONSTANTS,
+        ns_calendar::CONSTANTS,
         ns_exception::CONSTANTS,
         ns_file_manager::CONSTANTS,
         ns_key_value_observing::CONSTANTS,
@@ -134,6 +137,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
 #[derive(Default)]
 pub struct State {
     ns_bundle: ns_bundle::State,
+    ns_calendar: ns_calendar::State,
     ns_file_manager: ns_file_manager::State,
     ns_key_value_observing: ns_key_value_observing::State,
     ns_locale: ns_locale::State,
