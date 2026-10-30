@@ -76,8 +76,10 @@ fn inet_ntop(
     dst.cast_const()
 }
 
-fn inet_ntoa(env: &mut Environment, addr: in_addr) -> MutPtr<u8> {
-    let ipv4_addr = Ipv4Addr::from_bits(u32::from_be(addr.s_addr));
+fn inet_ntoa(env: &mut Environment, addr: in_addr_t) -> MutPtr<u8> {
+    // struct in_addr contains exactly one 32-bit value and is passed in one
+    // register by the 32-bit ARM ABI, so expose that register-sized value here.
+    let ipv4_addr = Ipv4Addr::from_bits(u32::from_be(addr));
     let address = ipv4_addr.to_string();
     let address_bytes = address.as_bytes();
 
@@ -126,20 +128,10 @@ mod tests {
     fn inet_ntoa_formats_into_a_reused_buffer() {
         let mut env = Environment::new_fake_for_test();
 
-        let first = inet_ntoa(
-            &mut env,
-            in_addr {
-                s_addr: u32::from_le_bytes([127, 0, 0, 1]),
-            },
-        );
+        let first = inet_ntoa(&mut env, u32::from_le_bytes([127, 0, 0, 1]));
         assert_eq!(env.mem.cstr_at_utf8(first.cast_const()), Ok("127.0.0.1"));
 
-        let second = inet_ntoa(
-            &mut env,
-            in_addr {
-                s_addr: u32::from_le_bytes([192, 0, 2, 1]),
-            },
-        );
+        let second = inet_ntoa(&mut env, u32::from_le_bytes([192, 0, 2, 1]));
         assert_eq!(second, first);
         assert_eq!(env.mem.cstr_at_utf8(second.cast_const()), Ok("192.0.2.1"));
     }
