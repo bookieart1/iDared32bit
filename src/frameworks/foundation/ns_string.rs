@@ -1054,7 +1054,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let length: NSUInteger = msg![env; this length];
     assert!(end <= length);
 
-    let left: id = msg![env; this substringToIndex:range.location];
+    let location = range.location;
+    let left: id = msg![env; this substringToIndex:location];
     let right: id = msg![env; this substringFromIndex:end];
     let result: id = msg![env; left stringByAppendingString:replacement];
     msg![env; result stringByAppendingString:right]
