@@ -10,7 +10,7 @@ use std::collections::hash_map::Entry;
 use crate::dyld::FunctionExports;
 use crate::environment::Environment;
 use crate::export_c_func;
-use crate::mem::{ConstPtr, MutPtr};
+use crate::mem::{ConstPtr, MutPtr, MutVoidPtr, Ptr};
 
 pub type LocaleCategory = i32;
 pub const LC_ALL: LocaleCategory = 0;
@@ -20,10 +20,12 @@ pub const LC_MONETARY: LocaleCategory = 3;
 pub const LC_NUMERIC: LocaleCategory = 4;
 pub const LC_TIME: LocaleCategory = 5;
 pub const LC_MESSAGES: LocaleCategory = 6;
+const LC_GLOBAL_LOCALE: MutVoidPtr = Ptr::from_bits(u32::MAX);
 
 #[derive(Default)]
 pub struct State {
     locale: std::collections::HashMap<LocaleCategory, MutPtr<u8>>,
+    thread_locale: std::collections::HashMap<usize, MutVoidPtr>,
 }
 
 pub fn setlocale(
@@ -51,4 +53,61 @@ pub fn setlocale(
     env.libc_state.clocale.locale.get(&category).unwrap().cast()
 }
 
-pub const FUNCTIONS: FunctionExports = &[export_c_func!(setlocale(_, _))];
+fn newlocale(
+    env: &mut Environment,
+    _category_mask: i32,
+    locale: ConstPtr<u8>,
+    _base: MutVoidPtr,
+) -> MutVoidPtr {
+    let locale_name = if locale.is_null() {
+        b"C".to_vec()
+    } else {
+        let requested = env.mem.cstr_at(locale);
+        if requested.is_empty() {
+            b"C".to_vec()
+        } else {
+            requested.to_owned()
+        }
+    };
+    env.mem.alloc_and_write_cstr(&locale_name).cast()
+}
+
+fn duplocale(env: &mut Environment, locale: MutVoidPtr) -> MutVoidPtr {
+    let locale_name = if locale == LC_GLOBAL_LOCALE || locale.is_null() {
+        b"C".to_vec()
+    } else {
+        env.mem.cstr_at(locale.cast_const().cast()).to_owned()
+    };
+    env.mem.alloc_and_write_cstr(&locale_name).cast()
+}
+
+fn freelocale(env: &mut Environment, locale: MutVoidPtr) {
+    if !locale.is_null() && locale != LC_GLOBAL_LOCALE {
+        env.mem.free(locale);
+    }
+}
+
+fn uselocale(env: &mut Environment, locale: MutVoidPtr) -> MutVoidPtr {
+    let current = env
+        .libc_state
+        .clocale
+        .thread_locale
+        .get(&env.current_thread)
+        .copied()
+        .unwrap_or(LC_GLOBAL_LOCALE);
+    if !locale.is_null() {
+        env.libc_state
+            .clocale
+            .thread_locale
+            .insert(env.current_thread, locale);
+    }
+    current
+}
+
+pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(setlocale(_, _)),
+    export_c_func!(newlocale(_, _, _)),
+    export_c_func!(duplocale(_)),
+    export_c_func!(freelocale(_)),
+    export_c_func!(uselocale(_)),
+];

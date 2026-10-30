@@ -23,6 +23,7 @@ pub struct UIScrollViewHostObject {
     /// UIScrollViewDelegate, weak reference
     delegate: id,
     scroll_enabled: bool,
+    dragging: bool,
     content_offset: CGPoint,
     content_size: CGSize,
 }
@@ -33,6 +34,7 @@ impl Default for UIScrollViewHostObject {
             superclass: Default::default(),
             delegate: nil,
             scroll_enabled: true,
+            dragging: false,
             content_offset: CGPoint { x: 0.0, y: 0.0 },
             content_size: CGSize {
                 width: 0.0,
@@ -72,6 +74,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setScrollEnabled:(bool)scroll_enabled {
     env.objc.borrow_mut::<UIScrollViewHostObject>(this).scroll_enabled = scroll_enabled;
+}
+
+- (bool)isDragging {
+    env.objc.borrow::<UIScrollViewHostObject>(this).dragging
 }
 
 - (())setDirectionalLockEnabled:(bool)enabled {
@@ -166,6 +172,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if !scroll_enabled {
         return;
     }
+    env.objc.borrow_mut::<UIScrollViewHostObject>(this).dragging = true;
 
     let touch_arr: id = msg![env; touches allObjects];
     // Assume single finger touches for now
@@ -208,6 +215,14 @@ pub const CLASSES: ClassExports = objc_classes! {
             () = msg![env; delegate scrollViewDidScroll:this];
         }
     }
+}
+
+- (())touchesEnded:(id)_touches withEvent:(id)_event {
+    env.objc.borrow_mut::<UIScrollViewHostObject>(this).dragging = false;
+}
+
+- (())touchesCancelled:(id)_touches withEvent:(id)_event {
+    env.objc.borrow_mut::<UIScrollViewHostObject>(this).dragging = false;
 }
 
 @end

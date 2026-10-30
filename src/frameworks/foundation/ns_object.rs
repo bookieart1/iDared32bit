@@ -80,6 +80,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (Class)class {
     this
 }
++ (Class)superclass {
+    env.objc.get_superclass(this)
+}
 + (id)self {
     this
 }
@@ -170,6 +173,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (Class)class {
     ObjC::read_isa(this, &env.mem)
+}
+- (Class)superclass {
+    let class = ObjC::read_isa(this, &env.mem);
+    env.objc.get_superclass(class)
 }
 - (bool)isMemberOfClass:(Class)class {
     let this_class: Class = msg![env; this class];

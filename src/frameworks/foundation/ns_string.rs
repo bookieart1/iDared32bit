@@ -1101,15 +1101,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)stringByAddingPercentEscapesUsingEncoding:(NSStringEncoding)encoding {
     assert!(encoding == NSASCIIStringEncoding || encoding == NSUTF8StringEncoding); // TODO: other encodings
-    // TODO: implement escaping as per RFC 2396
     let str = to_rust_string(env, this);
-    // FIXME: figure out why '[' and ']' are escaped on iOS simulator
-    assert!(str.as_bytes().iter().all(|byte| {
-        (byte.is_ascii_alphanumeric() || b"-_.~".contains(byte)) // unreserved
-        || b"!*'();:@&=+$,/?%#".contains(byte) // reserved
-    }));
-    let new: id = msg![env; this copy];
-    autorelease(env, new)
+    // RFC 2396 unreserved and reserved characters are left as-is. Everything
+    // else is escaped byte-by-byte using the requested UTF-8/ASCII-compatible
+    // representation. This also preserves existing percent escapes.
+    const URL_SAFE: &[u8] = b"-_.~!*'();:@&=+$,/?%#";
+    let mut escaped = String::with_capacity(str.len());
+    for &byte in str.as_bytes() {
+        if byte.is_ascii_alphanumeric() || URL_SAFE.contains(&byte) {
+            escaped.push(byte as char);
+        } else {
+            use std::fmt::Write;
+            write!(&mut escaped, "%{byte:02X}").unwrap();
+        }
+    }
+    autorelease(env, from_rust_string(env, escaped))
 }
 
 - (id)stringByAppendingPathComponent:(id)component { // NSString*

@@ -5,9 +5,22 @@
  */
 //! Minimal Grand Central Dispatch queue objects.
 
+use crate::abi::{CallFromHost, GuestFunction};
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
-use crate::mem::{ConstPtr, ConstVoidPtr, MutVoidPtr};
+use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr, SafeRead};
 use crate::Environment;
+
+/// The fixed header of a 32-bit Apple block literal. Captured variables, if
+/// any, follow this header and are accessed by the block's invoke function.
+#[repr(C)]
+struct BlockLiteral {
+    _isa: MutVoidPtr,
+    _flags: i32,
+    _reserved: i32,
+    invoke: GuestFunction,
+    _descriptor: MutVoidPtr,
+}
+unsafe impl SafeRead for BlockLiteral {}
 
 fn new_queue_object(env: &mut Environment) -> MutVoidPtr {
     // Queue objects are opaque to callers. Scheduling is intentionally added
@@ -35,6 +48,19 @@ fn dispatch_group_create(env: &mut Environment) -> MutVoidPtr {
     new_queue_object(env)
 }
 
+fn dispatch_async(env: &mut Environment, _queue: MutVoidPtr, block: MutPtr<BlockLiteral>) {
+    assert!(!block.is_null());
+    let invoke = env.mem.read(block).invoke;
+    assert_ne!(invoke.addr_without_thumb_bit(), 0);
+
+    // A full GCD implementation needs to copy stack blocks and schedule them
+    // on a queue. Until that machinery exists, invoking before this function
+    // returns is the safest lifetime-correct fallback: captured stack data is
+    // still valid, and callers still get the work performed.
+    log_once!("TODO: dispatch_async executes its block synchronously");
+    () = invoke.call_from_host(env, (block.cast_void(),));
+}
+
 pub const CONSTANTS: ConstantExports = &[(
     "__dispatch_main_q",
     HostConstant::Custom(|env| new_queue_object(env).cast_const()),
@@ -43,4 +69,5 @@ pub const CONSTANTS: ConstantExports = &[(
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(dispatch_queue_create(_, _)),
     export_c_func!(dispatch_group_create()),
+    export_c_func!(dispatch_async(_, _)),
 ];
