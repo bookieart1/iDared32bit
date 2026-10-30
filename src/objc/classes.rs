@@ -1101,6 +1101,23 @@ pub(super) fn class_getProperty(
     todo!()
 }
 
+pub(super) fn class_copyPropertyList(
+    env: &mut Environment,
+    cls: Class,
+    out_count: MutPtr<u32>,
+) -> MutPtr<objc_property_t> {
+    if !out_count.is_null() {
+        env.mem.write(out_count, 0);
+    }
+    if cls != nil {
+        log_once!(
+            "TODO: class_copyPropertyList for class '{}' returns an empty list",
+            env.objc.get_class_name(cls)
+        );
+    }
+    Ptr::null()
+}
+
 pub(super) fn class_replaceMethod(
     env: &mut Environment,
     cls: Class,

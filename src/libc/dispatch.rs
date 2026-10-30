@@ -29,9 +29,18 @@ fn dispatch_queue_create(
     new_queue_object(env)
 }
 
+fn dispatch_group_create(env: &mut Environment) -> MutVoidPtr {
+    // Dispatch objects are opaque. Group operations will be implemented when
+    // an app demonstrates which scheduling behaviour it needs.
+    new_queue_object(env)
+}
+
 pub const CONSTANTS: ConstantExports = &[(
     "__dispatch_main_q",
     HostConstant::Custom(|env| new_queue_object(env).cast_const()),
 )];
 
-pub const FUNCTIONS: FunctionExports = &[export_c_func!(dispatch_queue_create(_, _))];
+pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(dispatch_queue_create(_, _)),
+    export_c_func!(dispatch_group_create()),
+];

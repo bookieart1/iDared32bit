@@ -47,9 +47,9 @@ pub use selectors::{selector, SEL};
 use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, Ptr};
 use crate::Environment;
 use classes::{
-    class_getInstanceMethod, class_getInstanceSize, class_getMethodImplementation,
-    class_getProperty, class_getSuperclass, class_replaceMethod, method_getImplementation,
-    objc_getClass, ClassHostObject, FakeClass, UnimplementedClass,
+    class_copyPropertyList, class_getInstanceMethod, class_getInstanceSize,
+    class_getMethodImplementation, class_getProperty, class_getSuperclass, class_replaceMethod,
+    method_getImplementation, objc_getClass, ClassHostObject, FakeClass, UnimplementedClass,
 };
 pub(crate) use messages::objc_msgSend;
 use messages::{objc_msgSendSuper2, objc_msgSend_stret, MsgSendSignature, MsgSendSuperSignature};
@@ -223,6 +223,7 @@ fn object_getClassName(env: &mut Environment, object: id) -> ConstPtr<u8> {
 }
 
 const FUNCTIONS: FunctionExports = &[
+    export_c_func!(class_copyPropertyList(_, _)),
     export_c_func!(class_getInstanceSize(_)),
     export_c_func!(class_getSuperclass(_)),
     export_c_func!(class_getProperty(_, _)),

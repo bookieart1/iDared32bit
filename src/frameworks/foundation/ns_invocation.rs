@@ -134,7 +134,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         env.mem.free(prev_arg.cast());
     }
 
-    let argument_types: &Vec<String> = env.objc.borrow::<NSInvocationHostObject>(this).argument_types.as_ref();
+    let argument_types: &Vec<String> = env
+        .objc
+        .borrow::<NSInvocationHostObject>(this)
+        .argument_types
+        .as_ref();
     let arg_type = argument_types.get(idx as usize).unwrap();
     let new: MutVoidPtr = match arg_type.as_str() {
         "f" => {
@@ -160,7 +164,18 @@ pub const CLASSES: ClassExports = objc_classes! {
             let arg = env.mem.read(arg_loc);
             env.mem.alloc_and_write(arg).cast()
         }
-        _ => unimplemented!("unhandled argument type {arg_type}"),
+        _ => {
+            let selector = env
+                .objc
+                .borrow::<NSInvocationHostObject>(this)
+                .selector
+                .map(|selector| selector.as_str(&env.mem).to_owned())
+                .unwrap_or_else(|| "<not set>".to_owned());
+            unimplemented!(
+                "unhandled argument type {arg_type} for selector {selector}; signature arguments: {:?}",
+                argument_types
+            )
+        }
     };
 
     env.objc.borrow_mut::<NSInvocationHostObject>(this).arguments[idx as usize] = Some(new);

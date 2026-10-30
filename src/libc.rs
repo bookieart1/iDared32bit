@@ -96,6 +96,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         pthread::key::FUNCTIONS,
         pthread::mutex::FUNCTIONS,
         pthread::once::FUNCTIONS,
+        pthread::rwlock::FUNCTIONS,
         pthread::thread::FUNCTIONS,
         sched::FUNCTIONS,
         semaphore::FUNCTIONS,

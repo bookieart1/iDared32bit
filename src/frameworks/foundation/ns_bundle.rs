@@ -74,6 +74,13 @@ pub const CLASSES: ClassExports = objc_classes! {
    }
 }
 
++ (id)pathForResource:(id)name // NSString*
+               ofType:(id)extension // NSString*
+          inDirectory:(id)directory { // NSString*
+    let main_bundle: id = msg![env; this mainBundle];
+    msg![env; main_bundle pathForResource:name ofType:extension inDirectory:directory]
+}
+
 // Only the app's own bundle exists here, not the system frameworks' ones.
 + (id)bundleWithIdentifier:(id)identifier { // NSString*
     let main_bundle: id = msg![env; this mainBundle];

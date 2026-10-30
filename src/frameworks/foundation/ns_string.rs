@@ -1777,12 +1777,6 @@ fn data_using_encoding_lossy_inner(
     encoding: NSStringEncoding,
     lossy: bool,
 ) -> id {
-    if lossy {
-        log!(
-            "Warning: ignoring allowLossyConversion for '{}'",
-            to_rust_string(env, this)
-        );
-    }
     assert!(
         encoding == NSUTF8StringEncoding
             || encoding == NSASCIIStringEncoding
@@ -1790,11 +1784,36 @@ fn data_using_encoding_lossy_inner(
     );
 
     let string = to_rust_string(env, this);
-    if encoding == NSASCIIStringEncoding || encoding == NSISOLatin1StringEncoding {
-        assert!(string.as_bytes().iter().all(|byte| byte.is_ascii()));
-    }
-    let c_string = env.mem.alloc_and_write_cstr(string.as_bytes());
-    let length: NSUInteger = (string.len() + 1).try_into().unwrap();
+    let bytes = match encoding {
+        NSUTF8StringEncoding => string.as_bytes().to_vec(),
+        NSASCIIStringEncoding => {
+            if !lossy && !string.is_ascii() {
+                return nil;
+            }
+            string
+                .chars()
+                .map(|character| {
+                    if character.is_ascii() {
+                        character as u8
+                    } else {
+                        b'?'
+                    }
+                })
+                .collect()
+        }
+        NSISOLatin1StringEncoding => {
+            if !lossy && string.chars().any(|character| character as u32 > 0xff) {
+                return nil;
+            }
+            string
+                .chars()
+                .map(|character| u8::try_from(character as u32).unwrap_or(b'?'))
+                .collect()
+        }
+        _ => unreachable!(),
+    };
+    let c_string = env.mem.alloc_and_write_cstr(&bytes);
+    let length: NSUInteger = bytes.len().try_into().unwrap();
 
     msg_class![env; NSData dataWithBytesNoCopy:(c_string.cast_void()) length:length]
 }
