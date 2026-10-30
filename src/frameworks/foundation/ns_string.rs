@@ -1115,7 +1115,8 @@ pub const CLASSES: ClassExports = objc_classes! {
             write!(&mut escaped, "%{byte:02X}").unwrap();
         }
     }
-    autorelease(env, from_rust_string(env, escaped))
+    let escaped_string = from_rust_string(env, escaped);
+    autorelease(env, escaped_string)
 }
 
 - (id)stringByAppendingPathComponent:(id)component { // NSString*
