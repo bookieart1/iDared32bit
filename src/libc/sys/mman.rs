@@ -152,9 +152,13 @@ fn shm_open(env: &mut Environment, name: ConstPtr<u8>, oflag: i32, _dots: DotDot
 }
 
 fn mprotect(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize, prot: i32) -> i32 {
-    log!("TODO: mprotect({:?}, {}, {}) -> -1", addr, len, prot);
-    set_errno(env, ENOTSUP);
-    -1
+    // Guest memory does not currently enforce per-page protection flags, so
+    // every mapped page already permits the accesses mprotect can request.
+    // Report success rather than making runtimes such as Mono treat a harmless
+    // protection change as a fatal error.
+    log_dbg!("mprotect({:?}, {}, {}) -> 0", addr, len, prot);
+    set_errno(env, 0);
+    0
 }
 
 pub const FUNCTIONS: FunctionExports = &[

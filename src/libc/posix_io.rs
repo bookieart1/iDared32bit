@@ -402,6 +402,27 @@ pub fn write(
     // TODO: handle errno properly
     set_errno(env, 0);
 
+    if matches!(fd, STDOUT_FILENO | STDERR_FILENO) {
+        if buffer.is_null() {
+            assert_eq!(size, 0);
+            return 0;
+        }
+
+        let buffer_slice = env.mem.bytes_at(buffer.cast(), size);
+        let result = if fd == STDOUT_FILENO {
+            std::io::stdout().write(buffer_slice)
+        } else {
+            std::io::stderr().write(buffer_slice)
+        };
+        return match result {
+            Ok(bytes_written) => bytes_written.try_into().unwrap(),
+            Err(_) => {
+                set_errno(env, EIO);
+                -1
+            }
+        };
+    }
+
     let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
         log!(
             "Warning: write({:?}, {:?}, {:#x}) called with unknown fd, returning -1",
