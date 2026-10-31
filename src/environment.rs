@@ -1466,6 +1466,9 @@ impl Environment {
                         window.on_main_stack = true;
                     };
 
+                    if Self::is_null_page_access_panic(e.as_ref()) {
+                        env.log_memory_fault_context("Host memory-fault");
+                    }
                     echo!("Register state immediately after panic:");
                     env.dump_all_regs();
                     env.stack_trace_all();
@@ -1578,6 +1581,9 @@ impl Environment {
                         };
                         window::show_error_messagebox(self.window.as_deref(), error_string);
                     }
+                    if Self::is_null_page_access_panic(e.as_ref()) {
+                        self.log_memory_fault_context("Host memory-fault");
+                    }
                     echo!("Register state immediately after panic:");
                     self.dump_all_regs();
                     self.stack_trace_all();
@@ -1641,77 +1647,95 @@ impl Environment {
     }
 
     #[cold]
+    fn is_null_page_access_panic(panic: &(dyn std::any::Any + Send)) -> bool {
+        panic
+            .downcast_ref::<&str>()
+            .is_some_and(|message| message.contains("Attempted null-page access"))
+            || panic
+                .downcast_ref::<String>()
+                .is_some_and(|message| message.contains("Attempted null-page access"))
+    }
+
+    #[cold]
+    fn log_memory_fault_context(&self, source: &str) {
+        // A CPU fault reports the instruction after the fault. A panic from a
+        // guest-to-host API call instead leaves PC in the host-call stub and
+        // LR at the guest caller, so report both addresses.
+        let pc = self.cpu.regs()[cpu::Cpu::PC];
+        let lr = self.cpu.regs()[cpu::Cpu::LR];
+        let cpsr = self.cpu.cpsr();
+        let start = pc.saturating_sub(4);
+        let ptr = mem::ConstVoidPtr::from_bits(start);
+        if let Some(bytes) = self.mem.get_bytes_fallible(ptr, 8) {
+            log_no_panic!(
+                "{source} context: pc={pc:#010x}, lr={lr:#010x}, cpsr={cpsr:#010x}, bytes at {start:#010x}: {bytes:02x?}"
+            );
+        } else {
+            log_no_panic!(
+                "{source} context: pc={pc:#010x}, lr={lr:#010x}, cpsr={cpsr:#010x}, instruction bytes unavailable"
+            );
+        }
+
+        for (label, address) in [("", pc), (" caller", lr)] {
+            if let Some(binary) = self.bins.iter().find(|binary| {
+                binary
+                    .text_segment_base
+                    .is_some_and(|base| base <= address && address < binary.last_segment_end)
+            }) {
+                let nearest = binary
+                    .exported_symbols
+                    .iter()
+                    .filter(|(_, &symbol_address)| (symbol_address & !1) <= address)
+                    .max_by_key(|(_, &symbol_address)| symbol_address & !1);
+                if let Some((name, &symbol_address)) = nearest {
+                    log_no_panic!(
+                        "{source}{label} nearest symbol: {}!{} at {:#010x} (+{:#x})",
+                        binary.name,
+                        name,
+                        symbol_address,
+                        address.saturating_sub(symbol_address & !1),
+                    );
+                } else {
+                    log_no_panic!(
+                        "{source}{label} image: {} (no preceding symbol available)",
+                        binary.name,
+                    );
+                }
+            }
+        }
+
+        // A guest null dereference often follows a host API returning nil or
+        // receiving a bad pointer. Report host Objective-C objects in the
+        // argument registers and decode a selector-shaped R1. This is bounded
+        // to the terminal fault and does not change execution.
+        for register in 0..=3 {
+            let bits = self.cpu.regs()[register];
+            let candidate: objc::id = mem::MutPtr::from_bits(bits);
+            if self.objc.get_host_object(candidate).is_some() {
+                let class = objc::ObjC::read_isa(candidate, &self.mem);
+                let class_name = self.objc.try_get_class_name(class).unwrap_or("<unknown>");
+                log_no_panic!(
+                    "{source} Objective-C candidate: R{register}={bits:#010x} class={class_name:?}"
+                );
+            }
+        }
+        let selector_ptr = mem::ConstPtr::<u8>::from_bits(self.cpu.regs()[1]);
+        if let Ok(selector) = self.mem.cstr_at_utf8(selector_ptr) {
+            log_no_panic!(
+                "{source} selector candidate: R1={:#010x} {:?}",
+                self.cpu.regs()[1],
+                selector
+            );
+        }
+    }
+
+    #[cold]
     /// Let the debugger handle a CPU error, or panic if there's no debugger
     /// connected. Returns [true] if the CPU should step and then resume
     /// debugging, or [false] if it should resume normal execution.
     fn debug_cpu_error(&mut self, error: cpu::CpuError) {
         if matches!(error, cpu::CpuError::MemoryError) {
-            // The CPU core reports memory faults after advancing the PC. Keep
-            // a small window around it so a device log contains the faulting
-            // instruction (including either 16- or 32-bit Thumb encodings).
-            let pc = self.cpu.regs()[cpu::Cpu::PC];
-            let cpsr = self.cpu.cpsr();
-            let start = pc.saturating_sub(4);
-            let ptr = mem::ConstVoidPtr::from_bits(start);
-            if let Some(bytes) = self.mem.get_bytes_fallible(ptr, 8) {
-                log_no_panic!(
-                    "CPU memory-fault context: pc={pc:#010x}, cpsr={cpsr:#010x}, bytes at {start:#010x}: {bytes:02x?}"
-                );
-            } else {
-                log_no_panic!(
-                    "CPU memory-fault context: pc={pc:#010x}, cpsr={cpsr:#010x}, instruction bytes unavailable"
-                );
-            }
-
-            if let Some(binary) = self.bins.iter().find(|binary| {
-                binary
-                    .text_segment_base
-                    .is_some_and(|base| base <= pc && pc < binary.last_segment_end)
-            }) {
-                let nearest = binary
-                    .exported_symbols
-                    .iter()
-                    .filter(|(_, &address)| (address & !1) <= pc)
-                    .max_by_key(|(_, &address)| address & !1);
-                if let Some((name, &address)) = nearest {
-                    log_no_panic!(
-                        "CPU memory-fault nearest symbol: {}!{} at {:#010x} (+{:#x})",
-                        binary.name,
-                        name,
-                        address,
-                        pc.saturating_sub(address & !1),
-                    );
-                } else {
-                    log_no_panic!(
-                        "CPU memory-fault image: {} (no preceding symbol available)",
-                        binary.name,
-                    );
-                }
-            }
-
-            // A guest null dereference often follows a host API returning nil.
-            // Report any Objective-C objects in the argument registers and a
-            // selector-shaped R1 so a physical-device log can identify that
-            // API boundary without weakening memory safety or changing state.
-            for register in 0..=3 {
-                let bits = self.cpu.regs()[register];
-                let candidate: objc::id = mem::MutPtr::from_bits(bits);
-                if self.objc.get_host_object(candidate).is_some() {
-                    let class = objc::ObjC::read_isa(candidate, &self.mem);
-                    let class_name = self.objc.try_get_class_name(class).unwrap_or("<unknown>");
-                    log_no_panic!(
-                        "CPU memory-fault Objective-C candidate: R{register}={bits:#010x} class={class_name:?}"
-                    );
-                }
-            }
-            let selector_ptr = mem::ConstPtr::<u8>::from_bits(self.cpu.regs()[1]);
-            if let Ok(selector) = self.mem.cstr_at_utf8(selector_ptr) {
-                log_no_panic!(
-                    "CPU memory-fault selector candidate: R1={:#010x} {:?}",
-                    self.cpu.regs()[1],
-                    selector
-                );
-            }
+            self.log_memory_fault_context("CPU memory-fault");
         }
 
         if matches!(error, cpu::CpuError::UndefinedInstruction)

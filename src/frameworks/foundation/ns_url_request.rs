@@ -10,7 +10,7 @@ use crate::frameworks::foundation::ns_string::to_rust_string;
 use crate::objc::{
     autorelease, id, nil, objc_classes, release, ClassExports, HostObject, NSZonePtr,
 };
-use crate::{msg, msg_class, todo_objc_setter};
+use crate::{msg, msg_class, Environment};
 
 type NSURLRequestCachePolicy = NSUInteger;
 const NSURLRequestUseProtocolCachePolicy: NSURLRequestCachePolicy = 0;
@@ -30,6 +30,53 @@ struct NSURLRequestHostObject {
     http_header_fields: id,
 }
 impl HostObject for NSURLRequestHostObject {}
+
+/// Make an independent request snapshot, preserving the mutable/immutable
+/// distinction required by NSCopying and NSMutableCopying.
+fn copy_request(env: &mut Environment, source: id, mutable: bool) -> id {
+    let (url, cache_policy, timeout_interval, http_method, http_body, http_header_fields) = {
+        let source = env.objc.borrow::<NSURLRequestHostObject>(source);
+        (
+            source.url,
+            source.cache_policy,
+            source.timeout_interval,
+            source.http_method,
+            source.http_body,
+            source.http_header_fields,
+        )
+    };
+
+    let url: id = msg![env; url copy];
+    let http_method: id = msg![env; http_method copy];
+    let http_body: id = msg![env; http_body copy];
+    // The backing dictionary must stay mutable even for NSURLRequest because
+    // NSMutableURLRequest inherits the same host-object representation.
+    let http_header_fields: id = msg![env; http_header_fields mutableCopy];
+
+    let copy: id = if mutable {
+        msg_class![env; NSMutableURLRequest alloc]
+    } else {
+        msg_class![env; NSURLRequest alloc]
+    };
+
+    let (old_url, old_method, old_body, old_headers) = {
+        let host = env.objc.borrow::<NSURLRequestHostObject>(copy);
+        (host.url, host.http_method, host.http_body, host.http_header_fields)
+    };
+    *env.objc.borrow_mut::<NSURLRequestHostObject>(copy) = NSURLRequestHostObject {
+        url,
+        cache_policy,
+        timeout_interval,
+        http_method,
+        http_body,
+        http_header_fields,
+    };
+    release(env, old_url);
+    release(env, old_method);
+    release(env, old_body);
+    release(env, old_headers);
+    copy
+}
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -113,8 +160,35 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)URL {
     env.objc.borrow::<NSURLRequestHostObject>(this).url
 }
+- (NSURLRequestCachePolicy)cachePolicy {
+    env.objc.borrow::<NSURLRequestHostObject>(this).cache_policy
+}
+- (NSTimeInterval)timeoutInterval {
+    env.objc.borrow::<NSURLRequestHostObject>(this).timeout_interval
+}
+- (id)HTTPMethod {
+    env.objc.borrow::<NSURLRequestHostObject>(this).http_method
+}
 - (id)HTTPBody {
     env.objc.borrow::<NSURLRequestHostObject>(this).http_body
+}
+- (id)allHTTPHeaderFields {
+    let fields = env.objc.borrow::<NSURLRequestHostObject>(this).http_header_fields;
+    let fields: id = msg![env; fields copy];
+    autorelease(env, fields)
+}
+- (id)valueForHTTPHeaderField:(id)field {
+    let fields = env.objc.borrow::<NSURLRequestHostObject>(this).http_header_fields;
+    msg![env; fields objectForKey:field]
+}
+
+// NSCopying and NSMutableCopying. A copy of a mutable request is immutable;
+// a mutable copy is always a distinct mutable snapshot.
+- (id)copyWithZone:(NSZonePtr)_zone {
+    copy_request(env, this, false)
+}
+- (id)mutableCopyWithZone:(NSZonePtr)_zone {
+    copy_request(env, this, true)
 }
 
 - (())dealloc {
@@ -138,7 +212,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation NSMutableURLRequest: NSURLRequest
 
 - (())setCachePolicy:(NSURLRequestCachePolicy)cache_policy {
-    todo_objc_setter!(this, cache_policy);
+    env.objc.borrow_mut::<NSURLRequestHostObject>(this).cache_policy = cache_policy;
+}
+
+- (())setTimeoutInterval:(NSTimeInterval)timeout_interval {
+    env.objc.borrow_mut::<NSURLRequestHostObject>(this).timeout_interval = timeout_interval;
 }
 
 - (())setHTTPMethod:(id)http_method { // NSString *
@@ -170,9 +248,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setValue:(id)value // NSString *
     forHTTPHeaderField:(id)field { // NSString *
-    log_dbg!("[(NSURLRequest*){:?} setValue:'{}' forHTTPHeaderField:'{}']", this, to_rust_string(env, value), to_rust_string(env, field));
+    log_dbg!("[(NSURLRequest*){:?} setValue:{:?} forHTTPHeaderField:'{}']", this, value, to_rust_string(env, field));
     let http_header_fields = env.objc.borrow_mut::<NSURLRequestHostObject>(this).http_header_fields;
-    () = msg![env; http_header_fields setObject:value forKey:field];
+    if value == nil {
+        () = msg![env; http_header_fields removeObjectForKey:field];
+    } else {
+        () = msg![env; http_header_fields setObject:value forKey:field];
+    }
 }
 
 - (())addValue:(id)value // NSString *

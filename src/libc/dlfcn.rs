@@ -5,6 +5,7 @@
  */
 //! `dlfcn.h` (`dlopen()` and friends)
 
+use crate::cpu::Cpu;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::Environment;
@@ -85,7 +86,39 @@ fn dlsym(env: &mut Environment, handle: MutVoidPtr, symbol: ConstPtr<u8>) -> Mut
             // dlsym is commonly used to probe for optional functionality. Its
             // documented failure result is NULL, allowing the caller to fall
             // back or disable that feature rather than crashing the process.
-            log!("Warning: dlsym() could not find {symbol}, returning NULL");
+            let caller = env.cpu.regs()[Cpu::LR];
+            let context = env.bins.iter().find_map(|binary| {
+                let base = binary.text_segment_base?;
+                if !(base <= caller && caller < binary.last_segment_end) {
+                    return None;
+                }
+                let nearest = binary
+                    .exported_symbols
+                    .iter()
+                    .filter(|(_, &address)| (address & !1) <= caller)
+                    .max_by_key(|(_, &address)| address & !1)
+                    .map(|(name, &address)| {
+                        format!(
+                            "{}!{}+{:#x}",
+                            binary.name,
+                            name,
+                            caller.saturating_sub(address & !1)
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        format!("{}+{:#x}", binary.name, caller.saturating_sub(base))
+                    });
+                Some(context)
+            });
+            if let Some(context) = context {
+                log!(
+                    "Warning: dlsym() could not find {symbol}, returning NULL (guest caller {caller:#010x}, {context})"
+                );
+            } else {
+                log!(
+                    "Warning: dlsym() could not find {symbol}, returning NULL (guest caller {caller:#010x})"
+                );
+            }
             return Ptr::null();
         }
     };
