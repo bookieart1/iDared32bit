@@ -12,8 +12,13 @@ use crate::Environment;
 use std::time::{Duration, Instant};
 
 const RECENT: usize = 96;
+const SLOW_RECENT: usize = 32;
 const SIGNALS: usize = 24;
 const PROGRESS: usize = 24;
+const HEALTHY_PRESENT_INTERVAL: Duration = Duration::from_millis(100);
+const SLOW_PRESENT_INTERVAL: Duration = Duration::from_millis(180);
+const HEALTHY_PRESENT_STREAK: u16 = 30;
+const SLOW_PRESENT_STREAK: u8 = 3;
 
 #[derive(Clone, Copy, Debug)]
 struct Text {
@@ -139,10 +144,26 @@ struct Progress {
     sources: [usize; 4],
 }
 
+#[derive(Default)]
+struct SlowCapture {
+    ms: u128,
+    gap_ms: u128,
+    boundary_delta: u64,
+    presents: u64,
+    recent: Ring<Event, SLOW_RECENT>,
+}
+
+struct PendingSlowCapture {
+    capture: SlowCapture,
+    streak: u8,
+}
+
 pub struct Recorder {
     recent: Ring<Event, RECENT>,
     signals: Ring<Event, SIGNALS>,
     progress: Ring<Progress, PROGRESS>,
+    slow_capture: Option<SlowCapture>,
+    pending_slow_capture: Option<PendingSlowCapture>,
     sequence: u64,
     api: u64,
     objc: u64,
@@ -154,6 +175,9 @@ pub struct Recorder {
     yields: u64,
     started: Instant,
     next_progress: Instant,
+    last_present: Option<Instant>,
+    last_present_boundaries: u64,
+    healthy_present_streak: u16,
     dumped: bool,
 }
 impl Recorder {
@@ -163,6 +187,8 @@ impl Recorder {
             recent: Ring::default(),
             signals: Ring::default(),
             progress: Ring::default(),
+            slow_capture: None,
+            pending_slow_capture: None,
             sequence: 0,
             api: 0,
             objc: 0,
@@ -173,6 +199,9 @@ impl Recorder {
             yields: 0,
             started: now,
             next_progress: now + Duration::from_secs(5),
+            last_present: None,
+            last_present_boundaries: 0,
+            healthy_present_streak: 0,
             dumped: false,
         })
     }
@@ -213,6 +242,54 @@ impl Recorder {
         if signal {
             self.signals.push(event);
         }
+    }
+    fn note_present(&mut self) {
+        self.note_present_at(Instant::now());
+    }
+    fn note_present_at(&mut self, now: Instant) {
+        self.presents += 1;
+        let boundaries = self.api.saturating_add(self.objc);
+        if let Some(previous) = self.last_present {
+            let gap = now.saturating_duration_since(previous);
+            if gap <= HEALTHY_PRESENT_INTERVAL {
+                self.pending_slow_capture = None;
+                self.healthy_present_streak = self.healthy_present_streak.saturating_add(1);
+            } else {
+                if self.slow_capture.is_none() && gap >= SLOW_PRESENT_INTERVAL {
+                    if let Some(pending) = &mut self.pending_slow_capture {
+                        pending.streak = pending.streak.saturating_add(1);
+                        if pending.streak >= SLOW_PRESENT_STREAK {
+                            self.slow_capture = self
+                                .pending_slow_capture
+                                .take()
+                                .map(|pending| pending.capture);
+                        }
+                    } else if self.healthy_present_streak >= HEALTHY_PRESENT_STREAK {
+                        let mut recent = Ring::default();
+                        let skip = self.recent.iter().count().saturating_sub(SLOW_RECENT);
+                        for event in self.recent.iter().skip(skip) {
+                            recent.push(*event);
+                        }
+                        self.pending_slow_capture = Some(PendingSlowCapture {
+                            capture: SlowCapture {
+                                ms: now.duration_since(self.started).as_millis(),
+                                gap_ms: gap.as_millis(),
+                                boundary_delta: boundaries
+                                    .saturating_sub(self.last_present_boundaries),
+                                presents: self.presents,
+                                recent,
+                            },
+                            streak: 1,
+                        });
+                    }
+                } else if gap < SLOW_PRESENT_INTERVAL {
+                    self.pending_slow_capture = None;
+                }
+                self.healthy_present_streak = 0;
+            }
+        }
+        self.last_present = Some(now);
+        self.last_present_boundaries = boundaries;
     }
     pub fn checkpoint(&mut self, thread: usize, regs: &[u32], threads: usize, runnable: usize) {
         self.yields += 1;
@@ -264,6 +341,20 @@ impl Recorder {
         );
         for p in self.progress.iter() {
             Self::print_progress(p);
+        }
+        if let Some(capture) = &self.slow_capture {
+            echo_no_panic!("flight first sustained slow-present transition: elapsed-ms={} first-gap-ms={} boundaries-during-first-gap={} present={} (frozen after at least {} healthy intervals and {} consecutive slow intervals)",
+                capture.ms, capture.gap_ms, capture.boundary_delta, capture.presents,
+                HEALTHY_PRESENT_STREAK, SLOW_PRESENT_STREAK);
+            echo_no_panic!(
+                "flight slow-transition boundaries: newest {SLOW_RECENT}; total={}",
+                capture.recent.written
+            );
+            for event in capture.recent.iter() {
+                Self::print_event(event);
+            }
+        } else {
+            echo_no_panic!("flight first sustained slow-present transition: not observed");
         }
         echo_no_panic!(
             "flight candidate signals: newest {SIGNALS}; total={} (not diagnoses)",
@@ -393,10 +484,11 @@ impl Environment {
     pub fn diagnostic_end(&mut self, call: Option<Call>, object_result: bool) {
         if let (Some(recorder), Some(call)) = (&mut self.diagnostics, call) {
             let regs = self.cpu.regs();
-            if call.name.bytes() == b"presentRenderbuffer:" && regs[0] != 0 {
-                recorder.presents += 1;
-            }
+            let did_present = call.name.bytes() == b"presentRenderbuffer:" && regs[0] != 0;
             recorder.finish(call, [regs[0], regs[1]], object_result);
+            if did_present {
+                recorder.note_present();
+            }
         }
     }
     pub fn diagnostic_dump(&mut self, reason: &str) {
@@ -473,5 +565,35 @@ mod tests {
         assert!(std::mem::size_of::<Recorder>() < 80 * 1024);
         let text = Text::from_bytes(b"name\nforged line");
         assert_eq!(format!("{text}"), "name\\x0aforged line");
+    }
+    #[test]
+    fn first_slow_present_freezes_the_transition_history() {
+        let mut recorder = Recorder::new();
+        let start = recorder.started;
+        recorder.note_present_at(start);
+        for frame in 1..=HEALTHY_PRESENT_STREAK {
+            recorder.api += 10;
+            recorder.recent.push(Event {
+                sequence: frame as u64,
+                note: "synthetic",
+                ..Event::default()
+            });
+            recorder.note_present_at(start + Duration::from_millis(u64::from(frame) * 16));
+        }
+        recorder.api += 1_000;
+        let healthy_end = start + Duration::from_millis(u64::from(HEALTHY_PRESENT_STREAK) * 16);
+        recorder.note_present_at(healthy_end + Duration::from_millis(250));
+        assert!(recorder.slow_capture.is_none());
+        recorder.note_present_at(healthy_end + Duration::from_millis(500));
+        assert!(recorder.slow_capture.is_none());
+        recorder.note_present_at(healthy_end + Duration::from_millis(750));
+
+        let capture = recorder.slow_capture.as_ref().unwrap();
+        assert_eq!(capture.gap_ms, 250);
+        assert_eq!(capture.boundary_delta, 1_000);
+        assert_eq!(
+            capture.recent.iter().count(),
+            SLOW_RECENT.min(HEALTHY_PRESENT_STREAK as usize)
+        );
     }
 }

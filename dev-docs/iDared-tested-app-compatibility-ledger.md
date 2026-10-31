@@ -2253,3 +2253,76 @@ control. Keep v1 bounded and opt-in. If Blot is investigated next, add a
 single-shot slow-transition capture rather than enabling global instruction
 tracing. No code change, push, IPA build or compatibility claim follows from
 this log-analysis entry.
+
+## Dev 1.67 recovered-contract batch — October 31, 2026
+
+This batch acts on the specific contracts recovered by Dev 1.66. It contains
+two general compatibility implementations and one bounded Blot investigation;
+it does not claim that all three apps are fixed before physical-device testing.
+
+### Implementation boundary and rationale
+
+- **B'Blast / networking-interface contract (partial verified-contract
+  candidate):** `sysctl` now recognizes only the decoded six-component
+  `CTL_NET/PF_ROUTE/AF_LINK/NET_RT_IFLIST` query for the emulator's existing
+  virtual `en0` interface at index 2. It implements both the sizing call and
+  the data call and returns one 132-byte 32-bit Darwin route message containing
+  an `if_msghdr`, 96-byte `if_data`, and `sockaddr_dl`. The record describes a
+  deterministic virtual Ethernet link with a locally administered MAC address;
+  it does not expose or hash the host device's real hardware identity. Writes,
+  malformed arguments, short buffers and unrelated six-component MIBs remain
+  strict failures. Layouts and constants were checked against Apple's
+  `xnu-1504.15.3` headers (`route.h`, `if.h`, `if_dl.h`, `socket.h` and
+  `if_types.h`, tag commit `99c11f3f90a18f35d3692ea77444b51fd972a4f4`).
+- **Addicus / UIWebView method surface (partial contract):** `UIWebView` now
+  exports the historical `loadHTMLString:baseURL:` selector. This gives
+  `instanceMethodSignatureForSelector:` and `NSInvocation` the real Objective-C
+  signature instead of a fabricated `NSInvocation` response. The method
+  accepts the call and records only bounded length/base-URL context. touchHLE
+  still has no WebKit renderer, DOM or JavaScript engine, so this implementation
+  deliberately sends no false load-finished callback and makes no claim that
+  HTML is displayed. The device test will establish whether Addicus used this
+  surface only as startup plumbing or immediately requires a web engine.
+- **Blot / first sustained slowdown capture (diagnostic-only):** the opt-in
+  flight recorder now recognizes a transition only after at least 30 healthy
+  presentation intervals followed by three consecutive intervals of at least
+  180 ms. It then freezes the 32 call boundaries that preceded the first slow
+  interval, the first gap, boundary delta and presentation count. Requiring a
+  short sustained collapse prevents a normal one-frame scene-loading hitch
+  from consuming the one-time capture. It does not alter scheduling, timers,
+  graphics, audio or the existing provisional `MAGICK_THREAD_LIMIT=1`
+  accommodation. No speculative Blot performance fix is included because Dev
+  1.66 disproved source/thread proliferation but did not identify the expensive
+  or blocking operation.
+- **Generality:** neither compatibility implementation checks an app bundle
+  identifier. The sysctl behavior applies to callers of the exact historical
+  virtual-link query; the UIWebView method applies to every caller. Bundle
+  presets only keep bounded recording enabled for B'Blast, Addicus, Blot and
+  the Spoing control during this focused retest.
+
+### Predictions, risks and validation plan
+
+- B'Blast should consume both interface-list calls and either advance visibly
+  or expose a later independent blocker. Success means a valid record was
+  consumed, not merely that the old panic text disappeared.
+- Addicus should no longer create a nil method signature at the recorded
+  `PHInvocation` path. It may still remain black or reach a later web-rendering
+  limitation; that outcome would define the honest implementation boundary.
+- Blot is not predicted to run faster in this build. Reproducing the exact
+  Classic→menu→Challenges→Back sequence and then using emulator Home should
+  print one frozen `first sustained slow-present transition` section. If it
+  reports `not observed`, thresholds or trigger placement must be reconsidered
+  rather than adding unbounded logging.
+- Regression exposure is narrow: callers parsing route-interface records,
+  code introspecting or invoking `UIWebView`, and opt-in diagnostic sessions.
+  Spoing remains the focused recorder/control check. Saves and app-container
+  identity are unchanged.
+
+Unit tests cover the virtual route-record sizing/data layout, short-buffer
+failure, the exported UIWebView signature/argument count, and the synthetic
+healthy-to-three-slow-interval transition. Local changed-file formatting and
+whitespace checks pass. Native Windows linking is unavailable in this
+workspace because the MSVC linker is absent, so no local compiled-test pass is
+claimed; hosted macOS/Windows tests and the iOS package build remain required.
+Build commit, workflow results, downloaded IPA identity and device evidence
+will be appended after they exist.

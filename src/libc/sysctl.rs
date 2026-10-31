@@ -19,7 +19,26 @@ use crate::Environment;
 
 // Top level constants
 const CTL_KERN: i32 = 1;
+const CTL_NET: i32 = 4;
 const CTL_HW: i32 = 6;
+
+// CTL_NET/PF_ROUTE. These values and the 32-bit layouts below come from the
+// Darwin 10.4 XNU headers used by iPhone OS 4.x (xnu-1504.15.3).
+const PF_ROUTE: i32 = 17;
+const AF_LINK: i32 = 18;
+const NET_RT_IFLIST: i32 = 3;
+const EMULATED_EN0_INDEX: i32 = 2;
+const RTM_VERSION: u8 = 5;
+const RTM_IFINFO: u8 = 0x0e;
+const RTA_IFP: i32 = 0x10;
+const IFF_UP: i32 = 0x01;
+const IFF_RUNNING: i32 = 0x40;
+const IFT_ETHER: u8 = 0x06;
+const USER32_IF_MSGHDR_SIZE: usize = 112;
+const SOCKADDR_DL_SIZE: usize = 20;
+const ROUTE_IFLIST_RECORD_SIZE: GuestUSize =
+    (USER32_IF_MSGHDR_SIZE + SOCKADDR_DL_SIZE) as GuestUSize;
+const VIRTUAL_EN0_MAC: [u8; 6] = [0x02, 0x74, 0x48, 0x4c, 0x45, 0x01];
 
 // CTL_KERN
 const KERN_OSTYPE: i32 = 1;
@@ -169,6 +188,80 @@ fn current_process_kinfo() -> [u8; USER32_KINFO_PROC_SIZE as usize] {
     record
 }
 
+fn virtual_en0_iflist_record() -> [u8; ROUTE_IFLIST_RECORD_SIZE as usize] {
+    let mut record = [0; ROUTE_IFLIST_RECORD_SIZE as usize];
+
+    // struct if_msghdr. 32-bit Darwin aligns struct if_data to four bytes,
+    // so it begins at byte 16 and the whole header is 112 bytes.
+    record[0..2].copy_from_slice(&(ROUTE_IFLIST_RECORD_SIZE as u16).to_le_bytes());
+    record[2] = RTM_VERSION;
+    record[3] = RTM_IFINFO;
+    record[4..8].copy_from_slice(&RTA_IFP.to_le_bytes());
+    record[8..12].copy_from_slice(&(IFF_UP | IFF_RUNNING).to_le_bytes());
+    record[12..14].copy_from_slice(&(EMULATED_EN0_INDEX as u16).to_le_bytes());
+
+    // The beginning of struct if_data contains the link type, address length,
+    // Ethernet header length, MTU and line rate. Unsupported statistics stay
+    // zero, as they describe the virtual link rather than the host network.
+    let if_data = 16;
+    record[if_data] = IFT_ETHER;
+    record[if_data + 3] = VIRTUAL_EN0_MAC.len() as u8;
+    record[if_data + 4] = 14;
+    record[if_data + 8..if_data + 12].copy_from_slice(&1500u32.to_le_bytes());
+    record[if_data + 16..if_data + 20].copy_from_slice(&54_000_000u32.to_le_bytes());
+
+    // struct sockaddr_dl, immediately after struct if_msghdr. LLADDR() is
+    // sdl_data + sdl_nlen, so callers see the six stable virtual MAC bytes.
+    let sdl = USER32_IF_MSGHDR_SIZE;
+    record[sdl] = SOCKADDR_DL_SIZE as u8;
+    record[sdl + 1] = AF_LINK as u8;
+    record[sdl + 2..sdl + 4].copy_from_slice(&(EMULATED_EN0_INDEX as u16).to_le_bytes());
+    record[sdl + 4] = IFT_ETHER;
+    record[sdl + 5] = 3;
+    record[sdl + 6] = VIRTUAL_EN0_MAC.len() as u8;
+    record[sdl + 8..sdl + 11].copy_from_slice(b"en0");
+    record[sdl + 11..sdl + 17].copy_from_slice(&VIRTUAL_EN0_MAC);
+
+    record
+}
+
+fn sysctl_route_iflist_en0(
+    env: &mut Environment,
+    oldp: MutVoidPtr,
+    oldlenp: MutPtr<GuestUSize>,
+    newp: MutVoidPtr,
+    newlen: GuestUSize,
+) -> i32 {
+    if !newp.is_null() || newlen != 0 || oldlenp.is_null() {
+        set_errno(env, EINVAL);
+        return -1;
+    }
+
+    if oldp.is_null() {
+        env.mem.write(oldlenp, ROUTE_IFLIST_RECORD_SIZE);
+        return 0;
+    }
+
+    let oldlen = env.mem.read(oldlenp);
+    if oldlen < ROUTE_IFLIST_RECORD_SIZE {
+        // A routing message is indivisible. No complete record was copied.
+        env.mem.write(oldlenp, 0);
+        set_errno(env, ENOMEM);
+        return -1;
+    }
+
+    let record = virtual_en0_iflist_record();
+    env.mem
+        .bytes_at_mut(oldp.cast(), ROUTE_IFLIST_RECORD_SIZE)
+        .copy_from_slice(&record);
+    env.mem.write(oldlenp, ROUTE_IFLIST_RECORD_SIZE);
+    log_dbg!(
+        "sysctl() returned 32-bit NET_RT_IFLIST record for virtual en0 index {}",
+        EMULATED_EN0_INDEX
+    );
+    0
+}
+
 fn sysctl_kern_proc_pid(
     env: &mut Environment,
     pid: i32,
@@ -304,6 +397,22 @@ fn sysctl(
                 newlen,
             )
         }
+        6 => {
+            let path = std::array::from_fn(|index| env.mem.read(name + index as u32));
+            if path
+                == [
+                    CTL_NET,
+                    PF_ROUTE,
+                    0,
+                    AF_LINK,
+                    NET_RT_IFLIST,
+                    EMULATED_EN0_INDEX,
+                ]
+            {
+                return sysctl_route_iflist_en0(env, oldp, oldlenp, newp, newlen);
+            }
+            unimplemented!("Unknown six-component sysctl parameter {path:?}!")
+        }
         _ => unimplemented!("sysctl() for name length {name_len} is unimplemented!"),
     }
 }
@@ -434,6 +543,67 @@ mod tests {
             env.mem.write(name + index as u32, value);
         }
         name
+    }
+
+    fn route_iflist_en0_name(env: &mut Environment) -> MutPtr<i32> {
+        let values = [
+            CTL_NET,
+            PF_ROUTE,
+            0,
+            AF_LINK,
+            NET_RT_IFLIST,
+            EMULATED_EN0_INDEX,
+        ];
+        let name = env
+            .mem
+            .alloc(guest_size_of::<i32>() * values.len() as GuestUSize)
+            .cast::<i32>();
+        for (index, value) in values.into_iter().enumerate() {
+            env.mem.write(name + index as u32, value);
+        }
+        name
+    }
+
+    #[test]
+    fn route_iflist_returns_a_32_bit_virtual_en0_record() {
+        let mut env = Environment::new_fake_for_test();
+        let name = route_iflist_en0_name(&mut env);
+        let output_len = env.mem.alloc_and_write(0);
+
+        assert_eq!(
+            sysctl(&mut env, name, 6, Ptr::null(), output_len, Ptr::null(), 0,),
+            0
+        );
+        assert_eq!(env.mem.read(output_len), ROUTE_IFLIST_RECORD_SIZE);
+
+        let output = env.mem.alloc(ROUTE_IFLIST_RECORD_SIZE);
+        env.mem.write(output_len, ROUTE_IFLIST_RECORD_SIZE);
+        assert_eq!(
+            sysctl(&mut env, name, 6, output, output_len, Ptr::null(), 0,),
+            0
+        );
+        let bytes = env
+            .mem
+            .bytes_at(output.cast::<u8>(), ROUTE_IFLIST_RECORD_SIZE);
+        assert_eq!(u16::from_le_bytes(bytes[0..2].try_into().unwrap()), 132);
+        assert_eq!(&bytes[112..120], &[20, 18, 2, 0, 6, 3, 6, 0]);
+        assert_eq!(&bytes[120..123], b"en0");
+        assert_eq!(&bytes[123..129], &VIRTUAL_EN0_MAC);
+    }
+
+    #[test]
+    fn route_iflist_rejects_a_short_buffer_without_a_partial_record() {
+        let mut env = Environment::new_fake_for_test();
+        let name = route_iflist_en0_name(&mut env);
+        let output = env.mem.alloc(ROUTE_IFLIST_RECORD_SIZE - 1);
+        let output_len = env.mem.alloc_and_write(ROUTE_IFLIST_RECORD_SIZE - 1);
+
+        assert_eq!(
+            sysctl(&mut env, name, 6, output, output_len, Ptr::null(), 0,),
+            -1
+        );
+        assert_eq!(env.mem.read(output_len), 0);
+        assert_eq!(get_errno(&mut env), ENOMEM);
     }
 
     #[test]

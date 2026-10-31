@@ -7,6 +7,7 @@
 
 use crate::frameworks::core_graphics::CGRect;
 use crate::frameworks::foundation::ns_string::to_rust_string;
+use crate::frameworks::foundation::NSUInteger;
 use crate::frameworks::uikit::ui_view::UIViewHostObject;
 use crate::msg;
 use crate::objc::{id, msg_class, msg_super, nil, objc_classes, release, ClassExports};
@@ -59,6 +60,31 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [(UIWebView*) {:?} loadRequest:{:?} ({})]", this, request, url_string);
 }
 
+- (())loadHTMLString:(id)html baseURL:(id)base_url { // NSString*, NSURL*
+    // UIWebView is intentionally still a no-renderer implementation: touchHLE
+    // does not embed WebKit, so it cannot build a DOM, run JavaScript, or claim
+    // that a frame finished loading. Exporting the real selector is nevertheless
+    // important. Framework wrappers commonly obtain its method signature and
+    // invoke it through NSInvocation before any rendering is relevant.
+    let length: NSUInteger = if html == nil {
+        0
+    } else {
+        msg![env; html length]
+    };
+    let base_url = if base_url == nil {
+        Cow::default()
+    } else {
+        let description: id = msg![env; base_url description];
+        to_rust_string(env, description)
+    };
+    log!(
+        "TODO: [(UIWebView*) {:?} loadHTMLString:<{} UTF-16 units> baseURL:{}] (call accepted; no WebKit renderer)",
+        this,
+        length,
+        base_url
+    );
+}
+
 - (id)stringByEvaluatingJavaScriptFromString:(id)script { // NSString*
     let script = if script == nil {
         Cow::default()
@@ -88,4 +114,25 @@ fn add_scroll_view(env: &mut Environment, web_view: id) {
     let scroll_view: id = msg![env; scroll_view initWithFrame:bounds];
     () = msg![env; web_view addSubview:scroll_view];
     release(env, scroll_view);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_html_string_is_an_exported_instance_method() {
+        let mut env = Environment::new_fake_for_test();
+        let env = &mut env;
+        let class = env.objc.get_known_class("UIWebView", &mut env.mem);
+        let selector = env
+            .objc
+            .register_host_selector("loadHTMLString:baseURL:".to_string(), &mut env.mem);
+
+        assert!(env.objc.class_has_method(class, selector));
+        let signature: id = msg![env; class instanceMethodSignatureForSelector:selector];
+        assert_ne!(signature, nil);
+        let arguments: NSUInteger = msg![env; signature numberOfArguments];
+        assert_eq!(arguments, 4);
+    }
 }
