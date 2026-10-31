@@ -23,6 +23,7 @@ struct NSDateFormatterHostObject {
     date_format: Option<id>,
     date_style: NSDateFormatterStyle,
     time_style: NSDateFormatterStyle,
+    formatter_behavior: NSUInteger,
 }
 impl HostObject for NSDateFormatterHostObject {}
 
@@ -37,6 +38,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         date_format: None,
         date_style: 0,
         time_style: 0,
+        formatter_behavior: 0,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -58,6 +60,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setTimeStyle:(NSDateFormatterStyle)style {
     env.objc.borrow_mut::<NSDateFormatterHostObject>(this).time_style = style;
     set_format_from_styles(env, this);
+}
+
+- (())setFormatterBehavior:(NSUInteger)behavior {
+    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).formatter_behavior = behavior;
+}
+
+- (NSUInteger)formatterBehavior {
+    env.objc.borrow::<NSDateFormatterHostObject>(this).formatter_behavior
 }
 
 - (id)stringFromDate:(id)date {

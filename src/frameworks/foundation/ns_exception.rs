@@ -5,8 +5,74 @@
  */
 
 use crate::dyld::{ConstantExports, FunctionExports, HostConstant};
+use crate::objc::{
+    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+};
 use crate::mem::MutVoidPtr;
 use crate::{export_c_func, Environment};
+
+struct NSExceptionHostObject {
+    name: id,
+    reason: id,
+    user_info: id,
+}
+impl HostObject for NSExceptionHostObject {}
+
+pub const CLASSES: ClassExports = objc_classes! {
+
+(env, this, _cmd);
+
+@implementation NSException: NSObject
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::new(NSExceptionHostObject {
+        name: nil,
+        reason: nil,
+        user_info: nil,
+    });
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
++ (id)exceptionWithName:(id)name reason:(id)reason userInfo:(id)user_info {
+    let exception: id = msg![env; this alloc];
+    let exception: id = msg![env; exception initWithName:name reason:reason userInfo:user_info];
+    autorelease(env, exception)
+}
+
+- (id)initWithName:(id)name reason:(id)reason userInfo:(id)user_info {
+    retain(env, name);
+    retain(env, reason);
+    retain(env, user_info);
+    let host_object = env.objc.borrow_mut::<NSExceptionHostObject>(this);
+    host_object.name = name;
+    host_object.reason = reason;
+    host_object.user_info = user_info;
+    this
+}
+
+- (id)name {
+    env.objc.borrow::<NSExceptionHostObject>(this).name
+}
+
+- (id)reason {
+    env.objc.borrow::<NSExceptionHostObject>(this).reason
+}
+
+- (id)userInfo {
+    env.objc.borrow::<NSExceptionHostObject>(this).user_info
+}
+
+- (())dealloc {
+    let &NSExceptionHostObject { name, reason, user_info } = env.objc.borrow(this);
+    release(env, name);
+    release(env, reason);
+    release(env, user_info);
+    env.objc.dealloc_object(this, &mut env.mem);
+}
+
+@end
+
+};
 
 // All constants are NSExceptionName
 pub const CONSTANTS: ConstantExports = &[

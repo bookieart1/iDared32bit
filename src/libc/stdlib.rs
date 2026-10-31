@@ -188,6 +188,17 @@ fn strtod(env: &mut Environment, nptr: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>)
     res
 }
 
+fn strtod_l(
+    env: &mut Environment,
+    nptr: ConstPtr<u8>,
+    endptr: MutPtr<MutPtr<u8>>,
+    _locale: MutVoidPtr,
+) -> f64 {
+    // touchHLE currently provides only the C-style numeric locale, so an
+    // explicit locale object has the same conversion behavior as strtod().
+    strtod(env, nptr, endptr)
+}
+
 fn prng(state: u32) -> u32 {
     // The state must not be zero for this algorithm to work. This also makes
     // the default seed be 1, which matches the C standard.
@@ -410,6 +421,15 @@ fn strtof(env: &mut Environment, nptr: ConstPtr<u8>, endptr: MutPtr<ConstPtr<u8>
         env.mem.write(endptr, nptr + length);
     }
     number as f32
+}
+
+fn strtof_l(
+    env: &mut Environment,
+    nptr: ConstPtr<u8>,
+    endptr: MutPtr<ConstPtr<u8>>,
+    _locale: MutVoidPtr,
+) -> f32 {
+    strtof(env, nptr, endptr)
 }
 
 pub fn strtoul(
@@ -711,6 +731,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(atol(_)),
     export_c_func!(atof(_)),
     export_c_func!(strtod(_, _)),
+    export_c_func!(strtod_l(_, _, _)),
     export_c_func!(srand(_)),
     export_c_func!(sranddev()),
     export_c_func!(rand()),
@@ -729,6 +750,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(exit(_)),
     export_c_func!(bsearch(_, _, _, _, _)),
     export_c_func!(strtof(_, _)),
+    export_c_func!(strtof_l(_, _, _)),
     export_c_func!(strtoul(_, _, _)),
     export_c_func!(wcstoul(_, _, _)),
     export_c_func!(strtoull(_, _, _)),

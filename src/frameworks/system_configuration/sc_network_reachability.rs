@@ -5,12 +5,12 @@
  */
 //! SCNetworkReachability
 
-use crate::abi::GuestFunction;
+use crate::abi::{CallFromHost, GuestFunction};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::core_foundation::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use crate::frameworks::core_foundation::CFTypeRef;
 use crate::libc::sys::socket::sockaddr;
-use crate::mem::{ConstPtr, MutPtr, MutVoidPtr, Ptr};
+use crate::mem::{ConstPtr, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::objc::{msg, objc_classes, Class, ClassExports, HostObject};
 use crate::Environment;
 use std::net::SocketAddrV4;
@@ -34,8 +34,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 struct SCNetworkReachabilityHostObject {
     address: Option<SocketAddrV4>,
     callback: Option<(GuestFunction, MutVoidPtr)>,
+    delivered_offline_callback: bool,
 }
 impl HostObject for SCNetworkReachabilityHostObject {}
+
+#[repr(C, packed)]
+#[derive(Copy, Clone)]
+struct SCNetworkReachabilityContext {
+    version: i32,
+    info: MutVoidPtr,
+    _retain: GuestFunction,
+    _release: GuestFunction,
+    _copy_description: GuestFunction,
+}
+unsafe impl SafeRead for SCNetworkReachabilityContext {}
 
 // See comment for `_touchHLE_SCNetworkReachability` class
 type SCNetworkReachabilityRef = CFTypeRef;
@@ -63,6 +75,7 @@ fn SCNetworkReachabilityCreateWithName(
         Box::new(SCNetworkReachabilityHostObject {
             address: None,
             callback: None,
+            delivered_offline_callback: false,
         }), // TODO
         &mut env.mem,
     );
@@ -91,6 +104,7 @@ fn SCNetworkReachabilityCreateWithAddress(
         Box::new(SCNetworkReachabilityHostObject {
             address: Some(address_val.to_sockaddr_v4()),
             callback: None,
+            delivered_offline_callback: false,
         }),
         &mut env.mem,
     );
@@ -169,13 +183,23 @@ fn SCNetworkReachabilitySetCallback(
         env.objc
             .get_known_class("_touchHLE_SCNetworkReachability", &mut env.mem)
     );
-    env.objc
-        .borrow_mut::<SCNetworkReachabilityHostObject>(target)
-        .callback = if callout.addr_without_thumb_bit() == 0 {
+    let callback = if callout.addr_without_thumb_bit() == 0 {
         None
     } else {
-        Some((callout, context))
+        let info = if context.is_null() {
+            MutVoidPtr::null()
+        } else {
+            let context: SCNetworkReachabilityContext = env.mem.read(context.cast());
+            assert_eq!(context.version, 0);
+            context.info
+        };
+        Some((callout, info))
     };
+    let host_object = env
+        .objc
+        .borrow_mut::<SCNetworkReachabilityHostObject>(target);
+    host_object.callback = callback;
+    host_object.delivered_offline_callback = false;
     log!(
         "SCNetworkReachabilitySetCallback({:?}, {:?}, {:?}) -> TRUE",
         target,
@@ -197,9 +221,26 @@ fn SCNetworkReachabilityScheduleWithRunLoop(
         env.objc
             .get_known_class("_touchHLE_SCNetworkReachability", &mut env.mem)
     );
-    // Registration succeeds, but no callback is fired: the object reports a
-    // stable offline state through GetFlags. This prevents retired ad/network
-    // SDKs from spinning or dereferencing half-initialized reachability state.
+    // Older reachability wrappers expect an initial callback after scheduling.
+    // Deliver a single stable offline result when networking is disabled. This
+    // also prevents retired SDKs from repeatedly creating new reachability
+    // objects while waiting for a state notification that never arrives.
+    if !env.options.network_access {
+        let callback = {
+            let host_object = env
+                .objc
+                .borrow_mut::<SCNetworkReachabilityHostObject>(target);
+            if host_object.delivered_offline_callback {
+                None
+            } else {
+                host_object.delivered_offline_callback = true;
+                host_object.callback
+            }
+        };
+        if let Some((callback, info)) = callback {
+            () = callback.call_from_host(env, (target, 0_u32, info));
+        }
+    }
     true
 }
 

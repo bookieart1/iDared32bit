@@ -49,6 +49,15 @@ struct AudioFilePacketTableInfo {
 }
 unsafe impl SafeRead for AudioFilePacketTableInfo {}
 
+#[repr(C, packed)]
+#[derive(Copy, Clone)]
+struct AudioFramePacketTranslation {
+    frame: i64,
+    packet: i64,
+    frame_offset_in_packet: u32,
+}
+unsafe impl SafeRead for AudioFramePacketTranslation {}
+
 #[allow(dead_code)]
 const kAudioFileFileNotFoundError: OSStatus = -43;
 pub const kAudioFileBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
@@ -73,6 +82,8 @@ const kAudioFilePropertyAudioDataPacketCount: AudioFilePropertyID = fourcc(b"pcn
 pub const kAudioFilePropertyPacketSizeUpperBound: AudioFilePropertyID = fourcc(b"pkub");
 const kAudioFilePropertyEstimatedDuration: AudioFilePropertyID = fourcc(b"edur");
 const kAudioFilePropertyPacketTableInfo: AudioFilePropertyID = fourcc(b"pnfo");
+const kAudioFilePropertyPacketToFrame: AudioFilePropertyID = fourcc(b"pkfr");
+const kAudioFilePropertyFrameToPacket: AudioFilePropertyID = fourcc(b"frpk");
 
 pub fn AudioFileOpenURL(
     env: &mut Environment,
@@ -235,6 +246,9 @@ pub(super) fn property_size(property_id: AudioFilePropertyID) -> Option<GuestUSi
         kAudioFilePropertyPacketSizeUpperBound => guest_size_of::<u32>(),
         kAudioFilePropertyEstimatedDuration => guest_size_of::<f64>(),
         kAudioFilePropertyPacketTableInfo => guest_size_of::<AudioFilePacketTableInfo>(),
+        kAudioFilePropertyPacketToFrame | kAudioFilePropertyFrameToPacket => {
+            guest_size_of::<AudioFramePacketTranslation>()
+        }
         _ => return None,
     })
 }
@@ -371,6 +385,30 @@ pub fn AudioFileGetProperty(
                     remainder_frames: 0,
                 },
             );
+        }
+        kAudioFilePropertyPacketToFrame | kAudioFilePropertyFrameToPacket => {
+            let mut translation: AudioFramePacketTranslation =
+                env.mem.read(out_property_data.cast());
+            let frames_per_packet = host_object
+                .audio_file
+                .compressed_format()
+                .map(|format| format.frames_per_packet())
+                .unwrap_or_else(|| host_object.audio_file.audio_description().frames_per_packet)
+                .max(1);
+            let frames_per_packet = i64::from(frames_per_packet);
+
+            if in_property_id == kAudioFilePropertyPacketToFrame {
+                translation.frame = translation.packet.saturating_mul(frames_per_packet);
+                translation.frame_offset_in_packet = 0;
+            } else if translation.frame < 0 {
+                translation.packet = -1;
+                translation.frame_offset_in_packet = 0;
+            } else {
+                translation.packet = translation.frame / frames_per_packet;
+                translation.frame_offset_in_packet =
+                    (translation.frame % frames_per_packet) as u32;
+            }
+            env.mem.write(out_property_data.cast(), translation);
         }
         _ => unreachable!(),
     }
