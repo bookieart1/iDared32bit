@@ -113,22 +113,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @implementation UIFont: NSObject
 
-- (())dealloc {
-    let font = env.objc.borrow::<UIFontHostObject>(this);
-    let diagnostic = DeallocatedFont {
-        object: this,
-        size: font.size,
-        kind: font.kind,
-    };
-    let diagnostics = &mut env.framework_state.uikit.ui_font.deallocated_fonts;
-    const MAX_DEALLOCATED_FONT_DIAGNOSTICS: usize = 32;
-    if diagnostics.len() == MAX_DEALLOCATED_FONT_DIAGNOSTICS {
-        diagnostics.remove(0);
-    }
-    diagnostics.push(diagnostic);
-    msg_super![env; this dealloc]
-}
-
 // Values are checked against iPhone 3GS, iOS 4.0.1
 + (CGFloat)labelFontSize {
     17.0
@@ -220,6 +204,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     let leading: CGFloat = msg![env; this leading];
     assert!(descender <= 0.0);
     ascender + leading - descender
+}
+
+- (())dealloc {
+    let font = env.objc.borrow::<UIFontHostObject>(this);
+    let diagnostic = DeallocatedFont {
+        object: this,
+        size: font.size,
+        kind: font.kind,
+    };
+    let diagnostics = &mut env.framework_state.uikit.ui_font.deallocated_fonts;
+    const MAX_DEALLOCATED_FONT_DIAGNOSTICS: usize = 32;
+    if diagnostics.len() == MAX_DEALLOCATED_FONT_DIAGNOSTICS {
+        diagnostics.remove(0);
+    }
+    diagnostics.push(diagnostic);
+    msg_super![env; this dealloc]
 }
 
 @end
