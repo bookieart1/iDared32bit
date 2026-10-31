@@ -1,5 +1,8 @@
 name: Build unsigned development IPA
 
+# Compatibility-test builds are intentionally produced only from the dedicated
+# development branch below and install beside the App Store application.
+
 on:
   push:
     branches:
