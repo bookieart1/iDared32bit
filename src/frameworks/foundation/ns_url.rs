@@ -202,8 +202,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         // FIXME: don't assume URL is already absolute
         NSURLHostObject::FileURL { ns_string, .. } => ns_string,
         NSURLHostObject::OtherURL { ns_string } => {
-            // TODO: full RFC 1808 resolution
-            assert!(to_rust_string(env, ns_string).starts_with("http"));
+            // Non-file URLs include custom schemes, relative references and
+            // occasionally an empty string. They are still valid NSURL
+            // objects; `absoluteString` must return their stored spelling
+            // rather than assuming every such URL is HTTP(S).
             ns_string
         },
     }

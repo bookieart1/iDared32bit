@@ -5,7 +5,7 @@
  */
 //! `NSData` and `NSMutableData`.
 
-use super::ns_string::to_rust_string;
+use super::ns_string::{from_rust_string, to_rust_string};
 use super::{NSRange, NSUInteger};
 use crate::frameworks::foundation::ns_keyed_unarchiver::decode_current_data;
 use crate::fs::GuestPath;
@@ -223,6 +223,30 @@ pub const CLASSES: ClassExports = objc_classes! {
     let a = to_rust_slice(env, this).to_owned();
     let b = to_rust_slice(env, other);
     a == b
+}
+
+- (id)description {
+    let host = env.objc.borrow::<NSDataHostObject>(this);
+    let bytes = if host.length == 0 {
+        &[]
+    } else {
+        env.mem.bytes_at(host.bytes.cast(), host.length)
+    };
+
+    // Match Foundation's useful, stable shape closely enough for logging and
+    // SDKs which interpolate NSData into diagnostic strings.
+    let mut result = String::with_capacity(bytes.len().saturating_mul(2) + bytes.len() / 4 + 2);
+    result.push('<');
+    for (idx, byte) in bytes.iter().enumerate() {
+        if idx != 0 && idx % 4 == 0 {
+            result.push(' ');
+        }
+        use std::fmt::Write;
+        write!(&mut result, "{byte:02x}").unwrap();
+    }
+    result.push('>');
+    let string = from_rust_string(env, result);
+    autorelease(env, string)
 }
 
 - (())getBytes:(MutPtr<u8>)buffer length:(NSUInteger)length {
