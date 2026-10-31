@@ -1676,6 +1676,24 @@ impl Environment {
             );
         }
 
+        // A wider, still bounded window makes stripped guest code around a
+        // terminal fault disassemblable without enabling per-instruction
+        // tracing. Include a small stack window for the same reason.
+        let code_start = pc.saturating_sub(64);
+        let code_ptr = mem::ConstVoidPtr::from_bits(code_start);
+        if let Some(bytes) = self.mem.get_bytes_fallible(code_ptr, 96) {
+            log_no_panic!(
+                "{source} nearby guest code at {code_start:#010x} (96 bytes): {bytes:02x?}"
+            );
+        }
+        let sp = self.cpu.regs()[cpu::Cpu::SP];
+        let stack_ptr = mem::ConstVoidPtr::from_bits(sp);
+        if let Some(bytes) = self.mem.get_bytes_fallible(stack_ptr, 64) {
+            log_no_panic!(
+                "{source} guest stack at SP={sp:#010x} (64 bytes): {bytes:02x?}"
+            );
+        }
+
         for (label, address) in [("", pc), (" caller", lr)] {
             if let Some(binary) = self.bins.iter().find(|binary| {
                 binary

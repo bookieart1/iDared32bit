@@ -175,6 +175,13 @@ fn animation_selector(
 ) -> Option<SEL> {
     let selector: id = msg_class![env; CATransaction valueForKey:(get_static_str(env, key))];
     if selector != nil {
+        // NSNull distinguishes an explicit NULL selector from an unset
+        // selector. The former disables the callback; only the latter is
+        // eligible for the historical default-selector compatibility path.
+        let null: id = msg_class![env; NSNull null];
+        if selector == null {
+            return None;
+        }
         let selector = to_rust_string(env, selector);
         return Some(env.objc.lookup_selector(&selector).unwrap());
     }
@@ -262,17 +269,27 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (())setAnimationWillStartSelector:(SEL)selector {
-    let selector_str = selector.as_str(&env.mem);
-    log_dbg!("[UIView setAnimationWillStartSelector:{:?} ({})]", selector, selector_str);
-    let selector_nsstring = from_rust_string(env, selector_str.to_string());
-    () = msg_class![env; CATransaction setValue:selector_nsstring forKey:(get_static_str(env, touchHLE_kCATransactionAnimationWillStartSelector))];
+    let value: id = if selector.is_null() {
+        log_dbg!("[UIView setAnimationWillStartSelector:NULL]");
+        msg_class![env; NSNull null]
+    } else {
+        let selector_str = selector.as_str(&env.mem);
+        log_dbg!("[UIView setAnimationWillStartSelector:{:?} ({})]", selector, selector_str);
+        from_rust_string(env, selector_str.to_string())
+    };
+    () = msg_class![env; CATransaction setValue:value forKey:(get_static_str(env, touchHLE_kCATransactionAnimationWillStartSelector))];
 }
 
 + (())setAnimationDidStopSelector:(SEL)selector {
-    let selector_str = selector.as_str(&env.mem);
-    log_dbg!("[UIView setAnimationDidStopSelector:{:?} ({})]", selector, selector_str);
-    let selector_nsstring = from_rust_string(env, selector_str.to_string());
-    () = msg_class![env; CATransaction setValue:selector_nsstring forKey:(get_static_str(env, touchHLE_kCATransactionAnimationDidStopSelector))];
+    let value: id = if selector.is_null() {
+        log_dbg!("[UIView setAnimationDidStopSelector:NULL]");
+        msg_class![env; NSNull null]
+    } else {
+        let selector_str = selector.as_str(&env.mem);
+        log_dbg!("[UIView setAnimationDidStopSelector:{:?} ({})]", selector, selector_str);
+        from_rust_string(env, selector_str.to_string())
+    };
+    () = msg_class![env; CATransaction setValue:value forKey:(get_static_str(env, touchHLE_kCATransactionAnimationDidStopSelector))];
 }
 
 + (())beginAnimations:(id)animation_id // NSString*

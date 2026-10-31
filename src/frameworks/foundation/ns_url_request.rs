@@ -20,6 +20,7 @@ struct NSURLRequestHostObject {
     url: id,
     cache_policy: NSURLRequestCachePolicy,
     timeout_interval: NSTimeInterval,
+    http_should_handle_cookies: bool,
     // Request components
     /// `NSString*`
     http_method: id,
@@ -34,12 +35,21 @@ impl HostObject for NSURLRequestHostObject {}
 /// Make an independent request snapshot, preserving the mutable/immutable
 /// distinction required by NSCopying and NSMutableCopying.
 fn copy_request(env: &mut Environment, source: id, mutable: bool) -> id {
-    let (url, cache_policy, timeout_interval, http_method, http_body, http_header_fields) = {
+    let (
+        url,
+        cache_policy,
+        timeout_interval,
+        http_should_handle_cookies,
+        http_method,
+        http_body,
+        http_header_fields,
+    ) = {
         let source = env.objc.borrow::<NSURLRequestHostObject>(source);
         (
             source.url,
             source.cache_policy,
             source.timeout_interval,
+            source.http_should_handle_cookies,
             source.http_method,
             source.http_body,
             source.http_header_fields,
@@ -67,6 +77,7 @@ fn copy_request(env: &mut Environment, source: id, mutable: bool) -> id {
         url,
         cache_policy,
         timeout_interval,
+        http_should_handle_cookies,
         http_method,
         http_body,
         http_header_fields,
@@ -92,6 +103,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         url: nil,
         cache_policy: NSURLRequestUseProtocolCachePolicy,
         timeout_interval: 60.0,
+        http_should_handle_cookies: true,
         http_method: ns_string::get_static_str(env, "GET"),
         http_body: nil,
         http_header_fields,
@@ -166,6 +178,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (NSTimeInterval)timeoutInterval {
     env.objc.borrow::<NSURLRequestHostObject>(this).timeout_interval
 }
+- (bool)HTTPShouldHandleCookies {
+    env.objc.borrow::<NSURLRequestHostObject>(this).http_should_handle_cookies
+}
 - (id)HTTPMethod {
     env.objc.borrow::<NSURLRequestHostObject>(this).http_method
 }
@@ -217,6 +232,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setTimeoutInterval:(NSTimeInterval)timeout_interval {
     env.objc.borrow_mut::<NSURLRequestHostObject>(this).timeout_interval = timeout_interval;
+}
+
+- (())setHTTPShouldHandleCookies:(bool)should_handle_cookies {
+    env.objc.borrow_mut::<NSURLRequestHostObject>(this).http_should_handle_cookies = should_handle_cookies;
 }
 
 - (())setHTTPMethod:(id)http_method { // NSString *
