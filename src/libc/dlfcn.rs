@@ -108,7 +108,7 @@ fn dlsym(env: &mut Environment, handle: MutVoidPtr, symbol: ConstPtr<u8>) -> Mut
                     .unwrap_or_else(|| {
                         format!("{}+{:#x}", binary.name, caller.saturating_sub(base))
                     });
-                Some(context)
+                Some(nearest)
             });
             if let Some(context) = context {
                 log!(
