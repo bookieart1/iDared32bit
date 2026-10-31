@@ -12,7 +12,7 @@
 use crate::frameworks::core_foundation::time::{CFAbsoluteTimeGetGregorianDate, CFGregorianDate};
 use crate::frameworks::foundation::{ns_string, NSTimeInterval, NSUInteger};
 use crate::objc::{
-    autorelease, id, msg, nil, objc_classes, release, todo_objc_setter, ClassExports, HostObject,
+    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
 };
 use crate::Environment;
@@ -24,6 +24,8 @@ struct NSDateFormatterHostObject {
     date_style: NSDateFormatterStyle,
     time_style: NSDateFormatterStyle,
     formatter_behavior: NSUInteger,
+    locale: id,
+    time_zone: id,
 }
 impl HostObject for NSDateFormatterHostObject {}
 
@@ -39,17 +41,44 @@ pub const CLASSES: ClassExports = objc_classes! {
         date_style: 0,
         time_style: 0,
         formatter_behavior: 0,
+        locale: nil,
+        time_zone: nil,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
 - (())setDateFormat:(id)format { // NSString *
     let date_format: id = msg![env; format copy];
-    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).date_format = Some(date_format);
+    let old = env
+        .objc
+        .borrow_mut::<NSDateFormatterHostObject>(this)
+        .date_format
+        .replace(date_format);
+    if let Some(old) = old {
+        release(env, old);
+    }
 }
 
 - (())setTimeZone:(id)time_zone {
-    todo_objc_setter!(this, time_zone);
+    retain(env, time_zone);
+    let old = env.objc.borrow::<NSDateFormatterHostObject>(this).time_zone;
+    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).time_zone = time_zone;
+    release(env, old);
+}
+
+- (id)timeZone {
+    env.objc.borrow::<NSDateFormatterHostObject>(this).time_zone
+}
+
+- (())setLocale:(id)locale {
+    retain(env, locale);
+    let old = env.objc.borrow::<NSDateFormatterHostObject>(this).locale;
+    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).locale = locale;
+    release(env, old);
+}
+
+- (id)locale {
+    env.objc.borrow::<NSDateFormatterHostObject>(this).locale
 }
 
 // Setting a style replaces the format, as in Cocoa.
@@ -68,6 +97,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (NSUInteger)formatterBehavior {
     env.objc.borrow::<NSDateFormatterHostObject>(this).formatter_behavior
+}
+
+- (())dealloc {
+    let host_object = env.objc.borrow::<NSDateFormatterHostObject>(this);
+    let (date_format, locale, time_zone) = (
+        host_object.date_format,
+        host_object.locale,
+        host_object.time_zone,
+    );
+    if let Some(date_format) = date_format {
+        release(env, date_format);
+    }
+    release(env, locale);
+    release(env, time_zone);
+    env.objc.dealloc_object(this, &mut env.mem)
 }
 
 - (id)stringFromDate:(id)date {

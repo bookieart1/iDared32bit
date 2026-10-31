@@ -102,6 +102,20 @@ enum StringHostObject {
 }
 impl HostObject for StringHostObject {}
 impl StringHostObject {
+    /// Decode a string while preserving Objective-C's failable initializer
+    /// semantics for malformed UTF-8. Other encodings still use the existing
+    /// decoder until their error handling is made failable as well.
+    fn try_decode(bytes: Cow<[u8]>, encoding: NSStringEncoding) -> Option<StringHostObject> {
+        if encoding == NSUTF8StringEncoding {
+            if bytes.is_empty() {
+                return Some(StringHostObject::Utf8(Cow::Borrowed("")));
+            }
+            let string = String::from_utf8(bytes.into_owned()).ok()?;
+            return Some(StringHostObject::Utf8(Cow::Owned(string)));
+        }
+        Some(Self::decode(bytes, encoding))
+    }
+
     fn decode(bytes: Cow<[u8]>, encoding: NSStringEncoding) -> StringHostObject {
         if bytes.is_empty() {
             return StringHostObject::Utf8(Cow::Borrowed(""));
@@ -1450,7 +1464,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     let bytes: ConstPtr<u8> = bytes.cast();
     let length: NSUInteger = msg![env; data length];
     let new = msg![env; this initWithBytes:bytes length:length encoding:encoding];
-    log_dbg!("initWithData:encoding: {}", to_rust_string(env, new));
+    if new != nil {
+        log_dbg!("initWithData:encoding: {}", to_rust_string(env, new));
+    }
     new
 }
 
@@ -1467,9 +1483,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithBytes:(ConstPtr<u8>)bytes
              length:(NSUInteger)len
            encoding:(NSStringEncoding)encoding {
-    // TODO: error handling
     let slice = env.mem.bytes_at(bytes, len);
-    let host_object = StringHostObject::decode(Cow::Borrowed(slice), encoding);
+    let Some(host_object) = StringHostObject::try_decode(Cow::Borrowed(slice), encoding) else {
+        release(env, this);
+        return nil;
+    };
 
     *env.objc.borrow_mut(this) = host_object;
 
@@ -1511,7 +1529,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         msg_class![env; NSString defaultCStringEncoding]
     };
 
-    let host_object = StringHostObject::decode(Cow::Owned(bytes), encoding);
+    let Some(host_object) = StringHostObject::try_decode(Cow::Owned(bytes), encoding) else {
+        release(env, this);
+        return nil;
+    };
     *env.objc.borrow_mut(this) = host_object;
     this
 }
@@ -1527,8 +1548,12 @@ pub const CLASSES: ClassExports = objc_classes! {
         return nil;
     };
 
-    // TODO: error handling for encoding
-    let host_object = StringHostObject::decode(Cow::Owned(bytes), encoding);
+    let Some(host_object) = StringHostObject::try_decode(Cow::Owned(bytes), encoding) else {
+        // TODO: populate NSError when the caller requests it.
+        assert!(error.is_null());
+        release(env, this);
+        return nil;
+    };
     *env.objc.borrow_mut(this) = host_object;
     this
 }
@@ -1687,9 +1712,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithBytes:(ConstPtr<u8>)bytes
              length:(NSUInteger)len
            encoding:(NSStringEncoding)encoding {
-    // TODO: error handling
     let slice = env.mem.bytes_at(bytes, len);
-    let host_object = StringHostObject::decode(Cow::Borrowed(slice), encoding);
+    let Some(host_object) = StringHostObject::try_decode(Cow::Borrowed(slice), encoding) else {
+        release(env, this);
+        return nil;
+    };
 
     *env.objc.borrow_mut(this) = host_object;
 
@@ -2166,6 +2193,16 @@ fn line_range_helper(
 #[cfg(test)]
 mod ns_string_tests {
     use super::*;
+
+    #[test]
+    fn invalid_utf8_is_a_failed_decode() {
+        assert!(StringHostObject::try_decode(
+            Cow::Borrowed(b"bplist00\xdf"),
+            NSUTF8StringEncoding,
+        )
+        .is_none());
+    }
+
     #[test]
     fn linerange_tests() {
         let range = |x, y| NSRange {
