@@ -2335,3 +2335,46 @@ construct an autoreleased `NSMethodSignature` in the deliberately threadless
 fake environment. The follow-up keeps the unsupported synthetic MIB strict and
 checks the exported host method's exact `v@:@@` Objective-C encoding directly;
 no production behavior or Dev label changes.
+
+### Dev 1.67 final host verification and IPA
+
+Final source is `9159a0a6bb17c9deea3290db8c30c594c2bf16cb`. The final
+commit only wraps two new comments to the project's 80-character convention;
+it does not change the tested runtime behavior from `a51774f4`.
+
+- Test workflow `41219859506` completed successfully. The library suite passed
+  **94/94 on macOS and 94/94 on Windows**. The macOS diagnostic reproducer also
+  passed and retained the original unsupported synthetic MIB panic plus its
+  decoded flight-recorder entry.
+- The macOS, Windows and Android lint steps remain allowed failures at the two
+  pre-existing long comments in `src/libc/dlfcn.rs:61` and
+  `src/frameworks/foundation/ns_dictionary.rs:531`. The two Dev 1.67 comments
+  initially reported by that gate were corrected. The gate still prevents
+  clippy, rustdoc and Android compilation, so none of those passes is claimed.
+  Workflow `Test`, `Sanity check tests`, and the corresponding full guest/native
+  integration checks remain skipped by their existing conditions.
+- IPA workflow `41219859529` (run 109, job `124591983798`) completed
+  successfully. Artifact `13049791223`, name
+  `iDared32bit-dev-unsigned-9159a0a6bb17c9deea3290db8c30c594c2bf16cb`,
+  has GitHub artifact ZIP SHA-256
+  `befae638658c7edf11054f544e00b8919585a2bf763167d85a5826b29013227c`.
+- Downloaded IPA: `artifacts/1.67-9159a0a6/iDared-Dev-1.67.ipa`;
+  19,888,553 bytes; SHA-256
+  `cd349f76e72fc2f0284e1302f9deb2f729c3576c33a1abbf8ec2688a8f8c06fc`,
+  matching the workflow's printed checksum. The outer downloaded artifact ZIP
+  is 19,842,232 bytes and matches GitHub's displayed digest.
+- Independent inspection passed the ZIP CRC check and confirmed the arm64
+  executable, embedded commit abbreviation `9159a0a`, run `41219859529`,
+  branch/repository identity, slow-transition marker, all four focused default
+  option entries, separate `com.bookieart1.idared32bit.dev` / `iDared Dev`
+  identity, no provisioning profile and no code-signature directory. Details
+  are saved beside the IPA in `iDared-Dev-1.67.verification.json`.
+
+Physical-device status remains **untested**. The route-message and UIWebView
+contracts are host-tested general implementations, not yet proof that B'Blast
+or Addicus reaches gameplay. Blot receives diagnostic evidence only and is not
+predicted to run faster. Use one retained-data device pass: B'Blast launch and
+brief interaction if it advances; Addicus launch and brief interaction if it
+advances; Blot Classic about 15 seconds, menu, Challenges, Back, wait about 20
+seconds after the slowdown and use emulator Home; Spoing brief play, emulator
+Home, reopen and verify progress. Return one combined log and visible results.
