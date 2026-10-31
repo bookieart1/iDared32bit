@@ -16,6 +16,10 @@ use std::path::PathBuf;
 pub const OPTIONS_HELP: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/OPTIONS_HELP.txt"));
 
+/// One-off catalog survey switch. This is enabled only in the dedicated
+/// Dev 1.71 survey artifact and restored to `false` immediately afterwards.
+pub(crate) const UNIVERSAL_FLIGHT_RECORDER_SURVEY: bool = true;
+
 /// Game controller button for `--button-to-touch=` option.
 #[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
 pub enum Button {
@@ -96,7 +100,7 @@ impl Default for Options {
             dumping_file: crate::paths::user_data_base_path().join("DUMP.txt"),
             ignore_gl_errors: false,
             zero_stack_after_guest_to_host_call: None,
-            diagnostics: false,
+            diagnostics: UNIVERSAL_FLIGHT_RECORDER_SURVEY,
         }
     }
 }

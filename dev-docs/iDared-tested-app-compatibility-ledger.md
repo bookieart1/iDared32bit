@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: October 31, 2026
-Latest device-tested checkpoint: **iDared Dev 1.69** (`acf10ae9`)
+Latest device-tested checkpoint: **iDared Dev 1.70** (`6ca62e0e`)
 Latest built checkpoint: **iDared Dev 1.70** (`6ca62e0e`)
-Current activity: **Dev 1.70 is built and independently package-verified. It implements the three shared contracts recovered from the latest device evidence: `NSNull -description`, explicit offline failure for CFHost socket-stream creation, and the standard `printf` `+` flag for floating conversions. Hosted macOS and Windows library suites passed 105/105 tests; physical-device testing is pending.**
+Current activity: **Dev 1.71 is a dedicated catalog-survey build in preparation. It enables the existing bounded flight recorder by default for every launched game without changing its limits, filters, crash policy or emulation behavior. No compatibility implementation is included. Hosted validation and package verification are pending.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -2708,3 +2708,64 @@ Blot, play Classic long enough to die; if it remains open, return to the menu,
 open Challenges, press Back and wait about 20 seconds. Brief Spoing play is the
 working regression control; a full level is not required. Return the combined
 log and visible results.
+
+### Dev 1.70 device result: later blockers recovered; batch paused
+
+The supplied log identifies workflow `41248909612`, the independently verified
+Dev 1.70 package built from source `6ca62e0eb576cc80b91e0ca83fb5d5237ba0bba7`.
+The original 258,918-byte log is preserved verbatim at
+`outputs/device-logs/iDared-Dev-1.70-bblast-addicus-blot-device-log.txt` with
+SHA-256
+`2A05D95347EA0DDA710F7C48593A292C471708EBD8B6E0A1EF131EBBD38A76D1`.
+
+| App | User-visible result | Decisive evidence | Status / preserved next boundary |
+|---|---|---|---|
+| B'Blast | Both launches looked unchanged: the brief audio fragment, black screen and termination. | The Dev 1.69 `NSNull -description` panic is absent. Both launches instead stop after roughly 407–415 ms at `CFNumber` creation with `not implemented: type 11`, before a main-loop iteration or EAGL return. | **Advanced internally, still blocked.** Dev 1.70's Foundation contract was consumed. Historical `CFNumber` type-11 semantics are the next candidate to verify when this batch resumes; the unchanged screen is not evidence that the implementation was unused. |
+| Addicus | The menu still appeared only momentarily before termination, with no reliable visible improvement. | The log explicitly records `CFStreamCreatePairWithSocketToCFHost(www.google-analytics.com, 80)` returning null streams, then immediately stops on missing `_CFWriteStreamSetClient` after 54 main-loop iterations and 53 EAGL returns. | **Advanced internally, still blocked.** The explicit offline stream-creation path was exercised, but this analytics client does not stop there. The log does not yet decide whether the next correct boundary is null-input rejection or a non-connected stream object with later error delivery; do not fabricate a connected stream. |
+| Blot | A comparably long play session remained smooth and did not crash. | The session returned normally through emulator Home after 195.3 seconds, with 9,387 main-loop iterations, 9,287 EAGL returns, stable source counts and no sustained slow-presentation transition or panic. | **Passing long-session observation; death fix not yet promoted to universal verification.** This is strong non-regression evidence for the prior `qsort` fix and one non-recurrence of the formatting crash. The log has no explicit death marker, so it does not by itself prove that the exact death transition was exercised. |
+| Spoing | Not tested in this pass. | No Spoing launch is present in the log. | No status change. Its earlier working-control result remains the current evidence. |
+
+Per the user's direction, stop this compatibility batch here. Do not implement
+the recovered B'Blast or Addicus boundary yet. The next separate task is a
+dedicated survey IPA with bounded flight diagnostics enabled for every app,
+followed by a full page-by-page catalog pass. Performance- or timing-only
+anomalies from that survey must be repeated on the ordinary diagnostics-off
+baseline before being classified as game defects. Resume this three-app batch
+after the catalog evidence has been collected. No source change, push or new
+IPA was made for this result.
+
+## Dev 1.71 dedicated universal flight-recorder survey — source preparation
+
+The user explicitly authorized one survey IPA for a comprehensive page-by-page
+catalog pass. This is a **diagnostic-only** build, not a compatibility release.
+It contains no B'Blast, Addicus, Blot or other app-specific accommodation and
+does not suppress panics, make the null page accessible, fabricate API success,
+or expand instruction tracing.
+
+The only functional change is that `Options::default().diagnostics` follows the
+temporary `UNIVERSAL_FLIGHT_RECORDER_SURVEY` switch, which is enabled for the
+survey source commit. Therefore every app launched from the picker receives the
+same recorder that was previously enabled only for selected cohorts. Each
+instrumented app launch also prints
+`flight recorder v1 survey build: universal app coverage enabled`, making
+coverage auditable in a combined log. The picker itself remains outside the
+recorder.
+
+The recorder remains bounded at 96 recent framework/API events, 32 entries in a
+slow-presentation snapshot, 24 diagnostic signals and 24 progress samples. It
+still filters high-frequency Objective-C retain/release traffic, OpenGL calls
+and common memory/string primitives, emits only the first twelve five-second
+progress reports, and dumps on panic or emulator Home. No guest instruction
+trace was added. This limits log growth and overhead, but it cannot make the
+survey timing-neutral: a performance- or timing-only anomaly observed in this
+IPA must be repeated on the ordinary diagnostics-off build before it is called
+a compatibility regression.
+
+The survey predicts that every launched game log will contain both the survey
+marker and the ordinary bounded-recorder banner. Crashes should include the
+recent causal boundary and thread/progress state; normal Home exits should dump
+the same bounded record. A short calibration on known-working Spoing and Paper
+Monsters, plus previously repaired Spirits, Bounce and Blot, should precede the
+full catalog pass. The source switch will be restored to `false` in a separate
+`[skip ci]` commit immediately after the survey artifact is downloaded and
+verified, so later ordinary builds do not inherit universal diagnostics.

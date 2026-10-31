@@ -1457,6 +1457,9 @@ impl Environment {
     /// `std::process::exit` to end the process so this function never returns.
     pub fn run(mut self) -> bool {
         if self.diagnostics.is_some() {
+            if crate::options::UNIVERSAL_FLIGHT_RECORDER_SURVEY {
+                echo!("flight recorder v1 survey build: universal app coverage enabled");
+            }
             echo!("flight recorder v1 enabled: bounded API/ObjC history; 5s progress reports (first 12); dump on panic/Home. No instruction tracing.");
         }
         let mut curr_host_context = self.threads[0].host_context.take().unwrap();
