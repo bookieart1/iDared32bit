@@ -10,10 +10,10 @@
 //! - [Unicode Technical Standard #35](https://unicode.org/reports/tr35/tr35-10.html#Date_Format_Patterns)
 
 use crate::frameworks::core_foundation::time::{CFAbsoluteTimeGetGregorianDate, CFGregorianDate};
-use crate::frameworks::foundation::{ns_string, NSTimeInterval, NSUInteger};
+use crate::frameworks::foundation::{ns_string, NSInteger, NSTimeInterval, NSUInteger};
 use crate::objc::{
-    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject,
-    NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports,
+    HostObject, NSZonePtr,
 };
 use crate::Environment;
 
@@ -116,16 +116,25 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)stringFromDate:(id)date {
     let &NSDateFormatterHostObject {
-        date_format, ..
+        date_format, time_zone, ..
     } = env.objc.borrow(this);
     let format = ns_string::to_rust_string(env, date_format.unwrap()).to_string();
     log_dbg!("date_format before: {:?}", format);
 
     let ti: NSTimeInterval = msg![env; date timeIntervalSinceReferenceDate];
-    let greg_date = CFAbsoluteTimeGetGregorianDate(env, ti, nil);
+    let time_zone = if time_zone == nil {
+        msg_class![env; NSTimeZone defaultTimeZone]
+    } else {
+        time_zone
+    };
+    // NSTimeZone is currently a fixed-offset GMT model, but honoring its
+    // offset here keeps formatter behavior correct as that model grows.
+    let seconds_from_gmt: NSInteger = msg![env; time_zone secondsFromGMT];
+    let local_ti = ti + seconds_from_gmt as NSTimeInterval;
+    let greg_date = CFAbsoluteTimeGetGregorianDate(env, local_ti, nil);
     // The reference date (2001-01-01) was a Monday.
-    let weekday = ((ti / 86400.0).floor() as i64 + 1).rem_euclid(7) as usize;
-    let res = format_date(&format, &greg_date, weekday);
+    let weekday = ((local_ti / 86400.0).floor() as i64 + 1).rem_euclid(7) as usize;
+    let res = format_date(&format, &greg_date, weekday, seconds_from_gmt);
     log_dbg!("date_format after: {:?}", res);
 
     let res = ns_string::from_rust_string(env, res);
@@ -165,8 +174,13 @@ fn set_format_from_styles(env: &mut Environment, this: id) {
     }
 }
 
-/// Formats a date with a Unicode date pattern (en_US, in UTC).
-fn format_date(format: &str, date: &CFGregorianDate, weekday: usize) -> String {
+/// Formats a date with a Unicode date pattern (en_US).
+fn format_date(
+    format: &str,
+    date: &CFGregorianDate,
+    weekday: usize,
+    seconds_from_gmt: NSInteger,
+) -> String {
     const MONTHS: [&str; 12] = [
         "January",
         "February",
@@ -241,10 +255,41 @@ fn format_date(format: &str, date: &CFGregorianDate, weekday: usize) -> String {
             // Dates are worked out in UTC (see CFAbsoluteTimeGetGregorianDate).
             'z' if n >= 4 => "Greenwich Mean Time".to_string(),
             'z' => "GMT".to_string(),
+            // RFC 822/ISO 8601 zone forms from Unicode TR35. Widths 1-3 use
+            // the basic numeric form, width 4 uses localized GMT, and width 5
+            // uses the extended ISO form (with Z for UTC).
+            'Z' if n <= 3 => format_time_zone_offset(seconds_from_gmt, false),
+            'Z' if n == 4 => {
+                if seconds_from_gmt == 0 {
+                    "GMT".to_string()
+                } else {
+                    format!("GMT{}", format_time_zone_offset(seconds_from_gmt, true))
+                }
+            }
+            'Z' if n == 5 => {
+                if seconds_from_gmt == 0 {
+                    "Z".to_string()
+                } else {
+                    format_time_zone_offset(seconds_from_gmt, true)
+                }
+            }
             _ => unimplemented!("date format pattern {}", c.to_string().repeat(n)),
         };
     }
     out
+}
+
+fn format_time_zone_offset(seconds_from_gmt: NSInteger, colon: bool) -> String {
+    let seconds = i64::from(seconds_from_gmt);
+    let sign = if seconds < 0 { '-' } else { '+' };
+    let absolute = seconds.abs();
+    let hours = absolute / 3600;
+    let minutes = (absolute % 3600) / 60;
+    if colon {
+        format!("{sign}{hours:02}:{minutes:02}")
+    } else {
+        format!("{sign}{hours:02}{minutes:02}")
+    }
 }
 
 #[cfg(test)]
@@ -262,7 +307,7 @@ mod tests {
             minutes: 5,
             seconds: 9.0,
         };
-        let f = |format| format_date(format, &date, 6);
+        let f = |format| format_date(format, &date, 6, 0);
         assert_eq!(f("yyyy-MM-dd HH:mm:ss"), "2009-07-04 15:05:09");
         assert_eq!(f("M/d/yy h:mm a"), "7/4/09 3:05 PM");
         assert_eq!(f("MMM d, yyyy h:mm:ss a"), "Jul 4, 2009 3:05:09 PM");
@@ -270,5 +315,10 @@ mod tests {
         assert_eq!(f("L LL LLL LLLL LLLLL"), "7 07 Jul July J");
         assert_eq!(f("c cc ccc cccc ccccc cccccc"), "7 07 Sat Saturday S Sa");
         assert_eq!(f("'at' HH 'o''clock'"), "at 15 o'clock");
+        assert_eq!(f("Z ZZ ZZZ ZZZZ ZZZZZ"), "+0000 +0000 +0000 GMT Z");
+        assert_eq!(
+            format_date("Z ZZZZ ZZZZZ", &date, 6, -19_800),
+            "-0530 GMT-05:30 -05:30"
+        );
     }
 }

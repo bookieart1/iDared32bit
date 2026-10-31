@@ -11,7 +11,9 @@ use crate::frameworks::core_graphics::cg_bitmap_context::CGBitmapContextDrawer;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string::to_rust_string;
 use crate::frameworks::foundation::NSInteger;
-use crate::objc::{autorelease, id, msg, msg_super, objc_classes, ClassExports, HostObject};
+use crate::objc::{
+    autorelease, id, msg, msg_super, objc_classes, retain, ClassExports, HostObject,
+};
 use crate::Environment;
 use std::collections::HashMap;
 use std::ops::Range;
@@ -19,6 +21,12 @@ use std::ops::Range;
 #[derive(Default)]
 pub(super) struct State {
     fonts: HashMap<FontKind, Font>,
+    /// UIKit-created UIFont flyweights. The cache owns one retain on each
+    /// immutable object while callers still receive normal autoreleased
+    /// references. Several older apps keep system-font pointers across an
+    /// autorelease-pool drain, matching the long-lived instances used by the
+    /// historical UIKit implementation.
+    ui_fonts: HashMap<(id, FontKind, u32), id>,
     sans_regular_ja: Option<Font>,
     sans_bold_ja: Option<Font>,
     marker_felt: Option<Font>,
@@ -128,51 +136,30 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)systemFontOfSize:(CGFloat)size {
-    let host_object = UIFontHostObject {
-        size,
-        kind: FontKind::SansRegular,
-    };
-    let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
-    autorelease(env, new)
+    cached_font(env, this, FontKind::SansRegular, size)
 }
 + (id)boldSystemFontOfSize:(CGFloat)size {
-    let host_object = UIFontHostObject {
-        size,
-        kind: FontKind::SansBold,
-    };
-    let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
-    autorelease(env, new)
+    cached_font(env, this, FontKind::SansBold, size)
 }
 + (id)italicSystemFontOfSize:(CGFloat)size {
-    let host_object = UIFontHostObject {
-        size,
-        kind: FontKind::SansItalic,
-    };
-    let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
-    autorelease(env, new)
+    cached_font(env, this, FontKind::SansItalic, size)
 }
 + (id)fontWithName:(id)fontName // NSString*
             size:(CGFloat)fontSize {
     let font_name = to_rust_string(env, fontName).to_string();
-    let host_object = UIFontHostObject {
-        kind: get_app_font(env, &font_name).or_else(|| {
+    let kind = get_app_font(env, &font_name).or_else(|| {
             get_equivalent_font(&font_name)
         }).unwrap_or_else(|| {
             log!("No replacement found for font {}. Using system font instead.", font_name);
             FontKind::SansRegular
-        }),
-        size: fontSize,
-    };
-    let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
-    autorelease(env, new)
+        });
+    cached_font(env, this, kind, fontSize)
 }
 
 - (id)fontWithSize:(CGFloat)size {
     let kind = env.objc.borrow::<UIFontHostObject>(this).kind;
-    let host_object = UIFontHostObject { size, kind };
     let class = msg![env; this class];
-    let new = env.objc.alloc_object(class, Box::new(host_object), &mut env.mem);
-    autorelease(env, new)
+    cached_font(env, class, kind, size)
 }
 
 - (CGFloat)pointSize {
@@ -213,7 +200,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         size: font.size,
         kind: font.kind,
     };
-    let diagnostics = &mut env.framework_state.uikit.ui_font.deallocated_fonts;
+    let state = &mut env.framework_state.uikit.ui_font;
+    // A guest can still over-release a cached object. Do not leave a stale
+    // pointer in the flyweight table if that happens.
+    state.ui_fonts.retain(|_, cached| *cached != this);
+    let diagnostics = &mut state.deallocated_fonts;
     const MAX_DEALLOCATED_FONT_DIAGNOSTICS: usize = 32;
     if diagnostics.len() == MAX_DEALLOCATED_FONT_DIAGNOSTICS {
         diagnostics.remove(0);
@@ -225,6 +216,44 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+/// Return an immutable UIFont flyweight at +0 while the framework cache owns
+/// one retain. This models the long-lived system-font objects used by old
+/// UIKit without fabricating a font after a genuine use-after-free.
+fn cached_font(
+    env: &mut Environment,
+    class: id,
+    kind: FontKind,
+    size: CGFloat,
+) -> id {
+    let key = (class, kind, size.to_bits());
+    let cached = env
+        .framework_state
+        .uikit
+        .ui_font
+        .ui_fonts
+        .get(&key)
+        .copied();
+    if let Some(font) = cached {
+        if env.objc.get_host_object(font).is_some() {
+            let returned = retain(env, font);
+            return autorelease(env, returned);
+        }
+        env.framework_state.uikit.ui_font.ui_fonts.remove(&key);
+    }
+
+    let host_object = UIFontHostObject { size, kind };
+    let font = env
+        .objc
+        .alloc_object(class, Box::new(host_object), &mut env.mem);
+    env.framework_state
+        .uikit
+        .ui_font
+        .ui_fonts
+        .insert(key, font);
+    let returned = retain(env, font);
+    autorelease(env, returned)
+}
 
 /// Find a font the app bundles by name, loading them if needed.
 fn get_app_font(env: &mut Environment, name: &str) -> Option<FontKind> {

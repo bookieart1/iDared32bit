@@ -638,6 +638,36 @@ fn CGContextAddLineToPoint(env: &mut Environment, context: CGContextRef, x: CGFl
     env.objc.borrow_mut::<CGContextHostObject>(context).path = host_obj;
 }
 
+/// Append a path object to the context's current path without drawing it.
+///
+/// Core Graphics path objects are immutable from the caller's perspective, so
+/// the context must copy the elements rather than retain the source as its
+/// mutable current path. Coordinates remain in user space here; the context's
+/// transform is applied later when the current path is rendered.
+fn CGContextAddPath(
+    env: &mut Environment,
+    context: CGContextRef,
+    path: CGMutablePathRef,
+) {
+    log_dbg!("CGContextAddPath({:?}, {:?})", context, path);
+    assert!(!path.is_null());
+
+    let elements = env
+        .objc
+        .borrow::<CGMutablePathHostObject>(path)
+        .path_elements
+        .clone();
+    let mut current_path = env.objc.borrow::<CGContextHostObject>(context).path;
+    if current_path.is_null() {
+        current_path = CGPathCreateMutable(env);
+        env.objc.borrow_mut::<CGContextHostObject>(context).path = current_path;
+    }
+    env.objc
+        .borrow_mut::<CGMutablePathHostObject>(current_path)
+        .path_elements
+        .extend(elements);
+}
+
 // NOTE: We might be able to replace the drawing functionality here
 //       with a 3rd party 2D graphics lib
 fn CGContextStrokePath(env: &mut Environment, context: CGContextRef) {
@@ -769,6 +799,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextSetLineWidth(_, _)),
     export_c_func!(CGContextMoveToPoint(_, _, _)),
     export_c_func!(CGContextAddLineToPoint(_, _, _)),
+    export_c_func!(CGContextAddPath(_, _)),
     export_c_func!(CGContextStrokePath(_)),
     export_c_func!(CGContextFillEllipseInRect(_, _)),
 ];
