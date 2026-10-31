@@ -871,7 +871,7 @@ fn fcntl(
             // locks don't do anything, so they can temporarily be ignored.
             // TODO: Actually set locks when multiproccess support is added and
             // the file system supports it.
-            log!(
+            log_once!(
                 "TODO: fcntl({}, F_SETLK, {:?}) called. Locking unimplemented, ignoring lock.",
                 fd,
                 lock

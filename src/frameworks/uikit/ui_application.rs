@@ -532,6 +532,14 @@ pub(super) fn notify_will_terminate(env: &mut Environment) {
         let notif_name = get_static_str(env, UIApplicationWillTerminateNotification);
         () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
 
+        // Apps often update NSUserDefaults from applicationWillTerminate: or
+        // its notification. Flush those last changes too; synchronizing only
+        // before the callbacks loses progress written during shutdown.
+        if !env.is_app_picker {
+            let user_defaults: id = msg_class![env; NSUserDefaults standardUserDefaults];
+            let _: bool = msg![env; user_defaults synchronize];
+        }
+
         let _: () = msg![env; pool drain];
     };
 }

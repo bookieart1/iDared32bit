@@ -35,11 +35,45 @@ fn utf16(env: &Environment, ptr: ConstPtr<UChar>, len: u32) -> String {
     String::from_utf16_lossy(&units)
 }
 
+/// `regex-lite` deliberately implements a smaller syntax than ICU.  Older
+/// apps commonly use ICU's `\Q...\E` quoting, though, so translate that one
+/// construct before compiling the pattern.
+fn translate_icu_pattern(pattern: &str) -> String {
+    fn push_escaped_literal(output: &mut String, literal: &str) {
+        for ch in literal.chars() {
+            if matches!(ch, '.' | '^' | '$' | '*' | '+' | '?' | '(' | ')' | '[' | ']'
+                | '{' | '}' | '|' | '\\')
+            {
+                output.push('\\');
+            }
+            output.push(ch);
+        }
+    }
+
+    let mut output = String::with_capacity(pattern.len());
+    let mut rest = pattern;
+    while let Some(start) = rest.find("\\Q") {
+        output.push_str(&rest[..start]);
+        rest = &rest[start + 2..];
+        if let Some(end) = rest.find("\\E") {
+            push_escaped_literal(&mut output, &rest[..end]);
+            rest = &rest[end + 2..];
+        } else {
+            // ICU quotes through the end of the pattern if `\E` is omitted.
+            push_escaped_literal(&mut output, rest);
+            rest = "";
+            break;
+        }
+    }
+    output.push_str(rest);
+    output
+}
+
 fn regex_for_handle(env: &Environment, handle: ConstPtr<u32>) -> Option<Regex> {
     let pattern_ptr: ConstPtr<UChar> = Ptr::from_bits(env.mem.read(handle + PATTERN_PTR));
     let pattern_len = env.mem.read(handle + PATTERN_LEN);
     let flags = env.mem.read(handle + FLAGS);
-    let pattern = utf16(env, pattern_ptr, pattern_len);
+    let pattern = translate_icu_pattern(&utf16(env, pattern_ptr, pattern_len));
 
     // ICU and regex-lite share the syntax used by these older apps. Translate
     // the commonly used ICU flags into inline flags understood by regex-lite.
@@ -68,6 +102,46 @@ fn regex_for_handle(env: &Environment, handle: ConstPtr<u32>) -> Option<Regex> {
             None
         }
     }
+}
+
+fn match_group_range(
+    env: &Environment,
+    handle: ConstPtr<u32>,
+    group: usize,
+) -> Option<(u32, u32)> {
+    let match_start = env.mem.read(handle + MATCH_START);
+    let match_end = env.mem.read(handle + MATCH_END);
+    if match_start == NO_MATCH || match_end == NO_MATCH {
+        return None;
+    }
+
+    let text_ptr: ConstPtr<UChar> = Ptr::from_bits(env.mem.read(handle + TEXT_PTR));
+    let text_len = env.mem.read(handle + TEXT_LEN);
+    let text = utf16(env, text_ptr, text_len);
+    let byte_start = text
+        .char_indices()
+        .map(|(idx, _)| idx)
+        .chain(std::iter::once(text.len()))
+        .find(|&idx| text[..idx].encode_utf16().count() as u32 >= match_start)?;
+    let regex = regex_for_handle(env, handle)?;
+    let captures = regex.captures(&text[byte_start..])?;
+    let whole = captures.get(0)?;
+    // Re-running at the recorded start must reproduce the same match.
+    if whole.start() != 0
+        || match_start + whole.as_str().encode_utf16().count() as u32 != match_end
+    {
+        return None;
+    }
+    let capture = captures.get(group)?;
+    let start = match_start
+        + text[byte_start..byte_start + capture.start()]
+            .encode_utf16()
+            .count() as u32;
+    let end = match_start
+        + text[byte_start..byte_start + capture.end()]
+            .encode_utf16()
+            .count() as u32;
+    Some((start, end))
 }
 
 fn uregex_open(
@@ -220,12 +294,13 @@ fn uregex_start(
     if !status.is_null() {
         env.mem.write(status, U_ZERO_ERROR);
     }
-    if regexp.is_null() || group != 0 {
+    if regexp.is_null() || group < 0 {
         return -1;
     }
     let handle: ConstPtr<u32> = regexp.cast_const().cast();
-    let value = env.mem.read(handle + MATCH_START);
-    if value == NO_MATCH { -1 } else { value as i32 }
+    match_group_range(env, handle, group as usize)
+        .map(|(start, _)| start as i32)
+        .unwrap_or(-1)
 }
 
 fn uregex_end(
@@ -237,12 +312,13 @@ fn uregex_end(
     if !status.is_null() {
         env.mem.write(status, U_ZERO_ERROR);
     }
-    if regexp.is_null() || group != 0 {
+    if regexp.is_null() || group < 0 {
         return -1;
     }
     let handle: ConstPtr<u32> = regexp.cast_const().cast();
-    let value = env.mem.read(handle + MATCH_END);
-    if value == NO_MATCH { -1 } else { value as i32 }
+    match_group_range(env, handle, group as usize)
+        .map(|(_, end)| end as i32)
+        .unwrap_or(-1)
 }
 
 fn uregex_close(env: &mut Environment, regexp: MutVoidPtr) {
@@ -328,3 +404,16 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(uregex_groupCount(_, _)),
     export_c_func!(uregex_close(_)),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::translate_icu_pattern;
+    use regex_lite::Regex;
+
+    #[test]
+    fn translates_icu_quoted_literals() {
+        let pattern = translate_icu_pattern(r"(\Q[%\E)(.*?)(\Q|\E)(\Q[[\E)");
+        assert_eq!(pattern, r"(\[%)(.*?)(\|)(\[\[)");
+        assert!(Regex::new(&pattern).is_ok());
+    }
+}

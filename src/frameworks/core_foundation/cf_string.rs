@@ -361,6 +361,22 @@ fn CFStringGetLength(env: &mut Environment, the_string: CFStringRef) -> CFIndex 
     length.try_into().unwrap()
 }
 
+fn CFStringGetFastestEncoding(
+    _env: &mut Environment,
+    _the_string: CFStringRef,
+) -> CFStringEncoding {
+    // touchHLE stores NSString contents as Rust UTF-8 strings, making UTF-8
+    // both the fastest and a lossless representation of every string.
+    kCFStringEncodingUTF8
+}
+
+fn CFStringGetSmallestEncoding(
+    _env: &mut Environment,
+    _the_string: CFStringRef,
+) -> CFStringEncoding {
+    kCFStringEncodingUTF8
+}
+
 fn CFStringGetIntValue(env: &mut Environment, string: CFStringRef) -> i32 {
     // TODO: check for allowed characters
     msg![env; string intValue]
@@ -480,6 +496,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringGetFileSystemRepresentation(_, _, _)),
     export_c_func!(CFStringGetIntValue(_)),
     export_c_func!(CFStringGetLength(_)),
+    export_c_func!(CFStringGetFastestEncoding(_)),
+    export_c_func!(CFStringGetSmallestEncoding(_)),
     export_c_func!(CFStringFind(_, _, _)),
     export_c_func!(CFStringHasSuffix(_, _)),
     export_c_func!(CFStringUppercase(_, _)),
