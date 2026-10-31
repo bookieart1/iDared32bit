@@ -19,6 +19,7 @@ use crate::Environment;
 use std::collections::{HashMap, HashSet};
 
 use crate::fs::{FsNodeType, GuestPath};
+use crate::window::DeviceFamily;
 
 // Should be ISO 639-1 (or ISO 639-2) compliant
 // Legacy projects use language names while newer ones use language code lprojs
@@ -251,6 +252,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // TODO: cache result of lookups
 
+    // iOS prefers a resource specialized for the active device family (for
+    // example MainWindow~iphone.nib) over the unsuffixed resource.  A number
+    // of universal apps ship both phone and tablet archives under the same
+    // logical resource name.
+    let path = path_for_device_resource_helper(env, this, name, nil, directory, extension);
+    if path != nil {
+        return path
+    }
+
     let path = path_for_resource_helper(env, this, name, nil, directory, extension);
     if path != nil {
         return path
@@ -268,6 +278,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         if let Some(&(_, lprojs)) = LANG_ID_TO_LANG_PROJ.iter().find(|&&(code, _)| code == lang_code) {
             for lproj in lprojs {
                 let lproj: id = ns_string::get_static_str(env, lproj);
+                let localized_path = path_for_device_resource_helper(env, this, name, lproj, directory, extension);
+                if localized_path != nil {
+                    return localized_path;
+                }
                 let localized_path = path_for_resource_helper(env, this, name, lproj, directory, extension);
                 if localized_path != nil {
                     return localized_path;
@@ -278,8 +292,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
-    // TODO: Support look up for device specific resources, e.g. ~iphone
-
     // As a last resort, fallback to English
     // TODO: fallback to a development language (CFBundleDevelopmentRegion from
     // Info.plist)
@@ -289,6 +301,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     for lproj in ["English.lproj", "en.lproj"] {
         let lproj: id = ns_string::get_static_str(env, lproj);
+        let path = path_for_device_resource_helper(env, this, name, lproj, directory, extension);
+        if path != nil {
+            return path;
+        }
         let path = path_for_resource_helper(env, this, name, lproj, directory, extension);
         if path != nil {
             return path;
@@ -511,6 +527,60 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+fn path_for_device_resource_helper(
+    env: &mut Environment,
+    bundle: id,
+    name: id,
+    lproj: id,
+    directory: id,
+    extension: id,
+) -> id {
+    let suffix = match env.options.device_family {
+        Some(DeviceFamily::iPhone) => "~iphone",
+        Some(DeviceFamily::iPad) => "~ipad",
+        None => return nil,
+    };
+    let name_str = ns_string::to_rust_string(env, name).into_owned();
+
+    // A caller that supplied an explicit device modifier must get exactly
+    // that resource rather than a second modifier being appended.
+    let stem = name_str.rsplit('/').next().unwrap_or(&name_str);
+    let stem_without_extension = stem.rsplit_once('.').map_or(stem, |(stem, _)| stem);
+    if stem_without_extension.ends_with("~iphone") || stem_without_extension.ends_with("~ipad") {
+        return nil;
+    }
+
+    // When the type is part of the name, the modifier precedes its extension:
+    // Foo.png becomes Foo~iphone.png. With a separate type it is simply
+    // appended to the resource name.
+    let specialized_name = if extension == nil {
+        if let Some((base, ext)) = name_str.rsplit_once('.') {
+            format!("{base}{suffix}.{ext}")
+        } else {
+            format!("{name_str}{suffix}")
+        }
+    } else {
+        format!("{name_str}{suffix}")
+    };
+    let specialized_name = ns_string::from_rust_string(env, specialized_name);
+    let path = path_for_resource_helper(
+        env,
+        bundle,
+        specialized_name,
+        lproj,
+        directory,
+        extension,
+    );
+    if path != nil {
+        log!(
+            "Selected device-specific bundle resource {:?}",
+            ns_string::to_rust_string(env, path)
+        );
+    }
+    release(env, specialized_name);
+    path
+}
 
 fn path_for_resource_helper(
     env: &mut Environment,

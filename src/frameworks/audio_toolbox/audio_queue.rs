@@ -585,6 +585,29 @@ fn AudioQueueSetProperty(
     kAudioQueueErr_InvalidDevice
 }
 
+fn AudioQueueSetOfflineRenderFormat(
+    env: &mut Environment,
+    in_aq: AudioQueueRef,
+    in_format: ConstPtr<AudioStreamBasicDescription>,
+    _in_layout: ConstVoidPtr,
+) -> OSStatus {
+    return_if_null!(in_aq);
+    if in_format.is_null() {
+        return kAudioQueueErr_InvalidDevice;
+    }
+
+    // Offline rendering changes the format of samples returned by
+    // AudioQueueOfflineRender; it does not change normal queue playback. Keep
+    // accepting the configuration so apps that use it for decoding or as a
+    // capability probe can continue to their next step.
+    let format = env.mem.read(in_format);
+    log!(
+        "Warning: AudioQueueSetOfflineRenderFormat accepts the requested format, but offline rendering is not implemented yet: {:?}",
+        format
+    );
+    0
+}
+
 pub fn log_if_broken_audio_format(format: &AudioStreamBasicDescription) {
     let bytes_per_channel = format.bits_per_channel / 8;
     let expected_bytes_per_packet = format.bytes_per_frame * format.frames_per_packet;
@@ -1557,6 +1580,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueGetPropertySize(_, _, _)),
     export_c_func!(AudioQueueGetProperty(_, _, _, _)),
     export_c_func!(AudioQueueSetProperty(_, _, _, _)),
+    export_c_func!(AudioQueueSetOfflineRenderFormat(_, _, _)),
     export_c_func!(AudioQueuePrime(_, _, _)),
     export_c_func!(AudioQueueStart(_, _)),
     export_c_func!(AudioQueuePause(_)),

@@ -334,6 +334,11 @@ pub(super) fn UIApplicationMain(
             let bundle: id = msg_class![env; NSBundle mainBundle];
             let res: id = msg![env; bundle pathForResource:ns_main_nib_filename ofType:type_];
             if res != nil {
+                log!(
+                    "Loading main nib {:?} from {:?}",
+                    main_nib_filename,
+                    ns_string::to_rust_string(env, res)
+                );
                 let nib: id = msg_class![env; UINib nibWithNibName:ns_main_nib_filename bundle:nil];
                 release(env, ns_main_nib_filename);
                 let _: id = msg![env; nib instantiateWithOwner:ui_application

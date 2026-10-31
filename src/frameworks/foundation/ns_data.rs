@@ -135,8 +135,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         let absolute_str: id = msg![env; url absoluteString];
         let path = to_rust_string(env, absolute_str);
-        assert!(path.starts_with("http"));
-        log!("TODO: ignoring [(NSData*){:?} initWithContentsOfURL:{:?}]", this, path);
+        if path.starts_with("http://") || path.starts_with("https://") {
+            log!("TODO: ignoring [(NSData*){:?} initWithContentsOfURL:{:?}]", this, path);
+        } else {
+            // Foundation reports a failed load for unsupported URL schemes;
+            // it does not abort the process. This is commonly used as a
+            // capability probe by older apps.
+            log!("Warning: [(NSData*){:?} initWithContentsOfURL:{:?}] uses an unsupported URL scheme", this, path);
+        }
         release(env, this);
         nil
     }
