@@ -156,6 +156,29 @@ and iOS compilation are distinct from guest ABI and physical-device tests.
 The existing dev workflow skips full guest integration/native sanity/format
 checks and permits lint failures; a green workflow is not a complete matrix.
 
+Verified hosted results for source `288a5e40966d5a322ab660344d01e8c4dacb2531`:
+[test run 41216006091](https://github.com/bookieart1/iDared32bit/actions/runs/41216006091)
+passed all 90 library tests on both macOS and Windows. The separate visible
+reproducer step passed and printed `_sysctl` with
+`mib=[4, 17, 0, 0, 3, 2]`, raw arguments and stack words while retaining the
+original unsupported-query panic. This demonstrates new evidence at a real
+dispatch boundary, not a fix for the game. Full guest ABI/native sanity checks
+remained skipped. All three lint commands stopped at the existing comment-line
+check and were allowed failures; clippy/Android compilation were not validated.
+Initial new-test mistakes (borrowing an Environment and reserving the null
+segment before linker allocation) were corrected without changing game code
+or weakening assertions. Device performance and usefulness remain unverified.
+
+The [iOS archive and package run](https://github.com/bookieart1/iDared32bit/actions/runs/41216006158)
+succeeded for the same source commit. Artifact ID `13048746075` was downloaded
+and independently checked: valid ZIP, arm64 Mach-O, embedded commit `288a5e4`
+and run ID, `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, no code
+signature/provisioning profile, and all four diagnostic presets. Delivered as
+`iDared-Dev-1.66.ipa`, 19,867,195 bytes, SHA-256
+`7b02d9631af24a7e789cdb1001027b2aec35002e168a0a8b6210ce794e7599c1`.
+The later audit-results commit is documentation only; the IPA source remains
+`288a5e40966d5a322ab660344d01e8c4dacb2531`.
+
 Device test: launch B'Blast and Addicus once each; reproduce Blot's
 Challenges→Back slowdown, leave it for about 20 seconds and use emulator Home;
 play Spoing briefly and return Home as a working control. Send the ordinary log.
