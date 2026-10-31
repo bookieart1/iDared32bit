@@ -4,8 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! Opt-in, bounded flight recorder. Recording never calls guest code, formats
-//! text, allocates, writes logs, or changes guest state. This is boundary history,
-//! not an instruction trace or proof that a nil return is an error.
+//! text, allocates, writes logs, or changes guest state. This records boundaries,
+//! not instructions, and is not proof that a nil return is an error.
 
 use crate::mem::{ConstVoidPtr, Mem};
 use crate::Environment;
@@ -294,12 +294,12 @@ fn read_word(mem: &Mem, addr: u32) -> Option<u32> {
 }
 
 impl Environment {
-    /// Called only at existing guest/host boundaries, with no ownership changes.
+    /// Observe existing guest/host boundaries without ownership changes.
     pub fn diagnostic_api_begin(&mut self, name: &'static str) -> Option<Call> {
         let recorder = self.diagnostics.as_mut()?;
         recorder.api += 1;
         // ObjC is recorded at its decoded dispatch boundary. Count high-volume
-        // graphics/allocator/memory primitives, but don't let them erase history.
+        // graphics/allocator/memory primitives without erasing other history.
         if name.starts_with("_objc_msgSend")
             || name.starts_with("_gl")
             || matches!(
@@ -443,6 +443,7 @@ mod tests {
     fn objc_dispatch_distinguishes_nil_objects_from_numeric_zero() {
         use crate::objc::{id, msg, msg_class, nil, release};
         let mut env = Environment::new_fake_for_test();
+        let env = &mut env;
         let array: id = msg_class![env; NSArray new];
         env.diagnostics = Some(Recorder::new());
         let count: u32 = msg![env; array count];
@@ -456,7 +457,7 @@ mod tests {
             recorder.signals.iter().last().unwrap().call.name.bytes(),
             b"lastObject"
         );
-        release(&mut env, array);
+        release(env, array);
     }
     #[test]
     fn progress_and_output_are_bounded() {
