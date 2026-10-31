@@ -48,6 +48,17 @@ static void *test_method_imp(Method method) {
   return (void *)method_getImplementation(method);
 }
 
+static const char *test_method_types(Method method) {
+#ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
+  return method_getTypeEncoding(method);
+#else
+  // The iPhone OS 3 SDK's libobjc import library does not export
+  // method_getTypeEncoding, even though apps can resolve and call it at
+  // runtime. Verify the same backing field that the runtime accessor returns.
+  return ((struct method_layout *)method)->types;
+#endif
+}
+
 int test_class_getInstanceMethod(void) {
   TestClass *instance = [TestClass new];
   SEL answer_sel =
@@ -56,7 +67,7 @@ int test_class_getInstanceMethod(void) {
   if (method == 0 || test_method_name(method) != answer_sel) {
     return -1;
   }
-  const char *answer_types = method_getTypeEncoding(method);
+  const char *answer_types = test_method_types(method);
   if (answer_types == 0 || answer_types[0] != 'i') {
     return -7;
   }
@@ -87,7 +98,7 @@ int test_class_getInstanceMethod(void) {
                             instance, retain_count_sel) != 1) {
     return -5;
   }
-  const char *inherited_types = method_getTypeEncoding(inherited);
+  const char *inherited_types = test_method_types(inherited);
   if (inherited_types == 0 || inherited_types[0] != 'I') {
     return -8;
   }
