@@ -26,6 +26,7 @@ type NSSearchPathDomainMask = NSUInteger;
 const NSUserDomainMask: NSSearchPathDomainMask = 1;
 
 pub const NSFileModificationDate: &str = "NSFileModificationDate";
+pub const NSFileCreationDate: &str = "NSFileCreationDate";
 pub const NSFileSize: &str = "NSFileSize";
 const NSFileSystemFreeSize: &str = "NSFileSystemFreeSize";
 pub const NSFileType: &str = "NSFileType";
@@ -36,6 +37,10 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_NSFileModificationDate",
         HostConstant::NSString(NSFileModificationDate),
+    ),
+    (
+        "_NSFileCreationDate",
+        HostConstant::NSString(NSFileCreationDate),
     ),
     ("_NSFileSize", HostConstant::NSString(NSFileSize)),
     (
@@ -467,7 +472,7 @@ includingPropertiesForKeys:(id)_keys // NSArray*, only prefetching
 - (id)fileAttributesAtPath:(id)path // NSString *
               traverseLink:(bool)traverse {
     // TODO: other attributes
-    log_once!("Warning: NSFileManager fileAttributesAtPath:traverseLink: returns only NSFileType, NSFileModificationDate and NSFileSize attributes!");
+    log_once!("Warning: NSFileManager fileAttributesAtPath:traverseLink: returns only NSFileType, NSFileCreationDate, NSFileModificationDate and NSFileSize attributes!");
 
     let path = ns_string::to_rust_string(env, path); // TODO: avoid copy
     // TODO: traverse link
@@ -482,7 +487,7 @@ includingPropertiesForKeys:(id)_keys // NSArray*, only prefetching
     assert!(error.is_null()); // TODO
 
     // TODO: other attributes
-    log_once!("Warning: NSFileManager attributesOfItemAtPath:error: returns only NSFileType, NSFileModificationDate and NSFileSize attributes!");
+    log_once!("Warning: NSFileManager attributesOfItemAtPath:error: returns only NSFileType, NSFileCreationDate, NSFileModificationDate and NSFileSize attributes!");
 
     let path = ns_string::to_rust_string(env, path); // TODO: avoid copy
     // TODO: traverse link
@@ -624,6 +629,12 @@ fn file_attributes_common(env: &mut Environment, guest_path: &GuestPath) -> id {
 
     let modif_date_key = get_static_str(env, NSFileModificationDate);
     () = msg![env; dict setObject:unix_date forKey:modif_date_key];
+
+    // The virtual filesystem currently exposes one timestamp. Use it for the
+    // creation date too; legacy applications generally use these values for
+    // cache invalidation and need a stable NSDate rather than exact metadata.
+    let creation_date_key = get_static_str(env, NSFileCreationDate);
+    () = msg![env; dict setObject:unix_date forKey:creation_date_key];
 
     let size_key = get_static_str(env, NSFileSize);
     () = msg![env; dict setObject:size_num forKey:size_key];

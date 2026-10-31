@@ -43,7 +43,7 @@ pub struct State {
     pub root_view_controllers: Vec<(id, id)>,
     /// Views whose archived iPad frame was normalized for an iPhone launch.
     /// Non-retaining; used to select the matching legacy rotation geometry.
-    normalized_legacy_views: Vec<id>,
+    normalized_legacy_views: Vec<(id, CGRect)>,
 }
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -83,7 +83,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // at Launch". Some games never make their window visible themselves.
     let this = msg_super![env; this initWithCoder:coder];
 
-    normalize_legacy_device_family_frame(env, this);
+    normalize_legacy_device_family_frame(env, this, false);
 
     let state = &mut env.framework_state.uikit.ui_view.ui_window;
     state.windows.push(this);
@@ -238,15 +238,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     // UIKit has selected their iPhone family. Real UIKit adapts that archived
     // full-screen hierarchy to the active screen; doing the same here prevents
     // a 768x1024 view from being clipped and magnified on a 320x480 phone.
-    normalize_legacy_device_family_frame(env, view);
+    normalize_legacy_device_family_frame(env, view, true);
 
     let view_controller = env.objc.borrow::<UIViewHostObject>(view).view_controller;
     if env.bundle.bundle_identifier() == "com.majesticsoftware.blot" {
         let window_frame: CGRect = msg![env; this frame];
         let view_frame: CGRect = msg![env; view frame];
         let view_bounds: CGRect = msg![env; view bounds];
+        let view_transform: CGAffineTransform = msg![env; view transform];
         log!(
-            "Blot display diagnostic: UIWindow addSubview window_frame={window_frame:?}, view_frame={view_frame:?}, view_bounds={view_bounds:?}, view_controller={view_controller:?}"
+            "Blot display diagnostic: UIWindow addSubview view={view:?}, window_frame={window_frame:?}, view_frame={view_frame:?}, view_bounds={view_bounds:?}, view_transform={view_transform:?}, view_controller={view_controller:?}"
         );
     }
 
@@ -310,47 +311,47 @@ pub const CLASSES: ClassExports = objc_classes! {
             let view_frame: CGRect = msg![env; view frame];
             log_dbg!("Old view frame: {view_frame:?}");
 
-            let was_normalized = env
+            let normalized_archived_bounds = env
                 .framework_state
                 .uikit
                 .ui_view
                 .ui_window
                 .normalized_legacy_views
-                .contains(&view);
+                .iter()
+                .find_map(|(normalized_view, archived_bounds)| {
+                    (*normalized_view == view).then_some(*archived_bounds)
+                });
 
-            if was_normalized
-                && matches!(
-                    orientation,
-                    UIInterfaceOrientationLandscapeLeft | UIInterfaceOrientationLandscapeRight
-                )
-            {
-                // A landscape root view uses landscape logical bounds while
-                // its containing UIWindow remains in portrait screen
-                // coordinates on old iOS. Centering before rotation makes the
-                // transformed frame exactly cover the 320x480 window instead
-                // of pinning a magnified quadrant to one corner.
-                let window_bounds: CGRect = msg![env; this bounds];
-                let landscape_bounds = CGRect {
-                    origin: CGPoint { x: 0.0, y: 0.0 },
-                    size: crate::frameworks::core_graphics::CGSize {
-                        width: window_bounds.size.height,
-                        height: window_bounds.size.width,
-                    },
-                };
-                let center = CGPoint {
-                    x: window_bounds.origin.x + window_bounds.size.width / 2.0,
-                    y: window_bounds.origin.y + window_bounds.size.height / 2.0,
-                };
-                () = msg![env; view setBounds:landscape_bounds];
-                () = msg![env; view setCenter:center];
-                () = msg![env; view setTransform:transform];
-                log!(
-                    "Applied normalized landscape geometry to view {:?}: bounds={:?}, center={:?}",
-                    view,
-                    landscape_bounds,
-                    center
-                );
-                return;
+            if matches!(
+                orientation,
+                UIInterfaceOrientationLandscapeLeft | UIInterfaceOrientationLandscapeRight
+            ) {
+                if let Some(archived_bounds) = normalized_archived_bounds {
+                    // The host window already presents portrait UIKit coordinates
+                    // in the selected physical landscape orientation. Preserve the
+                    // archived coordinate system and its scale instead of replacing
+                    // it with a second 90-degree view transform.
+                    let window_bounds: CGRect = msg![env; this bounds];
+                    let center = CGPoint {
+                        x: window_bounds.origin.x + window_bounds.size.width / 2.0,
+                        y: window_bounds.origin.y + window_bounds.size.height / 2.0,
+                    };
+                    let scale = CGAffineTransform::make_scale(
+                        window_bounds.size.width / archived_bounds.size.width,
+                        window_bounds.size.height / archived_bounds.size.height,
+                    );
+                    () = msg![env; view setBounds:archived_bounds];
+                    () = msg![env; view setCenter:center];
+                    () = msg![env; view setTransform:scale];
+                    log!(
+                        "Preserved scaled archived geometry for landscape view {:?}: bounds={:?}, center={:?}, transform={:?}",
+                        view,
+                        archived_bounds,
+                        center,
+                        scale,
+                    );
+                    return;
+                }
             }
 
             () = msg![env; view setTransform:transform];
@@ -414,7 +415,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
-fn normalize_legacy_device_family_frame(env: &mut crate::Environment, view: id) {
+fn normalize_legacy_device_family_frame(
+    env: &mut crate::Environment,
+    view: id,
+    preserve_archived_coordinates: bool,
+) {
     if env.window().device_family() != DeviceFamily::iPhone {
         return;
     }
@@ -431,20 +436,40 @@ fn normalize_legacy_device_family_frame(env: &mut crate::Environment, view: id) 
     let screen: id = msg_class![env; UIScreen mainScreen];
     let phone_bounds: CGRect = msg![env; screen bounds];
     if phone_bounds.size.width == 320.0 && phone_bounds.size.height == 480.0 {
-        log!(
-            "Normalizing iPad-sized archived root view {:?} to iPhone bounds {:?}",
-            view,
-            phone_bounds
-        );
-        () = msg![env; view setFrame:phone_bounds];
-        let normalized = &mut env
-            .framework_state
-            .uikit
-            .ui_view
-            .ui_window
-            .normalized_legacy_views;
-        if !normalized.contains(&view) {
-            normalized.push(view);
+        if preserve_archived_coordinates {
+            let archived_bounds: CGRect = msg![env; view bounds];
+            let center = CGPoint {
+                x: phone_bounds.origin.x + phone_bounds.size.width / 2.0,
+                y: phone_bounds.origin.y + phone_bounds.size.height / 2.0,
+            };
+            let scale = CGAffineTransform::make_scale(
+                phone_bounds.size.width / archived_bounds.size.width,
+                phone_bounds.size.height / archived_bounds.size.height,
+            );
+            log!(
+                "Scaling iPad-sized archived root view {:?} into iPhone bounds {:?} while preserving archived bounds {:?}",
+                view,
+                phone_bounds,
+                archived_bounds,
+            );
+            () = msg![env; view setCenter:center];
+            () = msg![env; view setTransform:scale];
+            let normalized = &mut env
+                .framework_state
+                .uikit
+                .ui_view
+                .ui_window
+                .normalized_legacy_views;
+            if !normalized.iter().any(|(normalized_view, _)| *normalized_view == view) {
+                normalized.push((view, archived_bounds));
+            }
+        } else {
+            log!(
+                "Normalizing iPad-sized archived window {:?} to iPhone bounds {:?}",
+                view,
+                phone_bounds
+            );
+            () = msg![env; view setFrame:phone_bounds];
         }
     }
 }

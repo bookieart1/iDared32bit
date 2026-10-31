@@ -68,6 +68,14 @@ fn realloc(env: &mut Environment, ptr: MutVoidPtr, size: GuestUSize) -> MutVoidP
     env.mem.realloc(ptr, size)
 }
 
+fn reallocf(env: &mut Environment, ptr: MutVoidPtr, size: GuestUSize) -> MutVoidPtr {
+    // reallocf() differs from realloc() only when allocation fails: it frees
+    // the original pointer before returning NULL. touchHLE's guest allocator
+    // currently reports exhaustion by panicking rather than returning NULL,
+    // so successful calls have exactly the same behaviour as realloc().
+    realloc(env, ptr, size)
+}
+
 fn free(env: &mut Environment, ptr: MutVoidPtr) {
     // We need to catch situations of freeing NSObjects early!
     if env.objc.get_host_object(ptr.cast()).is_some() {
@@ -696,6 +704,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(calloc(_, _)),
     export_c_func!(valloc(_)),
     export_c_func!(realloc(_, _)),
+    export_c_func!(reallocf(_, _)),
     export_c_func!(free(_)),
     export_c_func!(atexit(_)),
     export_c_func!(atoi(_)),

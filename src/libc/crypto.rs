@@ -6,7 +6,7 @@
 //! CommonCrypto and friends
 
 use crate::dyld::FunctionExports;
-use crate::mem::{ConstVoidPtr, MutPtr, MutVoidPtr, SafeRead};
+use crate::mem::{ConstVoidPtr, GuestUSize, MutPtr, MutVoidPtr, SafeRead};
 use crate::{export_c_func, Environment};
 use aes::cipher::{generic_array::GenericArray as CipherArray, BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::{Aes128, Aes192, Aes256};
@@ -14,7 +14,7 @@ use digest::Digest;
 use md5::Md5;
 use sha1::Sha1;
 use sha2::digest::generic_array::GenericArray as DigestArray;
-use sha2::Sha256;
+use sha2::{Sha224, Sha256, Sha384, Sha512};
 use std::collections::HashMap;
 
 // TODO: struct definition
@@ -165,6 +165,76 @@ fn CC_SHA256_Final(env: &mut Environment, md: MutPtr<u8>, c: MutPtr<CC_SHA256_CT
     let digest = env.mem.read(c).finish();
     env.mem.bytes_at_mut(md, 32).copy_from_slice(&digest);
     1
+}
+
+fn hmac_digest<D: Digest + Default>(block_size: usize, key: &[u8], data: &[u8]) -> Vec<u8> {
+    let normalized_key = if key.len() > block_size {
+        D::digest(key).to_vec()
+    } else {
+        key.to_vec()
+    };
+
+    let mut inner_pad = vec![0x36; block_size];
+    let mut outer_pad = vec![0x5c; block_size];
+    for (idx, byte) in normalized_key.iter().enumerate() {
+        inner_pad[idx] ^= byte;
+        outer_pad[idx] ^= byte;
+    }
+
+    let mut inner = D::new();
+    inner.update(&inner_pad);
+    inner.update(data);
+    let inner_digest = inner.finalize();
+
+    let mut outer = D::new();
+    outer.update(&outer_pad);
+    outer.update(inner_digest);
+    outer.finalize().to_vec()
+}
+
+fn CCHmac(
+    env: &mut Environment,
+    algorithm: u32,
+    key: ConstVoidPtr,
+    key_length: GuestUSize,
+    data: ConstVoidPtr,
+    data_length: GuestUSize,
+    mac_out: MutVoidPtr,
+) {
+    // Values from CommonHMAC.h's CCHmacAlgorithm enum.
+    const K_CC_HMAC_ALG_SHA1: u32 = 0;
+    const K_CC_HMAC_ALG_MD5: u32 = 1;
+    const K_CC_HMAC_ALG_SHA256: u32 = 2;
+    const K_CC_HMAC_ALG_SHA384: u32 = 3;
+    const K_CC_HMAC_ALG_SHA512: u32 = 4;
+    const K_CC_HMAC_ALG_SHA224: u32 = 5;
+
+    assert!(!mac_out.is_null());
+    assert!(!key.is_null() || key_length == 0);
+    assert!(!data.is_null() || data_length == 0);
+
+    let key = if key_length == 0 {
+        Vec::new()
+    } else {
+        env.mem.bytes_at(key.cast(), key_length).to_vec()
+    };
+    let data = if data_length == 0 {
+        Vec::new()
+    } else {
+        env.mem.bytes_at(data.cast(), data_length).to_vec()
+    };
+    let digest = match algorithm {
+        K_CC_HMAC_ALG_SHA1 => hmac_digest::<Sha1>(64, &key, &data),
+        K_CC_HMAC_ALG_MD5 => hmac_digest::<Md5>(64, &key, &data),
+        K_CC_HMAC_ALG_SHA256 => hmac_digest::<Sha256>(64, &key, &data),
+        K_CC_HMAC_ALG_SHA384 => hmac_digest::<Sha384>(128, &key, &data),
+        K_CC_HMAC_ALG_SHA512 => hmac_digest::<Sha512>(128, &key, &data),
+        K_CC_HMAC_ALG_SHA224 => hmac_digest::<Sha224>(64, &key, &data),
+        _ => panic!("Unsupported CCHmac algorithm {algorithm}"),
+    };
+    env.mem
+        .bytes_at_mut(mac_out.cast(), digest.len().try_into().unwrap())
+        .copy_from_slice(&digest);
 }
 
 type CCCryptorStatus = i32;
@@ -331,5 +401,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CC_SHA256_Init(_)),
     export_c_func!(CC_SHA256_Update(_, _, _)),
     export_c_func!(CC_SHA256_Final(_, _)),
+    export_c_func!(CCHmac(_, _, _, _, _, _)),
     export_c_func!(CCCrypt(_, _, _, _, _, _, _, _, _, _, _)),
 ];
