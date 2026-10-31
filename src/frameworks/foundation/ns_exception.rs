@@ -76,12 +76,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     let name = if name == nil {
         "(unnamed)".to_owned()
     } else {
-        ns_string::to_rust_string(env, name)
+        ns_string::to_rust_string(env, name).into_owned()
     };
     let reason = if reason == nil {
         "(no reason)".to_owned()
     } else {
-        ns_string::to_rust_string(env, reason)
+        ns_string::to_rust_string(env, reason).into_owned()
     };
     log!("Warning: ignoring raised NSException {:?}: {:?}", name, reason);
 }
