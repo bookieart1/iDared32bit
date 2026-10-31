@@ -6657,6 +6657,23 @@ int test_NSKeyedArchiver_NSDictionary_of_NSArray_of_NSStrings() {
   return 0;
 }
 
+int test_NSKeyedArchiver_initForWritingWithMutableData() {
+  NSMutableData *data = [NSMutableData data];
+  NSKeyedArchiver *archiver = [[NSKeyedArchiver alloc]
+      initForWritingWithMutableData:data];
+  [archiver encodeObject:@"value" forKey:@"key"];
+  [archiver finishEncoding];
+
+  TEST_ASSERT([data length] > 0);
+  NSKeyedUnarchiver *unarchiver = [[NSKeyedUnarchiver alloc]
+      initForReadingWithData:data];
+  TEST_ASSERT([[unarchiver decodeObjectForKey:@"key"]
+      isEqualToString:@"value"]);
+  [unarchiver release];
+  [archiver release];
+  return 0;
+}
+
 int test_NSNumber_stringValue() {
   NSAutoreleasePool *pool = [NSAutoreleasePool new];
 
@@ -7797,6 +7814,7 @@ struct {
     FUNC_DEF(test_NSKeyedArchiver_encodeIntForKey),
     FUNC_DEF(test_NSKeyedArchiver_NSKeyedUnarchiver),
     FUNC_DEF(test_NSKeyedArchiver_NSDictionary_of_NSArray_of_NSStrings),
+    FUNC_DEF(test_NSKeyedArchiver_initForWritingWithMutableData),
     FUNC_DEF(test_AutoreleasePool),
     FUNC_DEF(test_NSNumber_stringValue),
     FUNC_DEF(test_NSMethodSignature),

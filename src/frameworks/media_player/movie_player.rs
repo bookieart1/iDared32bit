@@ -50,6 +50,10 @@ pub const MPMoviePlayerContentPreloadDidFinishNotification: &str =
     "MPMoviePlayerContentPreloadDidFinishNotification";
 pub const MPMoviePlayerScalingModeDidChangeNotification: &str =
     "MPMoviePlayerScalingModeDidChangeNotification";
+pub const MPMoviePlayerLoadStateDidChangeNotification: &str =
+    "MPMoviePlayerLoadStateDidChangeNotification";
+pub const MPMoviePlayerDidExitFullscreenNotification: &str =
+    "MPMoviePlayerDidExitFullscreenNotification";
 // TODO: More notifications?
 const MPMoviePlayerPlaybackDidFinishReasonUserInfoKey: &str =
     "MPMoviePlayerPlaybackDidFinishReasonUserInfoKey";
@@ -67,6 +71,14 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_MPMoviePlayerScalingModeDidChangeNotification",
         HostConstant::NSString(MPMoviePlayerScalingModeDidChangeNotification),
+    ),
+    (
+        "_MPMoviePlayerLoadStateDidChangeNotification",
+        HostConstant::NSString(MPMoviePlayerLoadStateDidChangeNotification),
+    ),
+    (
+        "_MPMoviePlayerDidExitFullscreenNotification",
+        HostConstant::NSString(MPMoviePlayerDidExitFullscreenNotification),
     ),
     (
         "_MPMoviePlayerPlaybackDidFinishReasonUserInfoKey",
@@ -196,7 +208,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let view: id = msg_class![env; UIView alloc];
     let view: id = msg![env; view initWithFrame:frame];
     env.objc.borrow_mut::<MPMoviePlayerControllerHostObject>(this).view = view;
-    log_dbg!(
+    log!(
         "[(MPMoviePlayerController*){:?} view] created {:?}",
         this,
         view

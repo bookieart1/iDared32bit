@@ -28,6 +28,7 @@ use crate::Environment;
 struct NSKeyedArchiverHostObject {
     plist: Dictionary,
     encoded_data: id, // NSData *
+    output_data: id,  // NSMutableData * supplied to initForWritingWithMutableData:
     current_key: Option<Uid>,
     /// map of id => Uid
     already_archived: HashMap<id, Uid>,
@@ -54,9 +55,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, Box::new(NSKeyedArchiverHostObject {
         plist,
         encoded_data: nil,
+        output_data: nil,
         current_key: None,
         already_archived
     }), &mut env.mem)
+}
+
+- (id)initForWritingWithMutableData:(id)data { // NSMutableData *
+    if data == nil {
+        release(env, this);
+        return nil;
+    }
+    retain(env, data);
+    let old_output_data = {
+        let host_object = env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this);
+        std::mem::replace(&mut host_object.output_data, data)
+    };
+    release(env, old_output_data);
+    this
 }
 
 + (id)archivedDataWithRootObject:(id)root_object { // NSCoding *
@@ -117,8 +133,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     let guest_buffer = env.mem.alloc(len);
     env.mem.bytes_at_mut(guest_buffer.cast(), len).copy_from_slice(&buffer[..]);
     let encoded_data: id = msg_class![env; NSData dataWithBytesNoCopy:guest_buffer length:len];
-    env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this).encoded_data = encoded_data;
+    let (old_encoded_data, output_data) = {
+        let host_object = env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this);
+        let old_encoded_data = std::mem::replace(&mut host_object.encoded_data, encoded_data);
+        (old_encoded_data, host_object.output_data)
+    };
     retain(env, encoded_data);
+    release(env, old_encoded_data);
+
+    if output_data != nil {
+        () = msg![env; output_data setLength:0u32];
+        () = msg![env; output_data appendData:encoded_data];
+    }
 }
 
 - (id)encodedData {
@@ -129,8 +155,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let NSKeyedArchiverHostObject { encoded_data, .. } = *env.objc.borrow::<NSKeyedArchiverHostObject>(this);
+    let NSKeyedArchiverHostObject { encoded_data, output_data, .. } = *env.objc.borrow::<NSKeyedArchiverHostObject>(this);
     release(env, encoded_data);
+    release(env, output_data);
     env.objc.dealloc_object(this, &mut env.mem);
 }
 

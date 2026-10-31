@@ -53,6 +53,27 @@ fn dlsym(env: &mut Environment, handle: MutVoidPtr, symbol: ConstPtr<u8>) -> Mut
     );
     // For some reason, the symbols passed to dlsym() don't have the leading _.
     let symbol = format!("_{}", env.mem.cstr_at_utf8(symbol).unwrap());
+
+    // RTLD_DEFAULT searches the process-wide symbol scope. That includes the
+    // main executable and its loaded guest dylibs, not only the iPhone OS
+    // functions implemented by touchHLE. Older Unity players use this path for
+    // native functions exported by their own executable (via __Internal P/Invoke).
+    // The Mach-O loader has already applied the image slide and preserved the
+    // Thumb bit in exported_symbols, so the address can be returned directly.
+    if handle == RTLD_DEFAULT {
+        if let Some((binary, &addr)) = env
+            .bins
+            .iter()
+            .find_map(|binary| binary.exported_symbols.get(&symbol).map(|addr| (binary, addr)))
+        {
+            log_dbg!(
+                "dlsym(RTLD_DEFAULT, {symbol}) resolved to guest symbol at {addr:#x} in {}",
+                binary.name,
+            );
+            return Ptr::from_bits(addr);
+        }
+    }
+
     // TODO: Symbol lookup should be scoped to the specific library requested,
     // where appropriate!
     let addr = match env
