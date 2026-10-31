@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: October 31, 2026
-Latest device-tested checkpoint: **iDared Dev 1.67** (`9159a0a6`)
-Latest built checkpoint: **iDared Dev 1.68** (`28368024`)
-Current activity: **Dev 1.68 implements the two shared contracts exposed by B'Blast and Addicus and replaces the pathological `qsort` identified during Blot's slowdown. Hosted library tests and the unsigned iPhone package build pass; physical-device verification is pending.**
+Latest device-tested checkpoint: **iDared Dev 1.68** (`28368024`)
+Latest built checkpoint: **iDared Dev 1.69** (`acf10ae9`)
+Current activity: **Dev 1.69 adds fixed-GMT time-zone display names and an explicitly offline CFHost surface for the next B'Blast and Addicus blockers. Hosted library tests and the unsigned iPhone package build pass; focused physical-device verification is pending.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -2471,3 +2471,106 @@ and interact briefly if it advances; in Blot run Classic for about 15 seconds,
 return to the menu, open Challenges, press Back and wait about 30 seconds; then
 use Spoing as the control by completing one level, exiting with emulator Home,
 reopening and confirming progress. Return the combined log and visible results.
+
+### Dev 1.68 device result: Blot fixed; two later shared contracts recovered
+
+The combined log identifies source `2836802` and workflow `41221870864`, which
+matches the independently verified Dev 1.68 IPA. B'Blast and Addicus each ran
+twice and stopped at the same new boundary on both runs. Blot and Spoing were
+also exercised without save deletion.
+
+| App | User-visible result | Decisive evidence | Status / next contract |
+|---|---|---|---|
+| B'Blast | Same tiny audio fragment, black screen and termination as before. | The new ARM architecture lookup is consumed. Both launches next send `localizedName:locale:` to a valid `NSTimeZone`, with style `1` (short standard) and a non-nil locale, then stop because the selector is absent. | **Advanced internally, still blocked.** Within touchHLE's existing fixed-GMT time-zone model, the next shared Foundation contract is deterministic. The unchanged visible symptom is not evidence that Dev 1.68 had no effect. |
+| Addicus | Publisher logo and, for the first time, the main menu appeared briefly before termination. | The new PNG representation is consumed. Rendering reaches the main loop and EAGL presentation. Google Analytics then creates `GANTCPSocket` and calls `connect:port:` with port 80 immediately before `_CFHostCreateWithName` is requested. | **Visible and internal advance, still blocked.** The first new blocker is an optional analytics/DNS path, not evidence that gameplay initialization itself failed. A correction must model an unavailable resolver honestly rather than claim a successful network connection. |
+| Blot | Classic, menu return, Challenges and Back remained smooth despite repeated menu interaction; the old persistent audiovisual slowdown could not be triggered. | The session ran about 95 seconds, returned through emulator Home, and recorded no sustained slow-present transition. | **Functionally fixed in the tested scope.** The general iterative `qsort` replacement is now device-verified for the captured Blot regression. This does not prove every Blot mode or every C comparator workload. |
+| Spoing | Brief play remained normal; no full level completion or save/relaunch check was performed in this pass. | The recorder ran for roughly 25 seconds and the app returned normally through emulator Home without a panic. | **Partial regression observation only.** Earlier complete level/save checks remain historical evidence; this pass does not replace them. |
+
+The result supports the Dev 1.68 model: all three intended old boundaries
+disappeared, Blot's captured `qsort` bottleneck was causal, and the two still
+failing apps exposed later independent APIs. No game-specific response or
+weakened crash handling is justified by this log.
+
+## Dev 1.69 time-zone naming and offline CFHost surface
+
+This batch is restricted to the two contracts established by the Dev 1.68
+device log. It contains no new Blot change and no diagnostic-system change.
+
+- **B'Blast / `NSTimeZone -localizedName:locale:` (partial contract within an
+  existing model):** implement all six historical `NSTimeZoneNameStyle`
+  values. touchHLE already deliberately represents every zone as fixed GMT,
+  so each valid style returns `GMT`; an unknown style returns nil. The locale
+  does not change the spelling of GMT in this limited model. This is general
+  Foundation behavior and contains no B'Blast check. It does not add a time
+  zone database, daylight-saving rules, or host-device time-zone leakage.
+- **Addicus / CFHost lifecycle and explicit offline resolution (partial
+  contract):** add an owned CFHost object for `CFHostCreateWithName` and
+  `CFHostCreateCopy`, including correct name retention and CFRelease-compatible
+  teardown. The tightly connected client/scheduling/start/get/cancel surface is
+  present so callers can handle unavailability without falling into another
+  missing-symbol panic. Non-null asynchronous client registration returns
+  false, resolution start returns false with POSIX `ENETUNREACH`, and result
+  getters return nil with `hasBeenResolved == false`. No address, successful
+  callback, DNS lookup, socket or network access is fabricated. Run-loop
+  schedule calls have no work after client registration has been rejected.
+- **Implementation status:** the time-zone result is exact only within the
+  emulator's pre-existing GMT-only boundary. CFHost is an intentionally
+  offline partial contract, not a resolver implementation. It should let
+  optional service code disable itself; software requiring working DNS remains
+  unsupported. Neither implementation checks a bundle identifier.
+
+Focused unit tests cover all six time-zone styles plus invalid-style rejection,
+and CFHost creation, retained name, explicit resolution failure/error, and
+unresolved addressing state. Changed-file formatting and whitespace checks
+pass. The local Windows environment still lacks MSVC `link.exe`; its dependency
+cache was refreshed successfully, but no local compiled-test pass is claimed.
+
+Predictions: B'Blast should leave the recorded time-zone call and expose its
+next independent boundary or render further. Addicus should reach and handle a
+legitimate offline analytics result; if the SDK requires asynchronous resolver
+callbacks even for failure, that limitation should become explicit rather than
+being hidden by a fake success. Blot should remain smooth and Spoing remains a
+focused working control.
+
+### Dev 1.69 hosted validation and package verification
+
+- Implementation commit `8d5a2af4a3551b58f06d85d61381a5ea652ede5a`
+  added the two contracts. Its first hosted test run (`41246604591`) caught a
+  test-only `&str`/`String` compile mismatch. Commit `0d464376` corrected that;
+  the next test run (`41246902706`) compiled and ran 101 tests, exposing a
+  signed/unsigned ABI mismatch only in the new time-zone test loop. Final source
+  commit `acf10ae95011950b1028caa4a082bf7f5e0bfcad` corrected the fixture to
+  use the method's `NSUInteger` ABI. No production behavior changed in either
+  follow-up.
+- Final lint/test workflow `41247250362` (run 48) completed successfully. The
+  macOS and Windows development-branch library suites each passed all 101
+  tests; the macOS diagnostic reproducer step also passed. The release-only
+  full-app test, legacy sanity-test and formatting steps were configured skips.
+  The development branch's allowed-to-fail lint script still stops at two
+  pre-existing long comment lines in `dlfcn.rs` and `ns_dictionary.rs`, so this
+  run does not claim clippy, rustdoc or Android compilation.
+- Unsigned-iPhone workflow `41247250422` (run 113) completed successfully,
+  including iOS compilation, separate development identity verification,
+  unsigned packaging and artifact upload. Earlier artifacts from the two
+  superseded test-fixture commits were not handed off.
+- Artifact `13060195873`,
+  `iDared32bit-dev-unsigned-acf10ae95011950b1028caa4a082bf7f5e0bfcad`, is
+  19,830,601 bytes. Its downloaded ZIP SHA-256 exactly matches GitHub's digest:
+  `726089DA14E2BC737ED7DCE349930E8302638E48E90831735B6A0E3A651E4A6F`.
+- The extracted IPA is 19,877,048 bytes with SHA-256
+  `6A0FF9E5B60ADC7009CA484F1EC94449ECD5DEA8E1731C28E7AFC6C3BA7011E2`.
+  All 36 ZIP entries read successfully. It identifies as
+  `com.bookieart1.idared32bit.dev` / `iDared Dev`, contains an arm64 Mach-O,
+  embeds source prefix `acf10ae`, workflow `41247250422`, the expected branch
+  and repository, and contains neither `_CodeSignature` nor
+  `embedded.mobileprovision`.
+- Local handoff: `outputs/iDared-Dev-1.69.ipa`; complete package evidence is in
+  `outputs/iDared-Dev-1.69.verification.json`.
+
+Focused device test: install over the development app without deleting its
+container. Launch B'Blast once and report whether it advances beyond the black
+screen. Launch Addicus, leave its menu untouched for about 20 seconds, then
+start a game and return to the menu if it remains open. Repeat Blot's
+Classic→menu→Challenges→Back path once as the regression check. Brief Spoing
+play is sufficient as the working control; a full level is not required in
+this pass. Return the combined log and visible results.
