@@ -23,8 +23,8 @@ use crate::fs::{Fs, GuestPath};
 use crate::mem::{GuestUSize, Mem, Ptr};
 use mach_object::{
     cpu_subtype_t, vm_prot_t, Bind, BindSymbolType, DyLib, LoadCommand, MachCommand, OFile, Rebase,
-    Symbol, SymbolIter, ThreadState, N_ARM_THUMB_DEF, S_LAZY_SYMBOL_POINTERS,
-    S_MOD_INIT_FUNC_POINTERS, S_NON_LAZY_SYMBOL_POINTERS, S_SYMBOL_STUBS,
+    ExportKind, ExportTrie, LinkEditData, Symbol, SymbolIter, ThreadState, N_ARM_THUMB_DEF,
+    S_LAZY_SYMBOL_POINTERS, S_MOD_INIT_FUNC_POINTERS, S_NON_LAZY_SYMBOL_POINTERS, S_SYMBOL_STUBS,
 };
 use std::collections::HashMap;
 use std::io::{Cursor, Seek, SeekFrom};
@@ -33,6 +33,56 @@ const VM_PROT_READ: vm_prot_t = 1;
 const VM_PROT_WRITE: vm_prot_t = 2;
 #[allow(dead_code)]
 const VM_PROT_EXECUTE: vm_prot_t = 4;
+
+fn add_export_trie_symbols(
+    bytes: &[u8],
+    export_off: u32,
+    export_size: u32,
+    image_base: u32,
+    exported_symbols: &mut HashMap<String, u32>,
+) -> Result<(), &'static str> {
+    if export_size == 0 {
+        return Ok(());
+    }
+
+    let start: usize = export_off.try_into().unwrap();
+    let size: usize = export_size.try_into().unwrap();
+    let end = start
+        .checked_add(size)
+        .ok_or("Mach-O export trie range overflow")?;
+    let payload = bytes
+        .get(start..end)
+        .ok_or("Mach-O export trie is outside the file")?;
+    let trie = ExportTrie::parse(payload).map_err(|_| "Could not parse Mach-O export trie")?;
+
+    for export in trie.symbols() {
+        let Some(address) = export.address() else {
+            // Re-exports are resolved through the referenced dylib rather than
+            // by an address in this image.
+            log_dbg!("Ignoring re-exported Mach-O symbol {}", export.name);
+            continue;
+        };
+        let address: u32 = address
+            .try_into()
+            .map_err(|_| "Mach-O export address does not fit in 32 bits")?;
+        let address = match export.kind {
+            // Absolute exports are not relative to the Mach-O image and must
+            // not move when the image is slid.
+            ExportKind::Absolute => address,
+            ExportKind::Regular | ExportKind::ThreadLocal => image_base
+                .checked_add(address)
+                .ok_or("Mach-O export address overflow")?,
+        };
+
+        // Prefer an LC_SYMTAB definition when both sources contain the same
+        // name. That path also applies N_ARM_THUMB_DEF from n_desc, whereas
+        // the export trie is primarily needed for stripped executables whose
+        // dynamic exports are absent from the classic symbol table.
+        exported_symbols.entry(export.name).or_insert(address);
+    }
+
+    Ok(())
+}
 
 #[derive(Debug)]
 pub struct MachO {
@@ -589,6 +639,8 @@ impl MachO {
                     rebase_size,
                     bind_off,
                     bind_size,
+                    export_off,
+                    export_size,
                     ..
                 } => {
                     let rebase_opcodes = Rebase::parse(
@@ -638,6 +690,23 @@ impl MachO {
                             ),
                         }
                     }
+
+                    add_export_trie_symbols(
+                        bytes,
+                        export_off,
+                        export_size,
+                        text_segment_base.unwrap(),
+                        &mut exported_symbols,
+                    )?;
+                }
+                LoadCommand::DyldExportsTrie(LinkEditData { off, size }) => {
+                    add_export_trie_symbols(
+                        bytes,
+                        off,
+                        size,
+                        text_segment_base.unwrap(),
+                        &mut exported_symbols,
+                    )?;
                 }
                 _ => (),
             }

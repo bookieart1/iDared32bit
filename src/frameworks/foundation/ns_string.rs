@@ -576,6 +576,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this dataUsingEncoding:encoding allowLossyConversion:false]
 }
 
+- (bool)canBeConvertedToEncoding:(NSStringEncoding)encoding {
+    // Foundation answers whether a lossless conversion of the whole string is
+    // possible. Use the abstract NSString primitives rather than assuming the
+    // receiver is one of touchHLE's concrete string classes.
+    let length: NSUInteger = msg![env; this length];
+    let units: Vec<u16> = (0..length)
+        .map(|index| msg![env; this characterAtIndex:index])
+        .collect();
+    encode_utf16_units(&units, encoding, false, false).is_some()
+}
+
 // These are the two methods that have to be overridden by subclasses, so these
 // implementations don't have to care about foreign subclasses.
 - (NSUInteger)length {

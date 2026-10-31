@@ -1663,6 +1663,32 @@ impl Environment {
                 );
             }
 
+            if let Some(binary) = self.bins.iter().find(|binary| {
+                binary
+                    .text_segment_base
+                    .is_some_and(|base| base <= pc && pc < binary.last_segment_end)
+            }) {
+                let nearest = binary
+                    .exported_symbols
+                    .iter()
+                    .filter(|(_, &address)| (address & !1) <= pc)
+                    .max_by_key(|(_, &address)| address & !1);
+                if let Some((name, &address)) = nearest {
+                    log_no_panic!(
+                        "CPU memory-fault nearest symbol: {}!{} at {:#010x} (+{:#x})",
+                        binary.name,
+                        name,
+                        address,
+                        pc.saturating_sub(address & !1),
+                    );
+                } else {
+                    log_no_panic!(
+                        "CPU memory-fault image: {} (no preceding symbol available)",
+                        binary.name,
+                    );
+                }
+            }
+
             // A guest null dereference often follows a host API returning nil.
             // Report any Objective-C objects in the argument registers and a
             // selector-shaped R1 so a physical-device log can identify that
