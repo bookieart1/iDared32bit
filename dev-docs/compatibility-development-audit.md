@@ -5,6 +5,8 @@ This is a diagnostic-only change. Device validation of Dev 1.66 is pending.
 The detailed dated device evidence remains in the workspace's
 `outputs/iDared-tested-app-compatibility-ledger.md` and its two narrative audits
 and launch/app/error CSVs. They are historical evidence, not current pass lists.
+The audit samples the full accessible history and relevant implementations; it
+does not claim an exhaustive correctness review of every framework method.
 
 ## What the project actually is
 
@@ -34,6 +36,8 @@ it cannot all be credited to our compatibility iterations.
 | Area | Evidence and interpretation |
 | --- | --- |
 | Shared Foundation/runtime contracts | Earlier batches added collection, KVC, coding, date/string, URL and runtime APIs. The dated longitudinal audit found multiple apps advancing beyond prior blockers. Absence of a panic alone was never proof of working gameplay. Large batches prevent precise per-commit causal attribution. |
+| Older persistence and VM work | The Spoing series crossed numeric/string archiving, calendars and POSIX/VM errors before confirmed play and persistence. Diversion advanced after missing-symbol handling and local ubiquitous key-value storage. These are aggregate observations, not proof that each commit independently caused an improvement. Local ubiquitous storage is not iCloud synchronization. |
+| Memory fidelity | The flat memory model does not enforce per-page mprotect permissions. The added mprotect success response is therefore a limited accommodation, not a faithful protection contract. mmap/Mach VM bookkeeping and allocator state have separate overlapping-range handling; partial-range tests should verify that surviving ranges remain discoverable. The new recorder neither changes these behaviors nor treats readable memory as proof of live allocation. |
 | UIKit and transitions | Menu/controller/animation/table changes across Dev 1.53–1.61 culminated in user-confirmed Spirits menus, gameplay, transitions and save/relaunch. The old tutorial-start crash is now an obsolete test premise. Table/slider/movie support remains incomplete outside that scope. |
 | Networking/resource distinction | General NSURLRequest/NSURL implementations exposed Bounce's previously unreachable Burstly startup paths: a real regression in usable behavior. Dev 1.62 URL scheme support restored the earlier partial behavior. Dev 1.63 local-file NSURLConnection support was followed by confirmed Bulba gameplay and persistence. Offline remote connections and actual local resources must not be conflated. |
 | Audio | Early AudioQueue success/silence placeholders did not establish playback. Subsequent queued decoding was materially different. Missing audio needs initialization, buffer consumption and output evidence, not merely successful return codes. |

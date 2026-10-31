@@ -419,10 +419,9 @@ mod tests {
     }
     #[test]
     fn invalid_pointers_and_interleaved_returns_are_observational() {
-        let mut env = Environment::new_fake_for_test();
         // A real Mach-O load reserves its null segment; the bare test
         // Environment intentionally does not load a binary.
-        env.mem.set_null_segment_size(0x1000);
+        let mut env = Environment::new_fake_for_test_with_null_segment(0x1000);
         env.cpu.regs_mut()[0..4].copy_from_slice(&[0, 6, 0, 4]);
         let before = *env.cpu.regs();
         assert!(env.diagnostic_api_begin("_sysctl").is_none());

@@ -1980,8 +1980,17 @@ impl Environment {
 
     #[cfg(test)]
     pub fn new_fake_for_test() -> Self {
+        Self::new_fake_for_test_with_null_segment(0)
+    }
+
+    #[cfg(test)]
+    pub fn new_fake_for_test_with_null_segment(null_segment_size: u32) -> Self {
         let options = options::Options::default();
         let mut mem = mem::Mem::new();
+        // Reserve before dyld allocates its stubs, as a Mach-O load does.
+        if null_segment_size != 0 {
+            mem.set_null_segment_size(null_segment_size);
+        }
         let mut objc = objc::ObjC::new();
         let mut dyld = dyld::Dyld::new();
         dyld.do_initial_linking_with_no_bins(&mut mem, &mut objc);
