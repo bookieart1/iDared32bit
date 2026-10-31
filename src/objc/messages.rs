@@ -301,7 +301,11 @@ fn objc_msgSend_inner(
     }
 
     let orig_class = super2.unwrap_or_else(|| ObjC::read_isa(receiver, &env.mem));
-    assert!(orig_class != nil);
+    assert!(
+        orig_class != nil,
+        "Cannot send selector {:?} to receiver {receiver:?}: its isa is nil (the object may have been deallocated or corrupted)",
+        selector.as_str(&env.mem)
+    );
     if !skip_initialize {
         maybe_initialize_class(env, receiver);
     }

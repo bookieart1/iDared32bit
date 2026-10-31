@@ -19,8 +19,8 @@ use super::cg_geometry::CGPointZero;
 use super::cg_image::CGImageRef;
 use super::cg_path::{
     kCGLineCapButt, kCGLineCapRound, kCGLineCapSquare, kCGPathElementAddLineToPoint,
-    kCGPathElementMoveToPoint, CGLineCap, CGMutablePathHostObject, CGMutablePathRef,
-    CGPathCreateMutable, CGPathElement,
+    kCGPathElementCloseSubpath, kCGPathElementMoveToPoint, CGLineCap,
+    CGMutablePathHostObject, CGMutablePathRef, CGPathCreateMutable, CGPathElement,
 };
 use super::{cg_bitmap_context, cg_color, CGFloat, CGPoint, CGRect, CGSize};
 use crate::dyld::{export_c_func, FunctionExports};
@@ -663,29 +663,29 @@ fn CGContextStrokePath(env: &mut Environment, context: CGContextRef) {
         .path_elements
         .clone();
 
-    let mut subpath: Vec<&CGPathElement> = vec![];
-    let mut subpath_index = 0;
+    let mut current_point = None;
+    let mut subpath_start = None;
 
     for elem in path_elements {
-        // NOTE: Arcs should have more than 1 point in the array,
-        //       but we don't support them yet
-        assert!(elem.points.len() < 2);
-
         if elem.r#type == kCGPathElementMoveToPoint {
-            subpath.push(elem);
-            subpath_index += 1;
-        } else if elem.r#type == kCGPathElementAddLineToPoint {
-            subpath.push(elem);
-
-            let point_0 = subpath[subpath_index - 1].points.first().unwrap();
-            let point_1 = subpath[subpath_index].points.first().unwrap();
+            current_point = elem.points.first().copied();
+            subpath_start = current_point;
+        } else {
+            let next_point = match elem.r#type {
+                kCGPathElementAddLineToPoint => elem.points.first().copied(),
+                kCGPathElementCloseSubpath => subpath_start,
+                _ => unimplemented!(),
+            };
+            let (Some(point_0), Some(point_1)) = (current_point, next_point) else {
+                continue;
+            };
 
             draw_rect_with_line_cap(
                 env,
                 context,
                 line_cap,
                 CGRect {
-                    origin: *point_0,
+                    origin: point_0,
                     size: line_size,
                 },
             );
@@ -716,15 +716,12 @@ fn CGContextStrokePath(env: &mut Environment, context: CGContextRef) {
                 context,
                 line_cap,
                 CGRect {
-                    origin: *point_1,
+                    origin: point_1,
                     size: line_size,
                 },
             );
 
-            subpath_index += 1;
-        } else {
-            // TODO: Add the other drawing types
-            unimplemented!();
+            current_point = Some(point_1);
         }
     }
 

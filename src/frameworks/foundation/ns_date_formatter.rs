@@ -217,20 +217,25 @@ fn format_date(format: &str, date: &CFGregorianDate, weekday: usize) -> String {
         out += &match c {
             'y' | 'Y' if n == 2 => format!("{:02}", date.year % 100),
             'y' | 'Y' => num(date.year),
-            'M' if n >= 4 => month.to_string(),
-            'M' if n == 3 => month[..3].to_string(),
-            'M' => num(date.month.into()),
+            'M' | 'L' if n == 5 => month[..1].to_string(),
+            'M' | 'L' if n == 4 => month.to_string(),
+            'M' | 'L' if n == 3 => month[..3].to_string(),
+            'M' | 'L' if n <= 2 => num(date.month.into()),
             'd' => num(date.day.into()),
             'H' => num(date.hours.into()),
             'h' => num(hour12),
             'm' => num(date.minutes.into()),
             's' => num(date.seconds as i32),
             'a' => (if date.hours < 12 { "AM" } else { "PM" }).to_string(),
-            'E' if n >= 4 => DAYS[weekday].to_string(),
-            'E' => DAYS[weekday][..3].to_string(),
+            'E' if n == 6 => DAYS[weekday][..2].to_string(),
+            'E' if n == 5 => DAYS[weekday][..1].to_string(),
+            'E' if n == 4 => DAYS[weekday].to_string(),
+            'E' if n <= 3 => DAYS[weekday][..3].to_string(),
             // Stand-alone local day of week. The formatter currently models
             // en_US, whose local numeric week starts on Sunday.
-            'c' if n >= 4 => DAYS[weekday].to_string(),
+            'c' if n == 6 => DAYS[weekday][..2].to_string(),
+            'c' if n == 5 => DAYS[weekday][..1].to_string(),
+            'c' if n == 4 => DAYS[weekday].to_string(),
             'c' if n == 3 => DAYS[weekday][..3].to_string(),
             'c' => num(weekday as i32 + 1),
             // Dates are worked out in UTC (see CFAbsoluteTimeGetGregorianDate).
@@ -262,7 +267,8 @@ mod tests {
         assert_eq!(f("M/d/yy h:mm a"), "7/4/09 3:05 PM");
         assert_eq!(f("MMM d, yyyy h:mm:ss a"), "Jul 4, 2009 3:05:09 PM");
         assert_eq!(f("EEEE, MMMM d, yyyy"), "Saturday, July 4, 2009");
-        assert_eq!(f("c cc ccc cccc"), "7 07 Sat Saturday");
+        assert_eq!(f("L LL LLL LLLL LLLLL"), "7 07 Jul July J");
+        assert_eq!(f("c cc ccc cccc ccccc cccccc"), "7 07 Sat Saturday S Sa");
         assert_eq!(f("'at' HH 'o''clock'"), "at 15 o'clock");
     }
 }

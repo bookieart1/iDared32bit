@@ -33,6 +33,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 pub type CGPathElementType = i32;
 pub const kCGPathElementMoveToPoint: CGPathElementType = 0;
 pub const kCGPathElementAddLineToPoint: CGPathElementType = 1;
+pub const kCGPathElementCloseSubpath: CGPathElementType = 4;
 
 pub type CGLineCap = i32;
 pub const kCGLineCapButt: CGLineCap = 0; // Default
@@ -113,6 +114,51 @@ pub fn CGPathAddLineToPoint(
     add_element(env, path, kCGPathElementAddLineToPoint, point);
 }
 
+fn current_and_subpath_start(
+    path_elements: &[CGPathElement],
+) -> (Option<CGPoint>, Option<CGPoint>) {
+    let mut current = None;
+    let mut subpath_start = None;
+    for element in path_elements {
+        match element.r#type {
+            kCGPathElementMoveToPoint => {
+                current = element.points.first().copied();
+                subpath_start = current;
+            }
+            kCGPathElementAddLineToPoint => current = element.points.first().copied(),
+            kCGPathElementCloseSubpath => current = subpath_start,
+            _ => unreachable!(),
+        }
+    }
+    (current, subpath_start)
+}
+
+/// Close the current subpath. As in Core Graphics, the close element itself
+/// contains no points; consumers use the latest move-to point to materialize
+/// the closing segment.
+pub fn CGPathCloseSubpath(env: &mut Environment, path: CGMutablePathRef) {
+    let can_close = {
+        let host_object = env.objc.borrow::<CGMutablePathHostObject>(path);
+        !host_object
+            .path_elements
+            .last()
+            .is_some_and(|element| element.r#type == kCGPathElementCloseSubpath)
+            && current_and_subpath_start(&host_object.path_elements)
+                .1
+                .is_some()
+    };
+
+    if can_close {
+        env.objc
+            .borrow_mut::<CGMutablePathHostObject>(path)
+            .path_elements
+            .push(CGPathElement {
+                points: Vec::new(),
+                r#type: kCGPathElementCloseSubpath,
+            });
+    }
+}
+
 /// Add a line followed by the circular arc tangent to the lines from the
 /// current point to `point1` and from `point1` to `point2`.
 ///
@@ -131,13 +177,12 @@ pub fn CGPathAddArcToPoint(
 ) {
     let point1 = transformed(env, m, CGPoint { x: x1, y: y1 });
     let point2 = transformed(env, m, CGPoint { x: x2, y: y2 });
-    let current = env
-        .objc
-        .borrow::<CGMutablePathHostObject>(path)
-        .path_elements
-        .last()
-        .and_then(|element| element.points.last())
-        .copied();
+    let current = current_and_subpath_start(
+        &env.objc
+            .borrow::<CGMutablePathHostObject>(path)
+            .path_elements,
+    )
+    .0;
 
     let Some(current) = current else {
         add_element(env, path, kCGPathElementMoveToPoint, point1);
@@ -272,21 +317,25 @@ pub fn CGPathAddLines(
     }
 }
 
-/// The points of a path made only of moves and lines, for keyframe
-/// animations. Panics on other elements, which aren't supported yet.
+/// The points of a flattened path made of moves, lines and closed subpaths,
+/// for keyframe animations. A close operation contributes the subpath's first
+/// point so interpolation follows the closing segment.
 pub fn path_points(env: &Environment, path: CGMutablePathRef) -> Vec<CGPoint> {
     let host_obj = env.objc.borrow::<CGMutablePathHostObject>(path);
-    host_obj
-        .path_elements
-        .iter()
-        .map(|elem| {
-            assert!(matches!(
-                elem.r#type,
-                kCGPathElementMoveToPoint | kCGPathElementAddLineToPoint
-            ));
-            elem.points[0]
-        })
-        .collect()
+    let mut points = Vec::new();
+    let mut subpath_start = None;
+    for element in &host_obj.path_elements {
+        match element.r#type {
+            kCGPathElementMoveToPoint => {
+                subpath_start = element.points.first().copied();
+                points.extend(subpath_start);
+            }
+            kCGPathElementAddLineToPoint => points.extend(element.points.first().copied()),
+            kCGPathElementCloseSubpath => points.extend(subpath_start),
+            _ => unreachable!(),
+        }
+    }
+    points
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -295,6 +344,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGPathRelease(_)),
     export_c_func!(CGPathMoveToPoint(_, _, _, _)),
     export_c_func!(CGPathAddLineToPoint(_, _, _, _)),
+    export_c_func!(CGPathCloseSubpath(_)),
     export_c_func!(CGPathAddArcToPoint(_, _, _, _, _, _, _)),
     export_c_func!(CGPathAddLines(_, _, _, _)),
 ];
@@ -330,6 +380,32 @@ mod tests {
                 1.0,
             ),
             vec![CGPoint { x: 1.0, y: 0.0 }]
+        );
+    }
+
+    #[test]
+    fn close_element_has_no_points_and_restores_subpath_start() {
+        assert_eq!(kCGPathElementCloseSubpath, 4);
+        let elements = vec![
+            CGPathElement {
+                points: vec![CGPoint { x: 2.0, y: 3.0 }],
+                r#type: kCGPathElementMoveToPoint,
+            },
+            CGPathElement {
+                points: vec![CGPoint { x: 5.0, y: 7.0 }],
+                r#type: kCGPathElementAddLineToPoint,
+            },
+            CGPathElement {
+                points: Vec::new(),
+                r#type: kCGPathElementCloseSubpath,
+            },
+        ];
+        assert_eq!(
+            current_and_subpath_start(&elements),
+            (
+                Some(CGPoint { x: 2.0, y: 3.0 }),
+                Some(CGPoint { x: 2.0, y: 3.0 })
+            )
         );
     }
 }

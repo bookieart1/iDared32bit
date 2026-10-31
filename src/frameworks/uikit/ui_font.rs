@@ -11,7 +11,7 @@ use crate::frameworks::core_graphics::cg_bitmap_context::CGBitmapContextDrawer;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string::to_rust_string;
 use crate::frameworks::foundation::NSInteger;
-use crate::objc::{autorelease, id, msg, objc_classes, ClassExports, HostObject};
+use crate::objc::{autorelease, id, msg, msg_super, objc_classes, ClassExports, HostObject};
 use crate::Environment;
 use std::collections::HashMap;
 use std::ops::Range;
@@ -25,6 +25,8 @@ pub(super) struct State {
     /// The names of the fonts the app bundles, in `fonts` as
     /// [FontKind::App], or [None] if they're not loaded yet.
     app_font_names: Option<Vec<Vec<String>>>,
+    /// Recently deallocated fonts, retained only as bounded diagnostic data.
+    deallocated_fonts: Vec<DeallocatedFont>,
 }
 impl State {
     fn get_font_by_kind(&mut self, font_kind: FontKind) -> &Font {
@@ -49,7 +51,7 @@ impl State {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 enum FontKind {
     MonoRegular,
     MonoBold,
@@ -66,6 +68,13 @@ enum FontKind {
     MarkerFelt,
     /// A font the app bundles, by its index in `UIAppFonts`.
     App(usize),
+}
+
+#[derive(Copy, Clone)]
+struct DeallocatedFont {
+    object: id,
+    size: CGFloat,
+    kind: FontKind,
 }
 
 struct UIFontHostObject {
@@ -103,6 +112,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 (env, this, _cmd);
 
 @implementation UIFont: NSObject
+
+- (())dealloc {
+    let font = env.objc.borrow::<UIFontHostObject>(this);
+    let diagnostic = DeallocatedFont {
+        object: this,
+        size: font.size,
+        kind: font.kind,
+    };
+    let diagnostics = &mut env.framework_state.uikit.ui_font.deallocated_fonts;
+    const MAX_DEALLOCATED_FONT_DIAGNOSTICS: usize = 32;
+    if diagnostics.len() == MAX_DEALLOCATED_FONT_DIAGNOSTICS {
+        diagnostics.remove(0);
+    }
+    diagnostics.push(diagnostic);
+    msg_super![env; this dealloc]
+}
 
 // Values are checked against iPhone 3GS, iOS 4.0.1
 + (CGFloat)labelFontSize {
@@ -280,23 +305,36 @@ fn get_font<'a>(state: &'a mut State, kind: FontKind, text: &str) -> &'a Font {
     state.get_font_by_kind(kind)
 }
 
-/// Read a UIFont's rendering properties, recovering conservatively when an
-/// old app keeps an unretained UIFont beyond an autorelease-pool boundary.
-/// UIKit historically cached many UIFont instances, and some legacy apps
-/// accidentally depended on that lifetime. A system-font fallback is safer
-/// than aborting the emulator for this presentation-only object.
+/// Read a UIFont's rendering properties. Invalid objects are diagnosed rather
+/// than substituted: continuing with a fabricated font leaves the invalid
+/// receiver in guest state and only moves the failure to the next message.
 fn font_properties(env: &Environment, font: id) -> (FontKind, CGFloat) {
     let Some(mut host_object) = env.objc.get_host_object(font) else {
-        log_once!("Warning: stale UIFont reference; using the 17-point system font");
-        return (FontKind::SansRegular, 17.0);
+        if let Some(deallocated) = env
+            .framework_state
+            .uikit
+            .ui_font
+            .deallocated_fonts
+            .iter()
+            .rev()
+            .find(|deallocated| deallocated.object == font)
+        {
+            panic!(
+                "UIFont receiver {font:?} was already deallocated (kind {:?}, size {})",
+                deallocated.kind, deallocated.size
+            );
+        }
+        panic!("UIFont receiver {font:?} has no registered host object");
     };
     loop {
         if let Some(font) = host_object.as_any().downcast_ref::<UIFontHostObject>() {
             return (font.kind, font.size);
         }
         let Some(superclass) = host_object.as_superclass() else {
-            log_once!("Warning: non-UIFont text style; using the 17-point system font");
-            return (FontKind::SansRegular, 17.0);
+            panic!(
+                "Expected UIFont for text rendering at {font:?}, found host object type {:?}",
+                host_object.type_name()
+            );
         };
         host_object = superclass;
     }
