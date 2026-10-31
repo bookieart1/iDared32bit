@@ -148,6 +148,7 @@ type AudioQueueParameterValue = f32;
 pub type AudioQueuePropertyID = u32;
 pub const kAudioQueueProperty_IsRunning: AudioQueuePropertyID = fourcc(b"aqrn");
 const kAudioQueueProperty_MagicCookie: AudioQueuePropertyID = fourcc(b"aqmc");
+const kAudioQueueProperty_HardwareCodecPolicy: AudioQueuePropertyID = fourcc(b"aqcp");
 
 /// (*void)(void *in_user_data, AudioQueueRef in_aq, AudioQueuePropertyID in_id)
 type AudioQueuePropertyListenerProc = GuestFunction;
@@ -570,6 +571,20 @@ fn AudioQueueSetProperty(
         host_object.magic_cookie = Some(cookie);
         host_object.packet_decoder = None;
         return 0; // success
+    }
+
+    if in_property_id == kAudioQueueProperty_HardwareCodecPolicy {
+        if in_property_data.is_null() || in_data_size != guest_size_of::<u32>() {
+            return kAudioQueueErr_InvalidPropertySize;
+        }
+        let policy: u32 = env.mem.read(in_property_data.cast());
+        if policy > 4 {
+            return kAudioQueueErr_InvalidProperty;
+        }
+        // touchHLE always performs audio decoding in software. Accept the
+        // caller's hardware/software preference as a capability hint so old
+        // decoders do not abandon an otherwise valid audio queue.
+        return 0;
     }
 
     log!(

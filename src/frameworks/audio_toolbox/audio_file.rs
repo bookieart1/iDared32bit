@@ -354,8 +354,23 @@ pub fn AudioFileGetProperty(
             env.mem.write(out_property_data.cast(), estimated_duration);
         }
         kAudioFilePropertyPacketTableInfo => {
-            log!("TODO: AudioFileGetProperty({:?}, kAudioFilePropertyPacketTableInfo, {:?}, {:?}) -> kAudioFileUnsupportedPropertyError", in_audio_file, io_data_size, out_property_data);
-            return kAudioFileUnsupportedPropertyError;
+            // AudioFile has already decoded the source into complete PCM
+            // frames. It therefore has no encoder delay or trailing partial
+            // frame to report, but callers still expect this property after
+            // AudioFileGetPropertyInfo advertised it.
+            let number_valid_frames = host_object
+                .audio_file
+                .packet_count()
+                .try_into()
+                .unwrap_or(i64::MAX);
+            env.mem.write(
+                out_property_data.cast(),
+                AudioFilePacketTableInfo {
+                    number_valid_frames,
+                    priming_frames: 0,
+                    remainder_frames: 0,
+                },
+            );
         }
         _ => unreachable!(),
     }

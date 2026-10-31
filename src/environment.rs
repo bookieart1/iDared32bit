@@ -2065,6 +2065,16 @@ impl Environment {
         let tmp_dir = format!("{}/tmp/", self.fs.home_directory().as_str());
         let tmp_value_cstr = self.mem.alloc_and_write_cstr(tmp_dir.as_bytes());
         self.env_vars.insert(b"TMPDIR".to_vec(), tmp_value_cstr);
+
+        if self.bundle.bundle_identifier() == "com.majesticsoftware.blot" {
+            // Blot embeds ImageMagick and performs its effects inside the
+            // emulated process. Limit it to the single guest CPU touchHLE
+            // exposes; extra ImageMagick workers only add contention and can
+            // make an otherwise responsive scene appear to freeze.
+            let thread_limit = self.mem.alloc_and_write_cstr(b"1");
+            self.env_vars
+                .insert(b"MAGICK_THREAD_LIMIT".to_vec(), thread_limit);
+        }
     }
 
     fn get_sorted_bin_indices(&self) -> Result<Vec<usize>, String> {

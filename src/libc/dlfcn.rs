@@ -145,10 +145,35 @@ fn _dyld_get_image_header(env: &mut Environment, image_index: u32) -> ConstVoidP
         .map_or(Ptr::null(), Ptr::from_bits)
 }
 
+fn _dyld_image_count(env: &mut Environment) -> u32 {
+    env.bins.len().try_into().unwrap_or(u32::MAX)
+}
+
+fn _dyld_get_image_name(env: &mut Environment, image_index: u32) -> ConstPtr<u8> {
+    let Some(bin) = env.bins.get(image_index as usize) else {
+        return Ptr::null();
+    };
+    let name = if image_index == 0 {
+        env.bundle.executable_path().as_str().to_string()
+    } else {
+        bin.name.clone()
+    };
+    dladdr_string(env, name)
+}
+
+fn _dyld_get_image_vmaddr_slide(_env: &mut Environment, _image_index: u32) -> i32 {
+    // touchHLE loads each image at the virtual addresses recorded in its
+    // Mach-O image, so there is no additional guest-visible ASLR slide.
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(dlopen(_, _)),
     export_c_func!(dlsym(_, _)),
     export_c_func!(dlclose(_)),
     export_c_func!(dladdr(_, _)),
     export_c_func!(_dyld_get_image_header(_)),
+    export_c_func!(_dyld_image_count()),
+    export_c_func!(_dyld_get_image_name(_)),
+    export_c_func!(_dyld_get_image_vmaddr_slide(_)),
 ];

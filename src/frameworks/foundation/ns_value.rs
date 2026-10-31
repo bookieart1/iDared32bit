@@ -7,7 +7,8 @@
 
 use super::ns_string::{from_rust_ordering, from_rust_string, to_rust_string};
 use super::{
-    _nib_archive_decoder, ns_keyed_unarchiver, NSComparisonResult, NSOrderedSame, NSUInteger,
+    _nib_archive_decoder, ns_keyed_unarchiver, NSComparisonResult, NSOrderedSame, NSRange,
+    NSUInteger,
 };
 use crate::frameworks::core_animation::ca_transform_3d::CATransform3D;
 use crate::frameworks::core_foundation::cf_number::{
@@ -38,6 +39,7 @@ pub(super) enum NSValueHostObject {
     CGSize(CGSize),
     CGRect(CGRect),
     CATransform3D(CATransform3D),
+    NSRange(NSRange),
 }
 impl HostObject for NSValueHostObject {}
 
@@ -180,6 +182,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)valueWithRange:(NSRange)value {
+    let host_object = Box::new(NSValueHostObject::NSRange(value));
+    let new = env.objc.alloc_object(this, host_object, &mut env.mem);
+    autorelease(env, new)
+}
+
 - (CGPoint)CGPointValue {
     let host_object = env.objc.borrow::<NSValueHostObject>(this);
     match host_object {
@@ -208,6 +216,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow::<NSValueHostObject>(this);
     match host_object {
         NSValueHostObject::CATransform3D(transform) => *transform,
+        _ => unimplemented!()
+    }
+}
+
+- (NSRange)rangeValue {
+    let host_object = env.objc.borrow::<NSValueHostObject>(this);
+    match host_object {
+        NSValueHostObject::NSRange(range) => NSRange {
+            location: range.location,
+            length: range.length,
+        },
         _ => unimplemented!()
     }
 }
