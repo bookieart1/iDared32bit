@@ -132,7 +132,7 @@ mod tests {
         let env = &mut env;
         let time_zone: id = msg_class![env; NSTimeZone systemTimeZone];
 
-        for style in 0..=5 {
+        for style in 0u32..=5 {
             let name: id = msg![env; time_zone localizedName:style locale:nil];
             assert_eq!(ns_string::to_rust_string(env, name), "GMT");
         }
