@@ -72,6 +72,11 @@ jobs:
         run: cargo test --lib --target x86_64-apple-darwin
         env:
           CMAKE: ${{ github.workspace }}/vendor/cmake/bin/cmake
+      - name: Record diagnostic reproducer evidence
+        if: github.ref == 'refs/heads/ci/unsigned-ipa-baseline'
+        run: cargo test --lib --target x86_64-apple-darwin flight_recorder_preserves_real_sysctl_failure_through_svc -- --nocapture
+        env:
+          CMAKE: ${{ github.workspace }}/vendor/cmake/bin/cmake
       - name: Test
         if: github.ref == 'refs/heads/idared32bit'
         run: cargo test --target x86_64-apple-darwin

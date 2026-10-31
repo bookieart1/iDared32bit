@@ -34,7 +34,13 @@
 # Blot's universal archive constructs its tablet-sized main hierarchy even
 # when launched as an iPhone app. Use the matching native device family and
 # composite its layered UI instead of presenting a cropped layer directly.
-com.majesticsoftware.blot: --device-family=ipad --force-composition
+com.majesticsoftware.blot: --device-family=ipad --force-composition --diagnostics=flight
+
+# Dev 1.66 diagnostic cohort. These options only record observations; they
+# must be removed after the diagnostic evaluation, or overridden with off.
+com.krome.BoomerangBlast: --diagnostics=flight
+com.getsetgames.addicus: --diagnostics=flight
+com.chillingo.spoing: --diagnostics=flight
 
 # Super Monkey Ball and Super Monkey Ball Lite
 # B = speed up level intro, Start = pause

@@ -435,6 +435,18 @@ pub fn run_run_loop(
     let is_main_run_loop = env.current_thread == 0;
 
     loop {
+        if is_main_run_loop {
+            if let Some(recorder) = &mut env.diagnostics {
+                recorder.run_loops += 1;
+                let state = env.objc.borrow::<NSRunLoopHostObject>(run_loop);
+                recorder.sources = [
+                    state.timers.len(),
+                    state.selector_objects.len(),
+                    state.audio_queues.len(),
+                    state.audio_units.len(),
+                ];
+            }
+        }
         let mut sleep_until = None;
 
         // Commit implicit CATransactions
@@ -593,11 +605,7 @@ pub fn run_run_loop(
 }
 
 /// Helper method for `mainRunLoop` and `currentRunLoop` NSThread class methods
-pub(super) fn run_loop_for_thread(
-    env: &mut Environment,
-    this: Class,
-    thread_id: ThreadId,
-) -> id {
+pub(super) fn run_loop_for_thread(env: &mut Environment, this: Class, thread_id: ThreadId) -> id {
     if env.threads[thread_id]
         .framework_state
         .foundation

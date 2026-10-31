@@ -32,6 +32,7 @@ mod audio;
 mod bundle;
 mod cpu;
 mod debug;
+mod diagnostics;
 mod dyld;
 mod environment;
 mod font;

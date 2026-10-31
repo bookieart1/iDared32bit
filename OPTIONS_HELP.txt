@@ -305,3 +305,14 @@ Other options:
         stack and branch based on the stack's content. There is normally
         no reason to enable this option. The number of bytes must be
         chosen carefully on a per-game basis.
+
+    --diagnostics=off|flight
+        Default: off. Opt in per app to a bounded API/Objective-C flight
+        recorder. Keeps 96 recent boundaries, 24 candidate nil/resource
+        failures, and 24 five-second progress samples. Reports on panic or
+        return to the picker, plus at most 12 live progress lines per launch.
+        Registers and limited system-query/path/symbol arguments are recorded;
+        logs may contain app filenames. No guest instructions are traced and
+        no API responses or memory checks are changed. A zero raw return is
+        not necessarily an error. Diagnostic builds may enable a test cohort
+        in DefaultOptions; Options.txt can override it with diagnostics=off.

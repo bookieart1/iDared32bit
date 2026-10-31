@@ -34,6 +34,7 @@ pub enum Button {
 /// Struct containing all user-configurable options.
 #[derive(Clone)]
 pub struct Options {
+    pub diagnostics: bool,
     pub fullscreen: bool,
     pub device_family: Option<DeviceFamily>,
     pub initial_orientation: DeviceOrientation,
@@ -95,6 +96,7 @@ impl Default for Options {
             dumping_file: crate::paths::user_data_base_path().join("DUMP.txt"),
             ignore_gl_errors: false,
             zero_stack_after_guest_to_host_call: None,
+            diagnostics: false,
         }
     }
 }
@@ -215,6 +217,12 @@ impl Options {
             );
         } else if arg == "--disable-direct-memory-access" {
             self.direct_memory_access = false;
+        } else if let Some(value) = arg.strip_prefix("--diagnostics=") {
+            self.diagnostics = match value {
+                "off" => false,
+                "flight" => true,
+                _ => return Err("Expected --diagnostics=off or --diagnostics=flight".into()),
+            };
         } else if let Some(address) = arg.strip_prefix("--gdb=") {
             let addrs = address
                 .to_socket_addrs()

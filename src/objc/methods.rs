@@ -78,6 +78,8 @@ pub struct Method {
 
 /// Type for any host function implementing a method (see also [IMP]).
 pub trait HostIMP: CallFromGuest {
+    /// Known Rust return type; never guess from a zero raw return register.
+    fn returns_object(&self) -> bool;
     /// See [MsgSendSignature::type_info].
     fn type_info(&self) -> (TypeId, &'static str);
 
@@ -105,6 +107,7 @@ macro_rules! impl_HostIMP {
                     $(type_char(TypeId::of::<$P>()),)*
                 ])
             }
+            fn returns_object(&self) -> bool { TypeId::of::<R>() == TypeId::of::<id>() }
         }
         impl<R, $($P,)*> HostIMP for fn(&mut Environment, id, SEL, $($P,)* DotDotDot) -> R
         where
@@ -125,6 +128,7 @@ macro_rules! impl_HostIMP {
                     '?', // TODO: Varargs
                 ])
             }
+            fn returns_object(&self) -> bool { TypeId::of::<R>() == TypeId::of::<id>() }
         }
 
         // Currently there is a one-to-one mapping between valid host IMP

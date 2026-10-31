@@ -286,6 +286,11 @@ fn objc_msgSend_inner(
     tolerate_type_mismatch: bool,
     skip_initialize: bool,
 ) {
+    let diagnostic_call = env.diagnostic_objc_begin(
+        receiver.to_bits(),
+        selector.as_ptr().to_bits(),
+        env.objc.message_type_info.is_some(),
+    );
     log_dbg!(
         "Dispatching {} for {:?}",
         selector.as_str(&env.mem),
@@ -297,6 +302,7 @@ fn objc_msgSend_inner(
         // https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjectiveC/Chapters/ocObjectsClasses.html#//apple_ref/doc/uid/TP30001163-CH11-SW7
         log_dbg!("[nil {}]", selector.as_str(&env.mem));
         env.cpu.regs_mut()[0..2].fill(0);
+        env.diagnostic_end(diagnostic_call, false);
         return;
     }
 
@@ -315,6 +321,7 @@ fn objc_msgSend_inner(
     else {
         // This is a faked method, return nil.
         env.cpu.regs_mut()[0..2].fill(0);
+        env.diagnostic_end(diagnostic_call, false);
         return;
     };
 
@@ -347,11 +354,17 @@ Type mismatch when sending message {} to {:?}!
                     }
                 }
             }
-            host_imp.call_from_guest(env)
+            host_imp.call_from_guest(env);
+            if diagnostic_call.is_some() {
+                env.diagnostic_end(diagnostic_call, host_imp.returns_object());
+            }
         }
         // We can't create a new stack frame, because that would
         // interfere with pass-through of stack arguments.
-        IMP::Guest(guest_imp) => guest_imp.call_without_pushing_stack_frame(env),
+        IMP::Guest(guest_imp) => {
+            guest_imp.call_without_pushing_stack_frame(env);
+            env.diagnostic_end(diagnostic_call, false);
+        }
     }
 }
 

@@ -85,10 +85,7 @@ fn decode_arm_direct_global_getter(target: u32, bytes: &[u8]) -> Option<u32> {
     let first = u32::from_le_bytes(bytes.get(0..4)?.try_into().ok()?);
     let second = u32::from_le_bytes(bytes.get(4..8)?.try_into().ok()?);
     let third = u32::from_le_bytes(bytes.get(8..12)?.try_into().ok()?);
-    if first & 0xffff_f000 != 0xe59f_0000
-        || second != 0xe590_0000
-        || third != 0xe12f_ff1e
-    {
+    if first & 0xffff_f000 != 0xe59f_0000 || second != 0xe590_0000 || third != 0xe12f_ff1e {
         return None;
     }
 
@@ -145,6 +142,7 @@ impl std::fmt::Debug for Thread {
 pub struct Environment {
     /// Reference point for various timing functions.
     pub startup_time: Instant,
+    pub diagnostics: Option<Box<crate::diagnostics::Recorder>>,
     pub bundle: NullableBox<bundle::Bundle>,
     pub fs: NullableBox<fs::Fs>,
     /// The window is only absent when running in headless mode.
@@ -741,6 +739,7 @@ impl Environment {
 
         let mut env = Environment {
             startup_time,
+            diagnostics: options.diagnostics.then(crate::diagnostics::Recorder::new),
             bundle: NullableBox::new(bundle),
             fs: NullableBox::new(fs),
             window,
@@ -888,6 +887,7 @@ impl Environment {
 
         let mut env = Environment {
             startup_time,
+            diagnostics: None,
             bundle: NullableBox::new(bundle),
             fs: NullableBox::new(fs),
             window,
@@ -949,6 +949,7 @@ impl Environment {
     unsafe fn new_fake() -> Self {
         Self {
             startup_time: Instant::now(),
+            diagnostics: None,
             bundle: NullableBox::null(),
             fs: NullableBox::null(),
             window: None,
@@ -1455,6 +1456,9 @@ impl Environment {
     /// the guest termination path in `ui_application::exit` calls
     /// `std::process::exit` to end the process so this function never returns.
     pub fn run(mut self) -> bool {
+        if self.diagnostics.is_some() {
+            echo!("flight recorder v1 enabled: bounded API/ObjC history; 5s progress reports (first 12); dump on panic/Home. No instruction tracing.");
+        }
         let mut curr_host_context = self.threads[0].host_context.take().unwrap();
         let panic_cell = self.panic_cell.clone();
         if let Some(mut gdb_server) = self.gdb_server.take() {
@@ -1503,6 +1507,7 @@ impl Environment {
                         window.on_main_stack = true;
                     };
 
+                    env.diagnostic_dump("panic");
                     if Self::is_null_page_access_panic(e.as_ref()) {
                         env.log_memory_fault_context("Host memory-fault");
                     }
@@ -1553,6 +1558,23 @@ impl Environment {
                 w.on_main_stack = true;
             }
 
+            if let Some(recorder) = &mut self.diagnostics {
+                let runnable = self
+                    .threads
+                    .iter()
+                    .filter(|t| {
+                        t.state != ThreadState::Dead
+                            && matches!(t.blocked_by, ThreadBlock::NotBlocked)
+                    })
+                    .count();
+                recorder.checkpoint(
+                    self.current_thread,
+                    self.cpu.regs(),
+                    self.threads.len(),
+                    runnable,
+                );
+            }
+
             if self
                 .quit_deadline
                 .is_some_and(|deadline| Instant::now() >= deadline)
@@ -1561,6 +1583,7 @@ impl Environment {
                 self.return_to_app_picker = true;
             }
             if self.return_to_app_picker {
+                self.diagnostic_dump("return-to-picker");
                 // Put the context back so it's freed when Environment drops.
                 let thread = self.threads.get_mut(self.current_thread).unwrap();
                 assert!(thread.host_context.is_none());
@@ -1621,6 +1644,7 @@ impl Environment {
                     if Self::is_null_page_access_panic(e.as_ref()) {
                         self.log_memory_fault_context("Host memory-fault");
                     }
+                    self.diagnostic_dump("scheduler-panic");
                     echo!("Register state immediately after panic:");
                     self.dump_all_regs();
                     self.stack_trace_all();
@@ -1803,8 +1827,7 @@ impl Environment {
                             for &reference in &references {
                                 let context_start = reference.saturating_sub(16);
                                 let context_ptr = mem::ConstVoidPtr::from_bits(context_start);
-                                if let Some(context) =
-                                    self.mem.get_bytes_fallible(context_ptr, 48)
+                                if let Some(context) = self.mem.get_bytes_fallible(context_ptr, 48)
                                 {
                                     log_no_panic!(
                                         "{source} global-slot literal reference at {reference:#010x}, code/data context at {context_start:#010x}: {context:02x?}"
@@ -1817,8 +1840,8 @@ impl Environment {
                                         .chunks_exact(4)
                                         .enumerate()
                                         .filter_map(|(index, word)| {
-                                            let instruction_address = text_start
-                                                + (index as u32).saturating_mul(4);
+                                            let instruction_address =
+                                                text_start + (index as u32).saturating_mul(4);
                                             let instruction =
                                                 u32::from_le_bytes(word.try_into().unwrap());
                                             let (register, literal_address) =
@@ -1839,8 +1862,7 @@ impl Environment {
                             for (instruction_address, register, literal_address) in literal_loads {
                                 let context_start = instruction_address.saturating_sub(96);
                                 let context_ptr = mem::ConstVoidPtr::from_bits(context_start);
-                                if let Some(context) =
-                                    self.mem.get_bytes_fallible(context_ptr, 192)
+                                if let Some(context) = self.mem.get_bytes_fallible(context_ptr, 192)
                                 {
                                     log_no_panic!(
                                         "{source} global-slot literal loaded by ARM instruction at {instruction_address:#010x} into R{register} from {literal_address:#010x}; code context at {context_start:#010x} (192 bytes): {context:02x?}"
@@ -1856,9 +1878,7 @@ impl Environment {
         let sp = self.cpu.regs()[cpu::Cpu::SP];
         let stack_ptr = mem::ConstVoidPtr::from_bits(sp);
         if let Some(bytes) = self.mem.get_bytes_fallible(stack_ptr, 64) {
-            log_no_panic!(
-                "{source} guest stack at SP={sp:#010x} (64 bytes): {bytes:02x?}"
-            );
+            log_no_panic!("{source} guest stack at SP={sp:#010x} (64 bytes): {bytes:02x?}");
         }
 
         for (label, address) in [("", pc), (" caller", lr)] {
@@ -1969,6 +1989,7 @@ impl Environment {
 
         Environment {
             startup_time: Instant::now(),
+            diagnostics: None,
             bundle: NullableBox::new(bundle::Bundle::new_fake_bundle()),
             fs: NullableBox::new(fs::Fs::new_fake_fs()),
             window: None,
@@ -2039,7 +2060,20 @@ impl Environment {
                             svc_pc,
                             svc,
                         ) {
+                            let diagnostic_call = if self.diagnostics.is_some() {
+                                let symbol = self
+                                    .dyld
+                                    .host_function_symbol_at_pc(
+                                        &self.mem,
+                                        self.cpu.regs()[cpu::Cpu::PC],
+                                    )
+                                    .unwrap_or("<unresolved-host-call>");
+                                self.diagnostic_api_begin(symbol)
+                            } else {
+                                None
+                            };
                             f.call_from_guest(self);
+                            self.diagnostic_end(diagnostic_call, false);
                             if let Some(len) = self.options.zero_stack_after_guest_to_host_call {
                                 log_once!("Applying zeroing of stack after guest to host call.");
                                 let start = self.cpu.regs()[cpu::Cpu::SP] - len;
@@ -2445,10 +2479,59 @@ mod memory_fault_diagnostic_tests {
     use super::{decode_arm_direct_global_getter, decode_arm_pc_relative_literal_load};
 
     #[test]
+    fn flight_recorder_preserves_real_sysctl_failure_through_svc() {
+        use super::*;
+        // Same unsupported six-component query shape as B'Blast, with explicit
+        // synthetic values: the device's actual MIB is still unknown.
+        for enabled in [false, true] {
+            let mut env = Environment::new_fake_for_test();
+            env.diagnostics = enabled.then(crate::diagnostics::Recorder::new);
+            let name = env.mem.alloc(24).cast::<u32>();
+            let mib = [4, 17, 0, 0, 3, 2];
+            for (i, word) in mib.into_iter().enumerate() {
+                env.mem.write(name + i as u32, word);
+            }
+            let stack = env.mem.alloc(16).cast::<u32>();
+            for i in 0..4 {
+                env.mem.write(stack + i, 0u32);
+            }
+            let f = env
+                .dyld
+                .create_proc_address(&mut env.mem, &mut env.cpu, "_sysctl")
+                .unwrap();
+            let svc: u32 = env
+                .mem
+                .read(mem::ConstPtr::from_bits(f.addr_without_thumb_bit()));
+            env.cpu.regs_mut()[0..4].copy_from_slice(&[name.to_bits(), 6, 0, 0]);
+            env.cpu.regs_mut()[cpu::Cpu::SP] = stack.to_bits();
+            env.cpu.regs_mut()[cpu::Cpu::PC] = f.addr_without_thumb_bit() + 4;
+            let before = *env.cpu.regs();
+            let error = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                env.handle_cpu_state(cpu::CpuState::Svc(svc & 0x00ff_ffff));
+            }))
+            .expect_err("unsupported query must still panic");
+            let message = error
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .or_else(|| error.downcast_ref::<&str>().copied())
+                .unwrap();
+            assert!(message.contains("name length 6"), "{message}");
+            assert_eq!(*env.cpu.regs(), before);
+            if let Some(recorder) = &mut env.diagnostics {
+                assert_eq!(
+                    recorder.last_entry(),
+                    Some((b"_sysctl".as_slice(), mib.as_slice()))
+                );
+                recorder.dump("automated six-component sysctl reproducer");
+            }
+        }
+    }
+
+    #[test]
     fn decodes_direct_global_getter() {
         let bytes = [
-            0x04, 0x00, 0x9f, 0xe5, 0x00, 0x00, 0x90, 0xe5, 0x1e, 0xff, 0x2f, 0xe1, 0x7c,
-            0xf8, 0xac, 0x00,
+            0x04, 0x00, 0x9f, 0xe5, 0x00, 0x00, 0x90, 0xe5, 0x1e, 0xff, 0x2f, 0xe1, 0x7c, 0xf8,
+            0xac, 0x00,
         ];
         assert_eq!(
             decode_arm_direct_global_getter(0x0047_cff4, &bytes),
