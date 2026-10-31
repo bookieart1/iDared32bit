@@ -18,7 +18,7 @@ pub const OPTIONS_HELP: &str =
 
 /// One-off catalog survey switch. This is enabled only in the dedicated
 /// Dev 1.71 survey artifact and restored to `false` immediately afterwards.
-pub(crate) const UNIVERSAL_FLIGHT_RECORDER_SURVEY: bool = true;
+pub(crate) const UNIVERSAL_FLIGHT_RECORDER_SURVEY: bool = false;
 
 /// Game controller button for `--button-to-touch=` option.
 #[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
