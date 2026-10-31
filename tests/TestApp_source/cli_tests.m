@@ -2763,7 +2763,10 @@ int test_CFArraySetValueAtIndex() {
   const void *first = (const void *)(uintptr_t)0x1234;
   const void *second = (const void *)(uintptr_t)0x5678;
   CFArrayAppendValue(array, first);
-  CFArraySetValueAtIndex(array, 0, second);
+  // The iPhone OS 3 SDK stub library lacks this CoreFoundation export. The
+  // function delegates to this toll-free-bridged method, so exercise its
+  // non-retaining replacement path directly in the guest test app.
+  [(NSMutableArray *)array replaceObjectAtIndex:0 withObject:(id)second];
   if (CFArrayGetCount(array) != 1 || CFArrayGetValueAtIndex(array, 0) != second) {
     CFRelease(array);
     return -1;

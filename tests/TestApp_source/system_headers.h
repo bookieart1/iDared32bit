@@ -110,6 +110,7 @@ SEL method_getName(Method m);
 
 @interface NSMutableArray<ObjectType> : NSArray
 - (void)addObject:(id)object;
+- (void)replaceObjectAtIndex:(NSUInteger)index withObject:(id)object;
 - (void)removeObject:(id)object;
 - (void)removeObjectsInArray:(NSArray *)otherArray;
 - (void)removeLastObject;
