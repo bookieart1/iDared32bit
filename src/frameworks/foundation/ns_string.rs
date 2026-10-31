@@ -2462,7 +2462,9 @@ fn get_bytes_range_inner(
     };
 
     if !buffer.is_null() && !bytes.is_empty() {
-        env.mem.bytes_at_mut(buffer, bytes.len()).copy_from_slice(&bytes);
+        env.mem
+            .bytes_at_mut(buffer, bytes.len().try_into().unwrap())
+            .copy_from_slice(&bytes);
     }
     if !used_length.is_null() {
         env.mem.write(used_length, bytes.len() as NSUInteger);
