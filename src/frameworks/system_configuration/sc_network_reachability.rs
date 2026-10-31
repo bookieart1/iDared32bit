@@ -33,6 +33,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 struct SCNetworkReachabilityHostObject {
     address: Option<SocketAddrV4>,
+    callback: Option<(GuestFunction, MutVoidPtr)>,
 }
 impl HostObject for SCNetworkReachabilityHostObject {}
 
@@ -59,7 +60,10 @@ fn SCNetworkReachabilityCreateWithName(
         .get_known_class("_touchHLE_SCNetworkReachability", &mut env.mem);
     let res = env.objc.alloc_object(
         isa,
-        Box::new(SCNetworkReachabilityHostObject { address: None }), // TODO
+        Box::new(SCNetworkReachabilityHostObject {
+            address: None,
+            callback: None,
+        }), // TODO
         &mut env.mem,
     );
     log!(
@@ -86,6 +90,7 @@ fn SCNetworkReachabilityCreateWithAddress(
         isa,
         Box::new(SCNetworkReachabilityHostObject {
             address: Some(address_val.to_sockaddr_v4()),
+            callback: None,
         }),
         &mut env.mem,
     );
@@ -110,7 +115,12 @@ fn SCNetworkReachabilityGetFlags(
             target,
             flags
         );
-        return false;
+        // The query itself succeeded; an empty flag set means offline. Some
+        // older reachability wrappers do not safely handle a failed query.
+        if !flags.is_null() {
+            env.mem.write(flags, 0);
+        }
+        return true;
     }
 
     let target_class: Class = msg![env; target class];
@@ -136,12 +146,15 @@ fn SCNetworkReachabilityGetFlags(
             return true;
         }
     }
+    if !flags.is_null() {
+        env.mem.write(flags, 0);
+    }
     log!(
-        "TODO: SCNetworkReachabilityGetFlags({:?}, {:?}) -> false",
+        "SCNetworkReachabilityGetFlags({:?}, {:?}) -> true (not reachable)",
         target,
         flags
     );
-    false
+    true
 }
 
 fn SCNetworkReachabilitySetCallback(
@@ -156,13 +169,53 @@ fn SCNetworkReachabilitySetCallback(
         env.objc
             .get_known_class("_touchHLE_SCNetworkReachability", &mut env.mem)
     );
+    env.objc
+        .borrow_mut::<SCNetworkReachabilityHostObject>(target)
+        .callback = if callout.addr_without_thumb_bit() == 0 {
+        None
+    } else {
+        Some((callout, context))
+    };
     log!(
-        "TODO: SCNetworkReachabilitySetCallback({:?}, {:?}, {:?}) -> FALSE",
+        "SCNetworkReachabilitySetCallback({:?}, {:?}, {:?}) -> TRUE",
         target,
         callout,
         context
     );
-    false
+    true
+}
+
+fn SCNetworkReachabilityScheduleWithRunLoop(
+    env: &mut Environment,
+    target: SCNetworkReachabilityRef,
+    _run_loop: CFTypeRef,
+    _run_loop_mode: CFTypeRef,
+) -> bool {
+    let target_class: Class = msg![env; target class];
+    assert_eq!(
+        target_class,
+        env.objc
+            .get_known_class("_touchHLE_SCNetworkReachability", &mut env.mem)
+    );
+    // Registration succeeds, but no callback is fired: the object reports a
+    // stable offline state through GetFlags. This prevents retired ad/network
+    // SDKs from spinning or dereferencing half-initialized reachability state.
+    true
+}
+
+fn SCNetworkReachabilityUnscheduleFromRunLoop(
+    env: &mut Environment,
+    target: SCNetworkReachabilityRef,
+    _run_loop: CFTypeRef,
+    _run_loop_mode: CFTypeRef,
+) -> bool {
+    let target_class: Class = msg![env; target class];
+    assert_eq!(
+        target_class,
+        env.objc
+            .get_known_class("_touchHLE_SCNetworkReachability", &mut env.mem)
+    );
+    true
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -170,4 +223,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(SCNetworkReachabilityCreateWithAddress(_, _)),
     export_c_func!(SCNetworkReachabilityGetFlags(_, _)),
     export_c_func!(SCNetworkReachabilitySetCallback(_, _, _)),
+    export_c_func!(SCNetworkReachabilityScheduleWithRunLoop(_, _, _)),
+    export_c_func!(SCNetworkReachabilityUnscheduleFromRunLoop(_, _, _)),
 ];

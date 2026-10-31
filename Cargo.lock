@@ -1144,6 +1144,7 @@ dependencies = [
  "owned_ttf_parser",
  "plist",
  "quick-xml 0.38.4",
+ "regex-lite",
  "rusttype",
  "sdl2",
  "sdl2-sys",
