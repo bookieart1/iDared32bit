@@ -325,8 +325,12 @@ pub(super) fn UIApplicationMain(
         let ui_application: id = msg![env; principal_class new];
 
         let device_family = env.options.device_family;
-        if let Some(main_nib_filename) = env.bundle.main_nib_filename(device_family) {
-            let ns_main_nib_filename = from_rust_string(env, main_nib_filename.to_string());
+        let main_nib_filename = env
+            .bundle
+            .main_nib_filename(device_family)
+            .map(str::to_owned);
+        if let Some(main_nib_filename) = main_nib_filename {
+            let ns_main_nib_filename = from_rust_string(env, main_nib_filename.clone());
             // We need to check first if main nib file exists,
             // as `UINib nibWithNibName:bundle:` will crash on nonexistent
             // nib otherwise
@@ -346,7 +350,7 @@ pub(super) fn UIApplicationMain(
             } else {
                 log!(
                     "Warning: couldn't load main nib file {:?}",
-                    env.bundle.main_nib_filename(device_family)
+                    main_nib_filename
                 );
             }
         }

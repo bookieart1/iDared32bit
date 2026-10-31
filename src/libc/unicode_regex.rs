@@ -51,7 +51,8 @@ fn uregex_close(env: &mut Environment, regexp: MutVoidPtr) {
     }
 }
 
-fn uregex_group_count(
+#[allow(non_snake_case)]
+fn uregex_groupCount(
     env: &mut Environment,
     regexp: MutVoidPtr,
     status: MutPtr<UErrorCode>,
@@ -118,6 +119,6 @@ fn uregex_group_count(
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(uregex_open(_, _, _, _, _)),
-    export_c_func!(uregex_group_count(_, _)),
+    export_c_func!(uregex_groupCount(_, _)),
     export_c_func!(uregex_close(_)),
 ];
