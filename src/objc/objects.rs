@@ -348,8 +348,7 @@ impl super::ObjC {
         );
         let Some(refcount) = entry.refcount.as_mut() else {
             panic!(
-                "Attempt to increment refcount on zero-refcount object {object:?} "
-                    "(class {class_name:?}, host type {})!",
+                "Attempt to increment refcount on zero-refcount object {object:?} (class {class_name:?}, host type {})!",
                 entry.host_object.type_name()
             );
         };
