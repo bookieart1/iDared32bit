@@ -280,6 +280,28 @@ fn get_font<'a>(state: &'a mut State, kind: FontKind, text: &str) -> &'a Font {
     state.get_font_by_kind(kind)
 }
 
+/// Read a UIFont's rendering properties, recovering conservatively when an
+/// old app keeps an unretained UIFont beyond an autorelease-pool boundary.
+/// UIKit historically cached many UIFont instances, and some legacy apps
+/// accidentally depended on that lifetime. A system-font fallback is safer
+/// than aborting the emulator for this presentation-only object.
+fn font_properties(env: &Environment, font: id) -> (FontKind, CGFloat) {
+    let Some(mut host_object) = env.objc.get_host_object(font) else {
+        log_once!("Warning: stale UIFont reference; using the 17-point system font");
+        return (FontKind::SansRegular, 17.0);
+    };
+    loop {
+        if let Some(font) = host_object.as_any().downcast_ref::<UIFontHostObject>() {
+            return (font.kind, font.size);
+        }
+        let Some(superclass) = host_object.as_superclass() else {
+            log_once!("Warning: non-UIFont text style; using the 17-point system font");
+            return (FontKind::SansRegular, 17.0);
+        };
+        host_object = superclass;
+    }
+}
+
 /// Called by the `sizeWithFont:` method family on `NSString`.
 pub fn size_with_font(
     env: &mut Environment,
@@ -287,17 +309,17 @@ pub fn size_with_font(
     text: &str,
     constrained: Option<(CGSize, UILineBreakMode)>,
 ) -> CGSize {
-    let host_object = env.objc.borrow::<UIFontHostObject>(font);
+    let (kind, size) = font_properties(env, font);
 
     let font = get_font(
         &mut env.framework_state.uikit.ui_font,
-        host_object.kind,
+        kind,
         text,
     );
 
     let wrap = constrained.map(|(size, ui_mode)| (size.width, convert_line_break_mode(ui_mode)));
 
-    let (width, height) = font.calculate_text_size(host_object.size, text, wrap);
+    let (width, height) = font.calculate_text_size(size, text, wrap);
 
     CGSize { width, height }
 }
@@ -309,17 +331,17 @@ pub fn break_lines_with_font<'a>(
     text: &'a str,
     constrained: Option<(CGSize, UILineBreakMode)>,
 ) -> Vec<(f32, &'a str)> {
-    let host_object = env.objc.borrow::<UIFontHostObject>(font);
+    let (kind, size) = font_properties(env, font);
 
     let font = get_font(
         &mut env.framework_state.uikit.ui_font,
-        host_object.kind,
+        kind,
         text,
     );
 
     let wrap = constrained.map(|(size, ui_mode)| (size.width, convert_line_break_mode(ui_mode)));
 
-    font.break_lines(host_object.size, text, wrap)
+    font.break_lines(size, text, wrap)
 }
 
 #[inline(always)]
@@ -384,26 +406,25 @@ pub fn draw_at_point(
 ) -> CGSize {
     let context = UIGraphicsGetCurrentContext(env);
 
-    let host_object = env.objc.borrow::<UIFontHostObject>(font);
+    let (kind, size) = font_properties(env, font);
 
     let font = get_font(
         &mut env.framework_state.uikit.ui_font,
-        host_object.kind,
+        kind,
         text,
     );
 
     let width_and_line_break_mode =
         width_and_line_break_mode.map(|(width, ui_mode)| (width, convert_line_break_mode(ui_mode)));
     let clip_x = width_and_line_break_mode.map(|(width, _)| point.x..(point.x + width));
-    let (width, height) =
-        font.calculate_text_size(host_object.size, text, width_and_line_break_mode);
+    let (width, height) = font.calculate_text_size(size, text, width_and_line_break_mode);
 
     let mut drawer = CGBitmapContextDrawer::new(&env.objc, &mut env.mem, context);
     let fill_color = drawer.rgb_fill_color();
     let oversample = drawer.transform_scale();
 
     font.draw(
-        host_object.size,
+        size,
         text,
         (point.x, point.y),
         width_and_line_break_mode,
@@ -436,11 +457,11 @@ pub fn draw_in_rect(
 
     let text_size = size_with_font(env, font, text, Some((rect.size, line_break_mode)));
 
-    let host_object = env.objc.borrow::<UIFontHostObject>(font);
+    let (kind, size) = font_properties(env, font);
 
     let font = get_font(
         &mut env.framework_state.uikit.ui_font,
-        host_object.kind,
+        kind,
         text,
     );
 
@@ -456,7 +477,7 @@ pub fn draw_in_rect(
     };
 
     font.draw(
-        host_object.size,
+        size,
         text,
         (rect.origin.x + origin_x_offset, rect.origin.y),
         Some((rect.size.width, convert_line_break_mode(line_break_mode))),

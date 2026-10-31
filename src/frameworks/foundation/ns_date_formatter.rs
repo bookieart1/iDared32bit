@@ -228,6 +228,11 @@ fn format_date(format: &str, date: &CFGregorianDate, weekday: usize) -> String {
             'a' => (if date.hours < 12 { "AM" } else { "PM" }).to_string(),
             'E' if n >= 4 => DAYS[weekday].to_string(),
             'E' => DAYS[weekday][..3].to_string(),
+            // Stand-alone local day of week. The formatter currently models
+            // en_US, whose local numeric week starts on Sunday.
+            'c' if n >= 4 => DAYS[weekday].to_string(),
+            'c' if n == 3 => DAYS[weekday][..3].to_string(),
+            'c' => num(weekday as i32 + 1),
             // Dates are worked out in UTC (see CFAbsoluteTimeGetGregorianDate).
             'z' if n >= 4 => "Greenwich Mean Time".to_string(),
             'z' => "GMT".to_string(),
@@ -257,6 +262,7 @@ mod tests {
         assert_eq!(f("M/d/yy h:mm a"), "7/4/09 3:05 PM");
         assert_eq!(f("MMM d, yyyy h:mm:ss a"), "Jul 4, 2009 3:05:09 PM");
         assert_eq!(f("EEEE, MMMM d, yyyy"), "Saturday, July 4, 2009");
+        assert_eq!(f("c cc ccc cccc"), "7 07 Sat Saturday");
         assert_eq!(f("'at' HH 'o''clock'"), "at 15 o'clock");
     }
 }

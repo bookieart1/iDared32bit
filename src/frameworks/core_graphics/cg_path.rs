@@ -113,6 +113,146 @@ pub fn CGPathAddLineToPoint(
     add_element(env, path, kCGPathElementAddLineToPoint, point);
 }
 
+/// Add a line followed by the circular arc tangent to the lines from the
+/// current point to `point1` and from `point1` to `point2`.
+///
+/// The path renderer currently consumes moves and lines, so the arc is stored
+/// as a short polyline. This preserves it for drawing and path animations
+/// without introducing a curve element that existing consumers cannot read.
+pub fn CGPathAddArcToPoint(
+    env: &mut Environment,
+    path: CGMutablePathRef,
+    m: ConstPtr<CGAffineTransform>,
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
+    radius: f32,
+) {
+    let point1 = transformed(env, m, CGPoint { x: x1, y: y1 });
+    let point2 = transformed(env, m, CGPoint { x: x2, y: y2 });
+    let current = env
+        .objc
+        .borrow::<CGMutablePathHostObject>(path)
+        .path_elements
+        .last()
+        .and_then(|element| element.points.last())
+        .copied();
+
+    let Some(current) = current else {
+        add_element(env, path, kCGPathElementMoveToPoint, point1);
+        return;
+    };
+
+    // Work in the path's stored coordinate space. This is exact for the
+    // overwhelmingly common null transform. For an affine transform, scale
+    // the radius by the mean transformed basis-vector length.
+    let radius = if m.is_null() {
+        radius
+    } else {
+        let transform = env.mem.read(m);
+        let x_scale = transform.a.hypot(transform.b);
+        let y_scale = transform.c.hypot(transform.d);
+        radius * (x_scale + y_scale) * 0.5
+    };
+
+    for point in arc_to_points(current, point1, point2, radius) {
+        add_element(env, path, kCGPathElementAddLineToPoint, point);
+    }
+}
+
+fn arc_to_points(
+    current: CGPoint,
+    point1: CGPoint,
+    point2: CGPoint,
+    radius: f32,
+) -> Vec<CGPoint> {
+    const EPSILON: f32 = 1.0e-6;
+
+    let from_corner = CGPoint {
+        x: current.x - point1.x,
+        y: current.y - point1.y,
+    };
+    let to_next = CGPoint {
+        x: point2.x - point1.x,
+        y: point2.y - point1.y,
+    };
+    let from_len = from_corner.x.hypot(from_corner.y);
+    let to_len = to_next.x.hypot(to_next.y);
+    if radius <= 0.0 || from_len <= EPSILON || to_len <= EPSILON {
+        return vec![point1];
+    }
+
+    let from = CGPoint {
+        x: from_corner.x / from_len,
+        y: from_corner.y / from_len,
+    };
+    let to = CGPoint {
+        x: to_next.x / to_len,
+        y: to_next.y / to_len,
+    };
+    let dot = (from.x * to.x + from.y * to.y).clamp(-1.0, 1.0);
+    let angle = dot.acos();
+    let half_angle = angle * 0.5;
+    let sin_half = half_angle.sin();
+    let tan_half = half_angle.tan();
+    let cross = from.x * to.y - from.y * to.x;
+    if sin_half.abs() <= EPSILON || tan_half.abs() <= EPSILON || cross.abs() <= EPSILON {
+        return vec![point1];
+    }
+
+    let tangent_distance = radius / tan_half;
+    let tangent1 = CGPoint {
+        x: point1.x + from.x * tangent_distance,
+        y: point1.y + from.y * tangent_distance,
+    };
+    let tangent2 = CGPoint {
+        x: point1.x + to.x * tangent_distance,
+        y: point1.y + to.y * tangent_distance,
+    };
+    let bisector_scale = (2.0 + 2.0 * dot).sqrt();
+    if bisector_scale <= EPSILON {
+        return vec![point1];
+    }
+    let bisector = CGPoint {
+        x: (from.x + to.x) / bisector_scale,
+        y: (from.y + to.y) / bisector_scale,
+    };
+    let center_distance = radius / sin_half;
+    let center = CGPoint {
+        x: point1.x + bisector.x * center_distance,
+        y: point1.y + bisector.y * center_distance,
+    };
+
+    let start_angle = (tangent1.y - center.y).atan2(tangent1.x - center.x);
+    let end_angle = (tangent2.y - center.y).atan2(tangent2.x - center.x);
+    let mut sweep = end_angle - start_angle;
+    if cross < 0.0 {
+        while sweep < 0.0 {
+            sweep += std::f32::consts::TAU;
+        }
+    } else {
+        while sweep > 0.0 {
+            sweep -= std::f32::consts::TAU;
+        }
+    }
+
+    let segment_count = (sweep.abs() / (std::f32::consts::PI / 16.0))
+        .ceil()
+        .max(1.0) as usize;
+    let mut points = Vec::with_capacity(segment_count + 1);
+    points.push(tangent1);
+    for i in 1..=segment_count {
+        let angle = start_angle + sweep * i as f32 / segment_count as f32;
+        points.push(CGPoint {
+            x: center.x + radius * angle.cos(),
+            y: center.y + radius * angle.sin(),
+        });
+    }
+    *points.last_mut().unwrap() = tangent2;
+    points
+}
+
 /// Like Apple's: a move to the first point, then lines to the others.
 pub fn CGPathAddLines(
     env: &mut Environment,
@@ -155,5 +295,41 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGPathRelease(_)),
     export_c_func!(CGPathMoveToPoint(_, _, _, _)),
     export_c_func!(CGPathAddLineToPoint(_, _, _, _)),
+    export_c_func!(CGPathAddArcToPoint(_, _, _, _, _, _, _)),
     export_c_func!(CGPathAddLines(_, _, _, _)),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quarter_circle_arc_is_tangent_to_both_lines() {
+        let points = arc_to_points(
+            CGPoint { x: 0.0, y: 0.0 },
+            CGPoint { x: 1.0, y: 0.0 },
+            CGPoint { x: 1.0, y: 1.0 },
+            0.25,
+        );
+        let first = points.first().unwrap();
+        let last = points.last().unwrap();
+        assert!((first.x - 0.75).abs() < 1.0e-5);
+        assert!(first.y.abs() < 1.0e-5);
+        assert!((last.x - 1.0).abs() < 1.0e-5);
+        assert!((last.y - 0.25).abs() < 1.0e-5);
+        assert!(points.len() > 2);
+    }
+
+    #[test]
+    fn degenerate_arc_falls_back_to_the_corner() {
+        assert_eq!(
+            arc_to_points(
+                CGPoint { x: 0.0, y: 0.0 },
+                CGPoint { x: 1.0, y: 0.0 },
+                CGPoint { x: 2.0, y: 0.0 },
+                1.0,
+            ),
+            vec![CGPoint { x: 1.0, y: 0.0 }]
+        );
+    }
+}
