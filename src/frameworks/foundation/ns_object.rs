@@ -160,7 +160,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)retain {
     log_dbg!("[{:?} retain]", this);
     if !env.objc.has_static_lifetime(this) {
-        env.objc.increment_refcount(this);
+        env.objc.increment_refcount(this, &env.mem);
     }
     this
 }

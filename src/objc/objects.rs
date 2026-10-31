@@ -58,8 +58,8 @@ pub const nil: id = Ptr::null();
 /// Struct used to track the host object and refcount of every object.
 /// Maybe debugging info too eventually?
 ///
-/// If the `refcount` is `None`, that means this object has a static duration
-/// and should not be reference-counted, e.g. it is a class.
+/// `static_lifetime` distinguishes immortal objects from dynamic objects whose
+/// `refcount` is temporarily `None` while their `dealloc` chain is running.
 pub(super) struct HostObjectEntry {
     host_object: Box<dyn AnyHostObject>,
     /// Static objects (classes and constant objects) are immortal. Keep this
@@ -333,7 +333,12 @@ impl super::ObjC {
     /// Increase the refcount of a reference-counted object. Do not call this
     /// directly unless you're implementing `release` on `NSObject`. That method
     /// may be overridden.
-    pub fn increment_refcount(&mut self, object: id) {
+    pub fn increment_refcount(&mut self, object: id, mem: &Mem) {
+        // Preserve enough identity in this diagnostic to find the real owner
+        // of a use-during-dealloc bug from a physical-device log. The pointer
+        // alone is not actionable and is routinely reused between launches.
+        let class = Self::read_isa(object, mem);
+        let class_name = self.get_class_name(class).to_owned();
         let Some(entry) = self.objects.get_mut(&object) else {
             panic!("No entry found for object {object:?}, it may have already been deallocated");
         };
@@ -342,7 +347,11 @@ impl super::ObjC {
             "Attempt to increment refcount on static-lifetime object {object:?}!"
         );
         let Some(refcount) = entry.refcount.as_mut() else {
-            panic!("Attempt to increment refcount on zero-refcount object {object:?}!");
+            panic!(
+                "Attempt to increment refcount on zero-refcount object {object:?} "
+                    "(class {class_name:?}, host type {})!",
+                entry.host_object.type_name()
+            );
         };
         *refcount = refcount.checked_add(1).unwrap();
     }

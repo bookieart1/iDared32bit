@@ -174,6 +174,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+// This is intentionally a pure state query: unlike -view, asking whether a
+// controller's view is loaded must not cause the view or its nib to load.
+- (bool)isViewLoaded {
+    env.objc.borrow::<UIViewControllerHostObject>(this).view != nil
+}
+
 // Usually overridden by the application
 - (())viewDidLoad {
     log_dbg!("[(UIViewController*){:?} viewDidLoad]", this);
