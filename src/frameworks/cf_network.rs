@@ -5,12 +5,13 @@
  */
 //! The CoreFoundation Network framework.
 
+pub mod cf_host;
 pub mod cf_http_message;
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/System/Library/Frameworks/CFNetwork.framework/CFNetwork",
     aliases: &[],
-    class_exports: &[],
+    class_exports: &[cf_host::CLASSES],
     constant_exports: &[cf_http_message::CONSTANTS],
-    function_exports: &[cf_http_message::FUNCTIONS],
+    function_exports: &[cf_host::FUNCTIONS, cf_http_message::FUNCTIONS],
 };

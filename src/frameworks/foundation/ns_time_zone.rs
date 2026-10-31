@@ -5,7 +5,7 @@
  */
 //! `NSTimeZone`.
 
-use crate::frameworks::foundation::{ns_string, NSInteger};
+use crate::frameworks::foundation::{ns_string, NSInteger, NSUInteger};
 use crate::objc::{autorelease, id, nil, release, retain, ClassExports, HostObject, NSZonePtr};
 use crate::{msg, objc_classes};
 
@@ -95,6 +95,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     ns_string::get_static_str(env, "GMT")
 }
 
+- (id)localizedName:(NSUInteger)style locale:(id)_locale {
+    // touchHLE currently models every NSTimeZone as GMT. All six historical
+    // NSTimeZoneNameStyle values therefore have the same correct display name
+    // in this deliberately limited model. Unknown styles are invalid.
+    if style <= 5 {
+        ns_string::get_static_str(env, "GMT")
+    } else {
+        nil
+    }
+}
+
 - (NSInteger)secondsFromGMT {
     // TODO: respect timezone
     0
@@ -108,3 +119,25 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::objc::msg_class;
+    use crate::Environment;
+
+    #[test]
+    fn localized_name_supports_all_historical_styles() {
+        let mut env = Environment::new_fake_for_test();
+        let env = &mut env;
+        let time_zone: id = msg_class![env; NSTimeZone systemTimeZone];
+
+        for style in 0..=5 {
+            let name: id = msg![env; time_zone localizedName:style locale:nil];
+            assert_eq!(ns_string::to_rust_string(env, name), "GMT");
+        }
+
+        let invalid: id = msg![env; time_zone localizedName:6u32 locale:nil];
+        assert_eq!(invalid, nil);
+    }
+}
