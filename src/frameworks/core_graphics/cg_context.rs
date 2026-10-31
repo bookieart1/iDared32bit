@@ -8,14 +8,12 @@
 use super::cg_affine_transform::{CGAffineTransform, CGAffineTransformIdentity};
 use super::cg_bitmap_context::{
     draw_rect_with_line_cap, CGBitmapContextDrawer, CGBitmapContextGetHeight,
-    CGBitmapContextGetWidth,
 };
 use super::cg_color::CGColorRef;
 use super::cg_color_space::{
     kCGColorSpaceModelMonochrome, kCGColorSpaceModelRGB, CGColorSpaceGetModel, CGColorSpaceRef,
 };
 use super::cg_font::{CGFontHostObject, CGFontRef, CGFontRelease, CGFontRetain, CGGlyph};
-use super::cg_geometry::CGPointZero;
 use super::cg_image::CGImageRef;
 use super::cg_path::{
     kCGLineCapButt, kCGLineCapRound, kCGLineCapSquare, kCGPathElementAddLineToPoint,
@@ -126,6 +124,116 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
+/// One clipping operation, stored in device-space coordinates. Successive
+/// operations are intersected by requiring a pixel to be inside every entry.
+/// Each entry may contain several subpaths; their combined nonzero winding
+/// number determines whether the pixel is inside that operation.
+#[derive(Clone, Debug)]
+pub(super) struct ClipPath {
+    subpaths: Vec<Vec<CGPoint>>,
+    bounds: CGRect,
+}
+
+impl ClipPath {
+    fn from_subpaths(subpaths: Vec<Vec<CGPoint>>) -> Self {
+        let mut points = subpaths.iter().flatten();
+        let first = points.next().copied().unwrap_or_default();
+        let (mut min_x, mut max_x) = (first.x, first.x);
+        let (mut min_y, mut max_y) = (first.y, first.y);
+        for point in points {
+            min_x = min_x.min(point.x);
+            max_x = max_x.max(point.x);
+            min_y = min_y.min(point.y);
+            max_y = max_y.max(point.y);
+        }
+        ClipPath {
+            subpaths,
+            bounds: CGRect {
+                origin: CGPoint { x: min_x, y: min_y },
+                size: CGSize {
+                    width: max_x - min_x,
+                    height: max_y - min_y,
+                },
+            },
+        }
+    }
+
+    /// Test the nonzero winding rule at a device-space point.
+    pub(super) fn contains(&self, point: CGPoint) -> bool {
+        if self.subpaths.is_empty()
+            || point.x < self.bounds.origin.x
+            || point.y < self.bounds.origin.y
+            || point.x > self.bounds.origin.x + self.bounds.size.width
+            || point.y > self.bounds.origin.y + self.bounds.size.height
+        {
+            return false;
+        }
+
+        let mut winding = 0i32;
+        for subpath in &self.subpaths {
+            if subpath.len() < 3 {
+                continue;
+            }
+            for (&start, &end) in subpath
+                .iter()
+                .zip(subpath.iter().cycle().skip(1))
+                .take(subpath.len())
+            {
+                let side = (end.x - start.x) * (point.y - start.y)
+                    - (point.x - start.x) * (end.y - start.y);
+                if start.y <= point.y {
+                    if end.y > point.y && side > 0.0 {
+                        winding += 1;
+                    }
+                } else if end.y <= point.y && side < 0.0 {
+                    winding -= 1;
+                }
+            }
+        }
+        winding != 0
+    }
+}
+
+fn clip_path_from_elements(
+    elements: &[CGPathElement],
+    transform: CGAffineTransform,
+) -> Option<ClipPath> {
+    if elements.is_empty() {
+        return None;
+    }
+
+    let mut subpaths = Vec::new();
+    let mut current = Vec::new();
+    for element in elements {
+        match element.r#type {
+            kCGPathElementMoveToPoint => {
+                if !current.is_empty() {
+                    subpaths.push(std::mem::take(&mut current));
+                }
+                if let Some(&point) = element.points.first() {
+                    current.push(transform.apply_to_point(point));
+                }
+            }
+            kCGPathElementAddLineToPoint => {
+                if let Some(&point) = element.points.first() {
+                    current.push(transform.apply_to_point(point));
+                }
+            }
+            kCGPathElementCloseSubpath => {
+                if !current.is_empty() {
+                    subpaths.push(std::mem::take(&mut current));
+                }
+            }
+            _ => unimplemented!("clipping this Core Graphics path element"),
+        }
+    }
+    if !current.is_empty() {
+        subpaths.push(current);
+    }
+
+    Some(ClipPath::from_subpaths(subpaths))
+}
+
 // TODO: keep more states saved once they are implemented
 type ContextState = (
     (CGFloat, CGFloat, CGFloat, CGFloat), // RGB fill color
@@ -135,7 +243,7 @@ type ContextState = (
     CGBlendMode,                          // blend mode
     CGLineCap,                            // line cap
     (CGFloat, CGFloat, CGFloat, CGFloat), // RGB stroke color
-    CGMutablePathRef,                     // path
+    Vec<ClipPath>,                        // clipping path intersections
 );
 
 pub(super) struct CGContextHostObject {
@@ -154,6 +262,7 @@ pub(super) struct CGContextHostObject {
     pub(super) state_stack: Vec<ContextState>,
     pub(super) rgb_stroke_color: (CGFloat, CGFloat, CGFloat, CGFloat),
     pub(super) path: CGMutablePathRef,
+    pub(super) clip_paths: Vec<ClipPath>,
 }
 impl HostObject for CGContextHostObject {}
 
@@ -307,19 +416,54 @@ pub fn CGContextFillEllipseInRect(env: &mut Environment, context: CGContextRef, 
 }
 
 fn CGContextClipToRect(env: &mut Environment, context: CGContextRef, rect: CGRect) {
-    if rect.origin == CGPointZero
-        && rect.size.height == CGBitmapContextGetHeight(env, context) as f32
-        && rect.size.width == CGBitmapContextGetWidth(env, context) as f32
-    {
-        assert!(env
-            .objc
-            .borrow_mut::<CGContextHostObject>(context)
-            .transform
-            .is_identity());
-        // All good, clipping is not needed!
+    let transform = env.objc.borrow::<CGContextHostObject>(context).transform;
+    let corners = vec![
+        rect.origin,
+        CGPoint {
+            x: rect.origin.x + rect.size.width,
+            y: rect.origin.y,
+        },
+        CGPoint {
+            x: rect.origin.x + rect.size.width,
+            y: rect.origin.y + rect.size.height,
+        },
+        CGPoint {
+            x: rect.origin.x,
+            y: rect.origin.y + rect.size.height,
+        },
+    ]
+    .into_iter()
+    .map(|point| transform.apply_to_point(point))
+    .collect();
+    env.objc
+        .borrow_mut::<CGContextHostObject>(context)
+        .clip_paths
+        .push(ClipPath::from_subpaths(vec![corners]));
+}
+
+/// Intersect the current clipping path with the current path using the
+/// nonzero winding rule, then reset the current path. Open subpaths are closed
+/// implicitly by [ClipPath::contains].
+fn CGContextClip(env: &mut Environment, context: CGContextRef) {
+    let (path, transform) = {
+        let host = env.objc.borrow::<CGContextHostObject>(context);
+        (host.path, host.transform)
+    };
+    if path.is_null() {
         return;
     }
-    todo!();
+    let elements = env
+        .objc
+        .borrow::<CGMutablePathHostObject>(path)
+        .path_elements
+        .clone();
+    let Some(clip) = clip_path_from_elements(&elements, transform) else {
+        return;
+    };
+    let new_path = CGPathCreateMutable(env);
+    let host = env.objc.borrow_mut::<CGContextHostObject>(context);
+    host.clip_paths.push(clip);
+    host.path = new_path;
 }
 
 pub fn CGContextConcatCTM(
@@ -406,7 +550,7 @@ fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
         host_obj.blend_mode,
         host_obj.line_cap,
         host_obj.rgb_stroke_color,
-        host_obj.path,
+        host_obj.clip_paths.clone(),
     ));
     CGFontRetain(env, env.objc.borrow::<CGContextHostObject>(context).font);
 }
@@ -427,7 +571,7 @@ fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
     host_obj.blend_mode = state.4;
     host_obj.line_cap = state.5;
     host_obj.rgb_stroke_color = state.6;
-    host_obj.path = state.7;
+    host_obj.clip_paths = state.7;
 }
 
 fn CGContextSetInterpolationQuality(
@@ -758,6 +902,66 @@ fn CGContextStrokePath(env: &mut Environment, context: CGContextRef) {
     env.objc.borrow_mut::<CGContextHostObject>(context).path = CGPathCreateMutable(env);
 }
 
+#[cfg(test)]
+mod clipping_tests {
+    use super::*;
+
+    fn point(x: CGFloat, y: CGFloat) -> CGPoint {
+        CGPoint { x, y }
+    }
+
+    #[test]
+    fn nonzero_winding_combines_subpaths_and_honors_holes() {
+        let outer = vec![
+            point(0.0, 0.0),
+            point(10.0, 0.0),
+            point(10.0, 10.0),
+            point(0.0, 10.0),
+        ];
+        let reverse_inner = vec![
+            point(3.0, 3.0),
+            point(3.0, 7.0),
+            point(7.0, 7.0),
+            point(7.0, 3.0),
+        ];
+        let clip = ClipPath::from_subpaths(vec![outer, reverse_inner]);
+
+        assert!(clip.contains(point(1.0, 1.0)));
+        assert!(!clip.contains(point(5.0, 5.0)));
+        assert!(!clip.contains(point(11.0, 5.0)));
+    }
+
+    #[test]
+    fn current_path_points_are_frozen_in_transformed_device_space() {
+        let elements = vec![
+            CGPathElement {
+                points: vec![point(0.0, 0.0)],
+                r#type: kCGPathElementMoveToPoint,
+            },
+            CGPathElement {
+                points: vec![point(2.0, 0.0)],
+                r#type: kCGPathElementAddLineToPoint,
+            },
+            CGPathElement {
+                points: vec![point(2.0, 2.0)],
+                r#type: kCGPathElementAddLineToPoint,
+            },
+            CGPathElement {
+                points: vec![point(0.0, 2.0)],
+                r#type: kCGPathElementAddLineToPoint,
+            },
+        ];
+        let clip = clip_path_from_elements(
+            &elements,
+            CGAffineTransform::make_translation(5.0, 7.0),
+        )
+        .unwrap();
+
+        assert!(clip.contains(point(6.0, 8.0)));
+        assert!(!clip.contains(point(1.0, 1.0)));
+    }
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextFlush(_)),
     export_c_func!(CGContextRetain(_)),
@@ -775,6 +979,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextSetShadowWithColor(_, _, _, _)),
     export_c_func!(CGContextFillRect(_, _)),
     export_c_func!(CGContextClearRect(_, _)),
+    export_c_func!(CGContextClip(_)),
     export_c_func!(CGContextClipToRect(_, _)),
     export_c_func!(CGContextConcatCTM(_, _)),
     export_c_func!(CGContextGetCTM(_)),

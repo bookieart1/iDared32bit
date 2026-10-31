@@ -96,6 +96,14 @@ public func idaredSwiftUIAppPicker(
     _ icons: UnsafePointer<UnsafePointer<UInt8>?>,
     _ iconCount: Int
 ) -> UnsafeMutablePointer<CChar>? {
+    // A guest app may have exited while SDL's hidden text input view was the
+    // first responder. Never let that keyboard leak into the native picker.
+    UIApplication.shared.sendAction(
+        #selector(UIResponder.resignFirstResponder),
+        to: nil,
+        from: nil,
+        for: nil
+    )
     let data = Data(bytes: json, count: strlen(json))
     guard let input = try? JSONDecoder().decode(PickerInput.self, from: data)
     else {
@@ -133,6 +141,95 @@ public func idaredSwiftUIAppPicker(
     window.isHidden = true
     window.rootViewController = nil
     return strdup(model.result!)
+}
+
+// MARK: - Legacy guest UIAlertView text entry
+
+private struct LegacyAlertInput: Decodable {
+    struct TextField: Decodable {
+        let text: String
+        let placeholder: String?
+        let secure: Bool
+    }
+
+    let title: String
+    let message: String
+    let buttons: [String]
+    let cancelIndex: Int?
+    let textFields: [TextField]
+}
+
+/// Presents the text fields that old games embedded as subviews of
+/// `UIAlertView`. The ordinary SDL message box cannot preserve those guest
+/// subviews or process text events while it is blocking. The return value is
+/// the selected guest button index followed by each field's UTF-8 bytes in
+/// hexadecimal, one item per line, allocated by `strdup()`.
+@_cdecl("idared_native_text_alert")
+public func idaredNativeTextAlert(
+    _ json: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar>? {
+    precondition(Thread.isMainThread)
+    let data = Data(bytes: json, count: strlen(json))
+    guard let input = try? JSONDecoder().decode(LegacyAlertInput.self, from: data),
+          let scene = activeWindowScene(),
+          let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController
+              ?? scene.windows.compactMap({ $0.rootViewController }).first,
+          let presenter = topViewController(root)
+    else {
+        return nil
+    }
+
+    let alert = UIAlertController(
+        title: input.title.isEmpty ? nil : input.title,
+        message: input.message.isEmpty ? nil : input.message,
+        preferredStyle: .alert
+    )
+    for field in input.textFields {
+        alert.addTextField { nativeField in
+            nativeField.text = field.text
+            nativeField.placeholder = field.placeholder
+            nativeField.isSecureTextEntry = field.secure
+        }
+    }
+
+    var selectedIndex: Int?
+    for (index, title) in input.buttons.enumerated() {
+        let style: UIAlertAction.Style = index == input.cancelIndex ? .cancel : .default
+        alert.addAction(UIAlertAction(title: title, style: style) { _ in
+            selectedIndex = index
+        })
+    }
+    presenter.present(alert, animated: true) {
+        alert.textFields?.first?.becomeFirstResponder()
+    }
+
+    // Rust is waiting on the main stack, so keep UIKit responsive until a
+    // button is selected, just as the native app picker does.
+    while selectedIndex == nil {
+        RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.05))
+    }
+
+    let texts = alert.textFields?.map { $0.text ?? "" } ?? []
+    let encodedTexts = texts.map { text in
+        text.utf8.map { String(format: "%02x", $0) }.joined()
+    }
+    alert.dismiss(animated: false)
+    let result = ([String(selectedIndex!)] + encodedTexts).joined(separator: "\n")
+    return strdup(result)
+}
+
+private func topViewController(_ root: UIViewController?) -> UIViewController? {
+    guard let root else { return nil }
+    if let presented = root.presentedViewController {
+        return topViewController(presented)
+    }
+    if let navigation = root as? UINavigationController {
+        return topViewController(navigation.visibleViewController)
+    }
+    if let tabs = root as? UITabBarController {
+        return topViewController(tabs.selectedViewController)
+    }
+    return root
 }
 
 private func activeWindowScene() -> UIWindowScene? {

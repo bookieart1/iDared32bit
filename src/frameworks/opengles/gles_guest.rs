@@ -13,7 +13,7 @@
 //! every time is never going to cause a problem in practice.
 
 use touchHLE_gl_bindings::gles11::{
-    ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER_BINDING, VERTEX_ARRAY_BUFFER_BINDING,
+    ARRAY_BUFFER, ARRAY_BUFFER_BINDING, ELEMENT_ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER_BINDING,
     WRITE_ONLY_OES,
 };
 
@@ -1418,6 +1418,38 @@ fn glGetBufferParameteriv(
         gles.GetBufferParameteriv(target, pname, params)
     })
 }
+
+const BUFFER_MAP_POINTER_OES: GLenum = 0x88BD;
+
+/// Return the guest-visible mapping for the buffer currently bound to
+/// `target`. The host mapping cannot be exposed to a 32-bit guest, so this
+/// must query the same shadow allocation returned by `glMapBufferOES`.
+fn glGetBufferPointervOES(
+    env: &mut Environment,
+    target: GLenum,
+    pname: GLenum,
+    params: MutPtr<MutVoidPtr>,
+) {
+    assert!(matches!(target, ARRAY_BUFFER | ELEMENT_ARRAY_BUFFER));
+    assert_eq!(pname, BUFFER_MAP_POINTER_OES);
+
+    let buffer_object_name = _get_currently_bound_buffer_object_name(env, target);
+    let current_ctx = env
+        .framework_state
+        .opengles
+        .current_ctx_for_thread(env.current_thread);
+    let guest_buffer = current_ctx
+        .and_then(|ctx| {
+            env.objc
+                .borrow::<EAGLContextHostObject>(ctx)
+                .mapped_buffers
+                .get(&buffer_object_name)
+                .map(|&(guest, _)| guest)
+        })
+        .unwrap_or_else(MutVoidPtr::null);
+    env.mem.write(params, guest_buffer);
+}
+
 fn glMapBufferOES(env: &mut Environment, target: GLenum, access: GLenum) -> MutPtr<GLvoid> {
     //  "glMapBuffer maps to the client's address space the entire data store
     //  of the buffer object currently bound to target. The data can then be
@@ -1735,6 +1767,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glDiscardFramebufferEXT(_, _, _)),
     export_c_func!(glGenerateMipmapOES(_)),
     export_c_func!(glGetBufferParameteriv(_, _, _)),
+    export_c_func!(glGetBufferPointervOES(_, _, _)),
     export_c_func!(glMapBufferOES(_, _)),
     export_c_func!(glUnmapBufferOES(_)),
 ];
@@ -1742,13 +1775,13 @@ pub const FUNCTIONS: FunctionExports = &[
 fn _get_currently_bound_buffer_object_name(env: &mut Environment, target: GLenum) -> GLuint {
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         let pname = match target {
-            ARRAY_BUFFER => VERTEX_ARRAY_BUFFER_BINDING,
+            ARRAY_BUFFER => ARRAY_BUFFER_BINDING,
             ELEMENT_ARRAY_BUFFER => ELEMENT_ARRAY_BUFFER_BINDING,
             _ => panic!(),
         };
-        let currently_bound_buffer_name: GLuint = 0;
-        gles.GetIntegerv(pname, &mut (currently_bound_buffer_name as GLint));
-        currently_bound_buffer_name
+        let mut currently_bound_buffer_name: GLint = 0;
+        gles.GetIntegerv(pname, &mut currently_bound_buffer_name);
+        currently_bound_buffer_name.try_into().unwrap()
     })
 }
 

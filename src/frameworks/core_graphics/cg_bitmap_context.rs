@@ -101,6 +101,7 @@ pub fn CGBitmapContextCreate(
         line_cap: kCGLineCapButt,
         line_width: 1.0,
         path: Ptr::null(),
+        clip_paths: Vec::new(),
     };
     let isa = env
         .objc
@@ -502,6 +503,7 @@ pub struct CGBitmapContextDrawer<'a> {
     rgb_fill_color: (CGFloat, CGFloat, CGFloat, CGFloat),
     blend_mode: CGBlendMode,
     transform: CGAffineTransform,
+    clip_paths: Vec<super::cg_context::ClipPath>,
     pixels: &'a mut [u8],
 }
 impl CGBitmapContextDrawer<'_> {
@@ -515,6 +517,7 @@ impl CGBitmapContextDrawer<'_> {
             rgb_fill_color,
             transform,
             blend_mode,
+            ref clip_paths,
             ..
         } = objc.borrow(context);
 
@@ -525,6 +528,7 @@ impl CGBitmapContextDrawer<'_> {
             rgb_fill_color,
             blend_mode,
             transform,
+            clip_paths: clip_paths.clone(),
             pixels,
         }
     }
@@ -567,6 +571,13 @@ impl CGBitmapContextDrawer<'_> {
         color: (CGFloat, CGFloat, CGFloat, CGFloat),
         blend: bool,
     ) {
+        let point = CGPoint {
+            x: coords.0 as CGFloat + 0.5,
+            y: coords.1 as CGFloat + 0.5,
+        };
+        if self.clip_paths.iter().any(|clip| !clip.contains(point)) {
+            return;
+        }
         put_pixel(
             &self.bitmap_info,
             self.pixels,
@@ -647,6 +658,7 @@ fn test_iter_transformed_pixels() {
             rgb_fill_color: (0.0, 0.0, 0.0, 0.0),
             blend_mode: kCGBlendModeNormal,
             transform,
+            clip_paths: Vec::new(),
             pixels: &mut [],
         }
     }

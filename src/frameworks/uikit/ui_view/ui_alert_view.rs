@@ -11,8 +11,133 @@
 use crate::frameworks::foundation::{ns_string, NSInteger};
 use crate::objc::{
     id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil, objc_classes, release,
-    retain, ClassExports, NSZonePtr, SEL,
+    retain, Class, ClassExports, NSZonePtr, SEL,
 };
+use std::ffi::{c_char, CStr, CString};
+use std::sync::OnceLock;
+
+type NativeTextAlertFn = unsafe extern "C" fn(*const c_char) -> *mut c_char;
+static NATIVE_TEXT_ALERT: OnceLock<NativeTextAlertFn> = OnceLock::new();
+
+/// Registered by the iOS executable. Keeping the callback optional lets the
+/// Rust library continue to build and run on desktop platforms.
+#[no_mangle]
+pub extern "C" fn idared_set_native_text_alert(prompt: NativeTextAlertFn) {
+    let _ = NATIVE_TEXT_ALERT.set(prompt);
+}
+
+fn json_string(value: &str) -> String {
+    let mut out = String::from("\"");
+    for ch in value.chars() {
+        match ch {
+            '\"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            ch if (ch as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out.push('\"');
+    out
+}
+
+fn collect_text_fields(env: &mut crate::Environment, view: id, result: &mut Vec<id>) {
+    let text_field_class = env.objc.get_known_class("UITextField", &mut env.mem);
+    let subviews = env.objc.borrow::<super::UIViewHostObject>(view).subviews.clone();
+    for subview in subviews {
+        let class: Class = msg![env; subview class];
+        if env.objc.class_is_subclass_of(class, text_field_class) {
+            result.push(subview);
+        } else {
+            collect_text_fields(env, subview, result);
+        }
+    }
+}
+
+fn decode_hex_text(value: &str) -> Option<String> {
+    if value.len() % 2 != 0 {
+        return None;
+    }
+    let bytes: Option<Vec<u8>> = value
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let pair = std::str::from_utf8(pair).ok()?;
+            u8::from_str_radix(pair, 16).ok()
+        })
+        .collect();
+    String::from_utf8(bytes?).ok()
+}
+
+fn show_native_text_alert(
+    env: &mut crate::Environment,
+    title: &str,
+    message: &str,
+    buttons: &[String],
+    cancel_button: Option<usize>,
+    text_fields: &[id],
+) -> Option<(usize, Vec<String>)> {
+    let prompt = *NATIVE_TEXT_ALERT.get()?;
+    let field_json: Vec<String> = text_fields
+        .iter()
+        .map(|&field| {
+            let text: id = msg![env; field text];
+            let placeholder: id = msg![env; field placeholder];
+            let secure: bool = msg![env; field isSecureTextEntry];
+            let text = if text == nil {
+                String::new()
+            } else {
+                ns_string::to_rust_string(env, text).into_owned()
+            };
+            let placeholder = if placeholder == nil {
+                "null".to_owned()
+            } else {
+                json_string(&ns_string::to_rust_string(env, placeholder))
+            };
+            format!(
+                "{{\"text\":{},\"placeholder\":{},\"secure\":{}}}",
+                json_string(&text),
+                placeholder,
+                secure
+            )
+        })
+        .collect();
+    let button_json = buttons
+        .iter()
+        .map(|button| json_string(button))
+        .collect::<Vec<_>>()
+        .join(",");
+    let cancel_json = cancel_button.map_or("null".to_owned(), |index| index.to_string());
+    let input = format!(
+        "{{\"title\":{},\"message\":{},\"buttons\":[{}],\"cancelIndex\":{},\"textFields\":[{}]}}",
+        json_string(title),
+        json_string(message),
+        button_json,
+        cancel_json,
+        field_json.join(",")
+    );
+    let input = CString::new(input).unwrap();
+    let result = env.on_parent_stack_in_coroutine(|window, _| {
+        // A guest field may already have started SDL text input. The native
+        // alert owns input until it returns, so dismiss the SDL keyboard first.
+        window.stop_text_input();
+        unsafe { prompt(input.as_ptr()) }
+    });
+    if result.is_null() {
+        return None;
+    }
+    let result_string = unsafe { CStr::from_ptr(result) }
+        .to_string_lossy()
+        .into_owned();
+    unsafe { libc::free(result.cast()) };
+
+    let mut parts = result_string.split('\n');
+    let index = parts.next()?.parse().ok()?;
+    let texts = parts.map(decode_hex_text).collect::<Option<Vec<_>>>()?;
+    if index >= buttons.len() || texts.len() != text_fields.len() {
+        return None;
+    }
+    Some((index, texts))
+}
 
 #[derive(Default)]
 pub struct UIAlertViewHostObject {
@@ -158,9 +283,32 @@ pub const CLASSES: ClassExports = objc_classes! {
     let cancel_button = usize::try_from(cancel_index)
         .ok()
         .filter(|&i| i < buttons.len());
-    let index = env.on_parent_stack_in_coroutine(|window, _| {
-        window.show_alert(&title, &message, &buttons, cancel_button)
-    });
+    let mut text_fields = Vec::new();
+    collect_text_fields(env, this, &mut text_fields);
+    let index = if text_fields.is_empty() {
+        env.on_parent_stack_in_coroutine(|window, _| {
+            window.show_alert(&title, &message, &buttons, cancel_button)
+        })
+    } else if let Some((index, texts)) = show_native_text_alert(
+        env,
+        &title,
+        &message,
+        &buttons,
+        cancel_button,
+        &text_fields,
+    ) {
+        for (&field, text) in text_fields.iter().zip(texts) {
+            let text = ns_string::from_rust_string(env, text);
+            () = msg![env; field setText:text];
+            let _: bool = msg![env; field resignFirstResponder];
+        }
+        Some(index)
+    } else {
+        log!("Warning: native text-entry alert was unavailable; using a message box without guest text fields.");
+        env.on_parent_stack_in_coroutine(|window, _| {
+            window.show_alert(&title, &message, &buttons, cancel_button)
+        })
+    };
     // Closing the alert without a button counts as the cancel button, like
     // UIKit does when the app is sent to the background.
     let Some(index) = index.or(cancel_button) else {

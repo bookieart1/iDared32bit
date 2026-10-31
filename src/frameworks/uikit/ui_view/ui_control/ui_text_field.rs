@@ -47,6 +47,9 @@ struct UITextFieldHostObject {
     delegate: id,
     editing: bool,
     text_label: id,
+    /// Copied, like UIKit's `placeholder` property.
+    placeholder: id,
+    secure_text_entry: bool,
 }
 impl_HostObject_with_superclass!(UITextFieldHostObject);
 impl Default for UITextFieldHostObject {
@@ -56,6 +59,8 @@ impl Default for UITextFieldHostObject {
             delegate: nil,
             editing: false,
             text_label: nil,
+            placeholder: nil,
+            secure_text_entry: false,
         }
     }
 }
@@ -115,10 +120,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())dealloc {
     let UITextFieldHostObject {
         text_label,
+        placeholder,
         ..
     } = std::mem::take(env.objc.borrow_mut(this));
 
     release(env, text_label);
+    release(env, placeholder);
     msg_super![env; this dealloc]
 }
 
@@ -182,11 +189,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setSecureTextEntry:(bool)secure {
-    todo_objc_setter!(this, secure);
+    env.objc.borrow_mut::<UITextFieldHostObject>(this).secure_text_entry = secure;
+}
+- (bool)isSecureTextEntry {
+    env.objc.borrow::<UITextFieldHostObject>(this).secure_text_entry
 }
 
 - (())setPlaceholder:(id)placeholder { // NSString*
-    todo_objc_setter!(this, to_rust_string(env, placeholder));
+    let placeholder: id = msg![env; placeholder copy];
+    let old = std::mem::replace(
+        &mut env.objc.borrow_mut::<UITextFieldHostObject>(this).placeholder,
+        placeholder,
+    );
+    release(env, old);
+}
+- (id)placeholder {
+    env.objc.borrow::<UITextFieldHostObject>(this).placeholder
 }
 
 - (())setPosition:(CGPoint)position {
