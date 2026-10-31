@@ -61,20 +61,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     }), &mut env.mem)
 }
 
-- (id)initForWritingWithMutableData:(id)data { // NSMutableData *
-    if data == nil {
-        release(env, this);
-        return nil;
-    }
-    retain(env, data);
-    let old_output_data = {
-        let host_object = env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this);
-        std::mem::replace(&mut host_object.output_data, data)
-    };
-    release(env, old_output_data);
-    this
-}
-
 + (id)archivedDataWithRootObject:(id)root_object { // NSCoding *
     let key = get_static_str(env, NSKeyedArchiveRootObjectKey);
     let instance: id = msg_class![env; NSKeyedArchiver new];
@@ -90,6 +76,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     log_dbg!("[NSKeyedArchiver archiveRootObject:{:?} toFile:{:?}('{}')]", root_object, file, to_rust_string(env, file));
     let data: id = msg![env; this archivedDataWithRootObject:root_object];
     msg![env; data writeToFile:file atomically:true]
+}
+
+- (id)initForWritingWithMutableData:(id)data { // NSMutableData *
+    if data == nil {
+        release(env, this);
+        return nil;
+    }
+    retain(env, data);
+    let old_output_data = {
+        let host_object = env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this);
+        std::mem::replace(&mut host_object.output_data, data)
+    };
+    release(env, old_output_data);
+    this
 }
 
 - (())encodeObject:(id)object // NSCoding *
