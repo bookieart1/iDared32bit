@@ -507,6 +507,28 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, immutable_keys)
 }
 
+// Generic implementation for immutable dictionaries and real NSDictionary
+// subclasses. The concrete mutable dictionary keeps its direct implementation
+// below, but an immutable _touchHLE_NSDictionary must inherit this contract too.
+- (id)allValues {
+    let values: id = msg_class![env; NSMutableArray array];
+    let enumerator: id = msg![env; this keyEnumerator];
+    loop {
+        let key: id = msg![env; enumerator nextObject];
+        if key == nil {
+            break;
+        }
+        let value: id = msg![env; this objectForKey:key];
+        // NSDictionary cannot contain nil values. Keep this assertion here so
+        // broken custom subclasses fail at the point where they violate the
+        // collection contract rather than inside NSMutableArray.
+        assert!(value != nil);
+        () = msg![env; values addObject:value];
+    }
+    let immutable_values: id = msg![env; values copy];
+    autorelease(env, immutable_values)
+}
+
 - (NSUInteger)hash {
     // TODO: define better hash
     msg![env; this count]

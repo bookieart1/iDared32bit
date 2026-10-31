@@ -7403,6 +7403,23 @@ int test_NSDictionary_subclass_allKeys() {
   return result;
 }
 
+int test_NSDictionary_allValues() {
+  NSDictionary *dict = [NSDictionarySubclassForAllKeysTest new];
+  NSArray *values = [dict allValues];
+  int result = 0;
+  if ([values count] != 2 || ![values containsObject:@1] ||
+      ![values containsObject:@2])
+    result = -1;
+  [dict release];
+
+  NSDictionary *immutable =
+      [NSDictionary dictionaryWithObject:@3 forKey:@"three"];
+  if (!result && ([[immutable allValues] count] != 1 ||
+                  ![[immutable allValues] containsObject:@3]))
+    result = -2;
+  return result;
+}
+
 int test_NSDictionary_keyEnumerator() {
   NSDictionary *immutable =
       [NSDictionary dictionaryWithObjects:[NSArray arrayWithObjects:@1, @2, nil]
@@ -7800,6 +7817,7 @@ struct {
     FUNC_DEF(test_methodForSelector),
     FUNC_DEF(test_nil_path_or_key),
     FUNC_DEF(test_NSDictionary_subclass_allKeys),
+    FUNC_DEF(test_NSDictionary_allValues),
     FUNC_DEF(test_NSDictionary_keyEnumerator),
     FUNC_DEF(test_NSCharacterSet_alphanumericCharacterSet),
     FUNC_DEF(test_malloc_zone_basic),

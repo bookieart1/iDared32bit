@@ -6,6 +6,7 @@
 //! `MPMoviePlayerController` etc.
 
 use crate::dyld::{ConstantExports, HostConstant};
+use crate::frameworks::core_graphics::CGRect;
 use crate::frameworks::foundation::{ns_string, ns_url, NSInteger, NSTimeInterval};
 use crate::frameworks::uikit::ui_device::UIDeviceOrientation;
 use crate::objc::{
@@ -79,6 +80,8 @@ struct MPMoviePlayerControllerHostObject {
     movie_source_type: MPMovieSourceType,
     should_autoplay: bool,
     // UIView *, made when first asked for
+    view: id,
+    // UIView *, made when first asked for
     background_view: id,
 }
 impl HostObject for MPMoviePlayerControllerHostObject {}
@@ -96,6 +99,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         content_url: nil,
         movie_source_type: MPMovieSourceTypeUnknown,
         should_autoplay: true,
+        view: nil,
         background_view: nil,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
@@ -122,8 +126,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     let host_obj = env.objc.borrow::<MPMoviePlayerControllerHostObject>(this);
-    let (url, background_view) = (host_obj.content_url, host_obj.background_view);
+    let (url, view, background_view) = (
+        host_obj.content_url,
+        host_obj.view,
+        host_obj.background_view,
+    );
     release(env, url);
+    release(env, view);
     release(env, background_view);
 
     env.objc.dealloc_object(this, &mut env.mem);
@@ -172,7 +181,27 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)view {
-    nil // TODO
+    let view = env.objc.borrow::<MPMoviePlayerControllerHostObject>(this).view;
+    if view != nil {
+        return view;
+    }
+
+    // MPMoviePlayerController's view property is non-nil on iOS. A number of
+    // games configure or embed it before playback begins, so returning nil can
+    // turn into a guest-side null dereference before any Objective-C error is
+    // visible. The emulator still does not decode video, but it can provide the
+    // real UIView contract and the expected screen-sized initial frame.
+    let screen: id = msg_class![env; UIScreen mainScreen];
+    let frame: CGRect = msg![env; screen applicationFrame];
+    let view: id = msg_class![env; UIView alloc];
+    let view: id = msg![env; view initWithFrame:frame];
+    env.objc.borrow_mut::<MPMoviePlayerControllerHostObject>(this).view = view;
+    log_dbg!(
+        "[(MPMoviePlayerController*){:?} view] created {:?}",
+        this,
+        view
+    );
+    view
 }
 
 // For the game's own content behind the movie. TODO: it isn't shown, as

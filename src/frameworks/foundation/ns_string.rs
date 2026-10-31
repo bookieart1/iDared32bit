@@ -460,6 +460,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)stringWithContentsOfURL:(id)url { // NSURL*
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfURL:url];
+    autorelease(env, new)
+}
+
 + (id)stringWithContentsOfFile:(id)path // NSString*
                       encoding:(NSStringEncoding)encoding
                          error:(MutPtr<id>)error { // NSError**
@@ -1548,6 +1554,42 @@ pub const CLASSES: ClassExports = objc_classes! {
     let encoding = if len > 1 && (bytes[..2] == [0xFE, 0xFF] || bytes[..2] == [0xFF, 0xFE]) {
         NSUTF16StringEncoding
     } else if len > 2 && bytes[..3] == [0xEF, 0xBB, 0xBF] {
+        NSUTF8StringEncoding
+    } else {
+        msg_class![env; NSString defaultCStringEncoding]
+    };
+
+    let Some(host_object) = StringHostObject::try_decode(Cow::Owned(bytes), encoding) else {
+        release(env, this);
+        return nil;
+    };
+    *env.objc.borrow_mut(this) = host_object;
+    this
+}
+
+// Historical convenience initializer. Like initWithContentsOfFile:, this
+// chooses an encoding from a BOM and otherwise uses the default C-string
+// encoding. NSData performs the URL loading so unsupported non-file schemes
+// fail cleanly instead of being mistaken for guest filesystem paths.
+- (id)initWithContentsOfURL:(id)url { // NSURL*
+    if url == nil {
+        release(env, this);
+        return nil;
+    }
+    let data: id = msg_class![env; NSData dataWithContentsOfURL:url];
+    if data == nil {
+        release(env, this);
+        return nil;
+    }
+
+    let bytes_ptr: ConstVoidPtr = msg![env; data bytes];
+    let length: NSUInteger = msg![env; data length];
+    let bytes = env.mem.bytes_at(bytes_ptr.cast(), length).to_vec();
+    let encoding = if bytes.len() > 1
+        && (bytes[..2] == [0xFE, 0xFF] || bytes[..2] == [0xFF, 0xFE])
+    {
+        NSUTF16StringEncoding
+    } else if bytes.len() > 2 && bytes[..3] == [0xEF, 0xBB, 0xBF] {
         NSUTF8StringEncoding
     } else {
         msg_class![env; NSString defaultCStringEncoding]

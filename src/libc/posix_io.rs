@@ -937,14 +937,25 @@ pub fn fsync(env: &mut Environment, fd: FileDescriptor) -> i32 {
     }
 }
 
-fn ftruncate(env: &mut Environment, fd: FileDescriptor, len: off_t) -> i32 {
-    // TODO: handle errno properly
-    set_errno(env, 0);
-
-    let file = env.libc_state.posix_io.file_for_fd(fd).unwrap();
+pub fn ftruncate(env: &mut Environment, fd: FileDescriptor, len: off_t) -> i32 {
+    if len < 0 {
+        set_errno(env, EINVAL);
+        return -1;
+    }
+    if fd < NORMAL_FILENO_BASE {
+        set_errno(env, EBADF);
+        return -1;
+    }
+    let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
+        set_errno(env, EBADF);
+        return -1;
+    };
     match file.file.set_len(len as u64) {
         Ok(()) => 0,
-        Err(_) => -1, // TODO: set errno
+        Err(_) => {
+            set_errno(env, EIO);
+            -1
+        }
     }
 }
 

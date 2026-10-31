@@ -1662,6 +1662,30 @@ impl Environment {
                     "CPU memory-fault context: pc={pc:#010x}, cpsr={cpsr:#010x}, instruction bytes unavailable"
                 );
             }
+
+            // A guest null dereference often follows a host API returning nil.
+            // Report any Objective-C objects in the argument registers and a
+            // selector-shaped R1 so a physical-device log can identify that
+            // API boundary without weakening memory safety or changing state.
+            for register in 0..=3 {
+                let bits = self.cpu.regs()[register];
+                let candidate: objc::id = mem::MutPtr::from_bits(bits);
+                if self.objc.get_host_object(candidate).is_some() {
+                    let class = objc::ObjC::read_isa(candidate, &self.mem);
+                    let class_name = self.objc.try_get_class_name(class).unwrap_or("<unknown>");
+                    log_no_panic!(
+                        "CPU memory-fault Objective-C candidate: R{register}={bits:#010x} class={class_name:?}"
+                    );
+                }
+            }
+            let selector_ptr = mem::ConstPtr::<u8>::from_bits(self.cpu.regs()[1]);
+            if let Ok(selector) = self.mem.cstr_at_utf8(selector_ptr) {
+                log_no_panic!(
+                    "CPU memory-fault selector candidate: R1={:#010x} {:?}",
+                    self.cpu.regs()[1],
+                    selector
+                );
+            }
         }
 
         if matches!(error, cpu::CpuError::UndefinedInstruction)

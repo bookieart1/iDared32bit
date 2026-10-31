@@ -140,6 +140,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+- (())truncateFileAtOffset:(u64)offset {
+    let Ok(offset) = i64::try_from(offset) else {
+        panic!("truncateFileAtOffset: offset is too large");
+    };
+    let fd = env.objc.borrow::<NSFileHandleHostObject>(this).fd;
+    if posix_io::ftruncate(env, fd, offset) == -1 {
+        panic!("truncateFileAtOffset: failed")
+    }
+}
+
 - (())closeFile {
     // file is closed on dealloc
     // TODO: keep closed state and raise an exception
