@@ -138,9 +138,17 @@ fn dlclose(env: &mut Environment, handle: MutVoidPtr) -> i32 {
     0 // success
 }
 
+fn _dyld_get_image_header(env: &mut Environment, image_index: u32) -> ConstVoidPtr {
+    env.bins
+        .get(image_index as usize)
+        .and_then(|bin| bin.text_segment_base)
+        .map_or(Ptr::null(), Ptr::from_bits)
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(dlopen(_, _)),
     export_c_func!(dlsym(_, _)),
     export_c_func!(dlclose(_)),
     export_c_func!(dladdr(_, _)),
+    export_c_func!(_dyld_get_image_header(_)),
 ];

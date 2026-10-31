@@ -31,6 +31,11 @@
 # - Use --stabilize-virtual-cursor= if the game's menus are practically unusable
 #   without it.
 
+# Blot's universal archive constructs its tablet-sized main hierarchy even
+# when launched as an iPhone app. Use the matching native device family and
+# composite its layered UI instead of presenting a cropped layer directly.
+com.majesticsoftware.blot: --device-family=ipad --force-composition
+
 # Super Monkey Ball and Super Monkey Ball Lite
 # B = speed up level intro, Start = pause
 com.ooi.supermonkeyball: --landscape-left --y-tilt-offset=24 --button-to-touch=B,470,160 --button-to-touch=Start,240,10

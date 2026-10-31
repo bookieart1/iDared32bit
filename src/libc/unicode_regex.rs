@@ -35,14 +35,47 @@ fn uregex_open(
 
     // Preserve enough state to give the guest a stable, non-null opaque
     // handle. The pattern remains owned by the caller, as in ICU.
-    let handle: MutPtr<u32> = env.mem.alloc(12).cast();
+    let handle: MutPtr<u32> = env.mem.alloc(20).cast();
     env.mem.write(handle, pattern.to_bits());
     env.mem.write(handle + 1, pattern_length as u32);
     env.mem.write(handle + 2, flags);
+    env.mem.write(handle + 3, 0);
+    env.mem.write(handle + 4, 0);
     log_once!(
         "Warning: uregex_open provides an opaque compatibility handle; ICU matching is not implemented yet"
     );
     handle.cast()
+}
+
+#[allow(non_snake_case)]
+fn uregex_setText(
+    env: &mut Environment,
+    regexp: MutVoidPtr,
+    text: ConstPtr<UChar>,
+    text_length: i32,
+    status: MutPtr<UErrorCode>,
+) {
+    if !status.is_null() {
+        env.mem.write(status, U_ZERO_ERROR);
+    }
+    if regexp.is_null() {
+        return;
+    }
+
+    let text_length = if text_length >= 0 {
+        text_length as u32
+    } else if text.is_null() {
+        0
+    } else {
+        let mut length = 0;
+        while env.mem.read(text + length) != 0 {
+            length += 1;
+        }
+        length
+    };
+    let handle: MutPtr<u32> = regexp.cast();
+    env.mem.write(handle + 3, text.to_bits());
+    env.mem.write(handle + 4, text_length);
 }
 
 fn uregex_close(env: &mut Environment, regexp: MutVoidPtr) {
@@ -119,6 +152,7 @@ fn uregex_groupCount(
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(uregex_open(_, _, _, _, _)),
+    export_c_func!(uregex_setText(_, _, _, _)),
     export_c_func!(uregex_groupCount(_, _)),
     export_c_func!(uregex_close(_)),
 ];

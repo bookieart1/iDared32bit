@@ -7,10 +7,13 @@
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::libc::errno::{set_errno, ENOENT};
-use crate::mem::{guest_size_of, ConstPtr, GuestUSize, MutPtr, MutVoidPtr, PAGE_SIZE};
+use crate::mem::{
+    guest_size_of, ConstPtr, GuestUSize, MutPtr, MutVoidPtr, SafeRead, PAGE_SIZE,
+};
 use crate::window::DeviceFamily;
 use crate::Environment;
 
@@ -25,6 +28,7 @@ const KERN_OSREV: i32 = 3;
 const KERN_VERSION: i32 = 4;
 const KERN_HOSTNAME: i32 = 10;
 const KERN_PROC: i32 = 14;
+const KERN_BOOTTIME: i32 = 21;
 const KERN_OSVERSION: i32 = 65;
 
 // KERN_PROC
@@ -53,7 +57,7 @@ enum SysCtlNamePath {
 // Clippy complains about the type.
 // Below values corresponds to the original iPhone.
 // Reference https://www.mail-archive.com/misc@openbsd.org/msg80988.html
-static SYSCTL_VALUES: [(SysCtlNamePath, &str, SysInfoType); 18] = [
+static SYSCTL_VALUES: [(SysCtlNamePath, &str, SysInfoType); 19] = [
     // Generic CPU, I/O
     (SysCtlNamePath::Length2(CTL_HW, HW_MACHINE), "hw.machine", SysInfoType::String(b"iPhone1,1")),
     (SysCtlNamePath::Length2(CTL_HW, HW_MODEL), "hw.model", SysInfoType::String(b"M68AP")),
@@ -73,6 +77,7 @@ static SYSCTL_VALUES: [(SysCtlNamePath, &str, SysInfoType); 18] = [
     (SysCtlNamePath::Length2(CTL_KERN, KERN_OSRELEASE), "kern.osrelease", SysInfoType::String(b"10.0.0d3")),
     (SysCtlNamePath::Length2(CTL_KERN, KERN_OSREV), "kern.osrevision", SysInfoType::String(b"199506")),
     (SysCtlNamePath::Length2(CTL_KERN, KERN_HOSTNAME), "kern.hostname", SysInfoType::String(b"touchHLE")), // this is arbitrary
+    (SysCtlNamePath::Length2(CTL_KERN, KERN_BOOTTIME), "kern.boottime", SysInfoType::BootTime),
     (SysCtlNamePath::Length2(CTL_KERN, KERN_VERSION), "kern.version", SysInfoType::String(b"Darwin Kernel Version 10.0.0d3: Wed May 13 22:11:58 PDT 2009; root:xnu-1357.2.89~4/RELEASE_ARM_S5L8900X")),
     (SysCtlNamePath::Length2(CTL_KERN, KERN_OSVERSION), "kern.osversion", SysInfoType::String(b"7A341")),
     // Last 0 here is an unnamed placeholder
@@ -127,8 +132,17 @@ enum SysInfoType {
     String(&'static [u8]),
     Int32(i32),
     Int64(i64),
+    BootTime,
     Struct,
 }
+
+#[repr(C, packed)]
+#[derive(Copy, Clone)]
+struct GuestTimeval {
+    tv_sec: i32,
+    tv_usec: i32,
+}
+unsafe impl SafeRead for GuestTimeval {}
 
 fn sysctl(
     env: &mut Environment,
@@ -273,6 +287,7 @@ where
         SysInfoType::String(str) => str.len() as GuestUSize + 1,
         SysInfoType::Int32(_) => guest_size_of::<i32>(),
         SysInfoType::Int64(_) => guest_size_of::<i64>(),
+        SysInfoType::BootTime => guest_size_of::<GuestTimeval>(),
         _ => unimplemented!(),
     };
     if oldp.is_null() {
@@ -298,6 +313,22 @@ where
         }
         SysInfoType::Int64(num) => {
             env.mem.write(oldp.cast(), num);
+        }
+        SysInfoType::BootTime => {
+            // KERN_BOOTTIME is a 32-bit Darwin timeval. A plausible boot time
+            // is sufficient for legacy callers that use it to derive uptime.
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let tv_sec = now.saturating_sub(3600).min(i32::MAX as u64) as i32;
+            env.mem.write(
+                oldp.cast(),
+                GuestTimeval {
+                    tv_sec,
+                    tv_usec: 0,
+                },
+            );
         }
         _ => unimplemented!(),
     }

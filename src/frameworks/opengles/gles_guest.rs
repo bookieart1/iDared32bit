@@ -390,49 +390,9 @@ fn glViewport(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height:
     // and scale viewport appropriately
     let factor = env.options.scale_hack.get() as GLsizei;
     let (x, y) = (x * factor, y * factor);
-    let (requested_width, requested_height) = (width * factor, height * factor);
-    let legacy_fullscreen = x == 0
-        && y == 0
-        && matches!((width, height), (768, 1024) | (1024, 768));
+    let (width, height) = (width * factor, height * factor);
     with_ctx_and_mem(env, |gles, _mem| unsafe {
-        let (mut viewport_width, mut viewport_height) = (requested_width, requested_height);
-
-        // A handful of universal iPhone/iPad games accidentally select their
-        // archived iPad viewport while UIKit has correctly selected an iPhone
-        // drawable. Real iOS clips the drawable to its actual backing size;
-        // forwarding the oversized viewport verbatim instead magnifies one
-        // corner of the game. Restrict this correction to the two canonical
-        // iPad full-screen sizes and an actually smaller bound renderbuffer.
-        if legacy_fullscreen {
-            let mut renderbuffer = 0;
-            gles.GetIntegerv(gles11::RENDERBUFFER_BINDING_OES, &mut renderbuffer);
-            if renderbuffer != 0 {
-                let mut drawable_width = 0;
-                let mut drawable_height = 0;
-                gles.GetRenderbufferParameterivOES(
-                    gles11::RENDERBUFFER_OES,
-                    gles11::RENDERBUFFER_WIDTH_OES,
-                    &mut drawable_width,
-                );
-                gles.GetRenderbufferParameterivOES(
-                    gles11::RENDERBUFFER_OES,
-                    gles11::RENDERBUFFER_HEIGHT_OES,
-                    &mut drawable_height,
-                );
-                if drawable_width > 0
-                    && drawable_height > 0
-                    && (requested_width > drawable_width || requested_height > drawable_height)
-                {
-                    log_once!(
-                        "Normalizing a legacy iPad OpenGL viewport to the bound drawable size."
-                    );
-                    viewport_width = drawable_width;
-                    viewport_height = drawable_height;
-                }
-            }
-        }
-
-        gles.Viewport(x, y, viewport_width, viewport_height)
+        gles.Viewport(x, y, width, height)
     })
 }
 fn glLineWidth(env: &mut Environment, val: GLfloat) {
