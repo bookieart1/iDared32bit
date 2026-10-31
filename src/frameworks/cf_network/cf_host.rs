@@ -201,7 +201,7 @@ fn CFStreamCreatePairWithSocketToCFHost(
         "(null)".to_string()
     } else {
         let name = env.objc.borrow::<CFHostHostObject>(host).name;
-        to_rust_string(env, name)
+        to_rust_string(env, name).into_owned()
     };
     log!(
         "Warning: CFStreamCreatePairWithSocketToCFHost({}, {}) is unavailable; returning NULL streams",
