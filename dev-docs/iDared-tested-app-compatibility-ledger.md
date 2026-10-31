@@ -2,8 +2,8 @@
 
 Last reconciled: October 31, 2026
 Latest device-tested checkpoint: **iDared Dev 1.69** (`acf10ae9`)
-Latest built checkpoint: **iDared Dev 1.69** (`acf10ae9`)
-Current activity: **Dev 1.70 source work implements the three shared contracts recovered from the latest device evidence: `NSNull -description`, explicit offline failure for CFHost socket-stream creation, and the standard `printf` `+` flag for floating conversions. Focused tests are present; hosted validation and IPA packaging are pending.**
+Latest built checkpoint: **iDared Dev 1.70** (`6ca62e0e`)
+Current activity: **Dev 1.70 is built and independently package-verified. It implements the three shared contracts recovered from the latest device evidence: `NSNull -description`, explicit offline failure for CFHost socket-stream creation, and the standard `printf` `+` flag for floating conversions. Hosted macOS and Windows library suites passed 105/105 tests; physical-device testing is pending.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -2619,7 +2619,7 @@ its verified Dev 1.68 long-session death result remains the separate formatting
 issue above. No source change, new package, or push was made from this status
 report.
 
-## Dev 1.70 three recovered contracts — source prepared, validation pending
+## Dev 1.70 three recovered contracts — built and awaiting device test
 
 This batch follows the three independently decisive boundaries above. It does
 not change the diagnostic recorder, memory-fault policy, rendering, saves or
@@ -2666,3 +2666,45 @@ survive the recorded death formatting request; a long Classic session ending
 in death is required because the menu-slowdown fix and this formatter fix are
 separate. The relevant regression checks are a brief Spoing session, Blot's
 smooth Classic/menu/Challenges path, and repeated launch/return behavior.
+
+### Dev 1.70 hosted validation and package verification
+
+- Implementation commit `3341bbf00af1e1f7a367c48743a8c6e255fa2caa`
+  added the three shared contracts. Its first unsigned-iPhone workflow
+  (`41248565043`) correctly rejected a `Cow<str>`/`String` type mismatch in the
+  new CFHost diagnostic text. Final source commit
+  `6ca62e0eb576cc80b91e0ca83fb5d5237ba0bba7` uses the owned string expected by
+  that helper; this follow-up does not change the API result or stream behavior.
+- Final lint/test workflow `41248909683` (run 50) completed successfully. The
+  macOS and Windows development-branch library suites each passed all 105
+  tests, including the four new focused tests; the macOS diagnostic reproducer
+  also passed. The release-only full-app test, legacy sanity-test and formatting
+  steps were configured skips. The allowed-to-fail lint script still stops at
+  the two pre-existing long comment lines in `dlfcn.rs` and
+  `ns_dictionary.rs`, so this run does not claim clippy, rustdoc or Android
+  compilation.
+- Unsigned-iPhone workflow `41248909612` (run 115) completed successfully,
+  including iOS compilation, separate development identity verification,
+  unsigned packaging and artifact upload.
+- Artifact `13060895244`,
+  `iDared32bit-dev-unsigned-6ca62e0eb576cc80b91e0ca83fb5d5237ba0bba7`,
+  is 19,834,916 bytes. Its downloaded ZIP SHA-256 exactly matches GitHub's
+  digest:
+  `0A59CB27EA5AB4EB2431ABC093A995DD3DD533A63EBCB10F1FCD65F3CA5F33B2`.
+- The extracted IPA is 19,881,346 bytes with SHA-256
+  `4B08A0FB6C2E655D30173472CEABD716CD40ECB7BBF61BB64DB5B1EFC6CB2872`.
+  All 36 ZIP entries read successfully. It identifies as
+  `com.bookieart1.idared32bit.dev` / `iDared Dev`, contains an unsigned arm64
+  Mach-O, embeds source prefix `6ca62e0`, workflow `41248909612`, the expected
+  branch and repository, the bounded diagnostic recorder and cohort options,
+  and contains neither `_CodeSignature` nor `embedded.mobileprovision`.
+- Local handoff: `outputs/iDared-Dev-1.70.ipa`; complete package evidence is in
+  `outputs/iDared-Dev-1.70.verification.json`.
+
+Focused device test: install over the development app without deleting its
+container. Launch B'Blast once and allow its current result to occur. Launch
+Addicus; if the menu remains, wait about 20 seconds and try starting once. In
+Blot, play Classic long enough to die; if it remains open, return to the menu,
+open Challenges, press Back and wait about 20 seconds. Brief Spoing play is the
+working regression control; a full level is not required. Return the combined
+log and visible results.
