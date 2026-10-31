@@ -197,16 +197,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)path {
-    match *env.objc.borrow(this) {
-        NSURLHostObject::FileURL { ns_string, .. } => ns_string,
-        NSURLHostObject::OtherURL { ns_string } => {
-            // TODO: Support full URLs, not only ones that are just a path.
-            // FIXME: This should do unescaping.
-            // TODO: Avoid copy.
-            assert!(to_rust_string(env, ns_string).starts_with('/'));
-            ns_string
-        },
-    }
+    let url = match *env.objc.borrow(this) {
+        NSURLHostObject::FileURL { ns_string, .. } => return ns_string,
+        NSURLHostObject::OtherURL { ns_string } => to_rust_string(env, ns_string).into_owned(),
+    };
+    let Some(path) = url_path(&url) else {
+        return nil;
+    };
+    let path = from_rust_string(env, path);
+    autorelease(env, path)
 }
 
 - (id)absoluteString {
@@ -350,6 +349,18 @@ fn url_host(url: &str) -> Option<String> {
     percent_decode_utf8(encoded_host)
 }
 
+fn url_path(url: &str) -> Option<String> {
+    let (_, _, encoded_path, _, _) = split_url(url);
+    let encoded_path = encoded_path
+        .split_once(';')
+        .map_or(encoded_path, |(path, _)| path);
+    let mut path = percent_decode_utf8(encoded_path)?;
+    if path.len() > 1 && path.ends_with('/') {
+        path.pop();
+    }
+    Some(path)
+}
+
 /// Shortcut for host code, provides a view of a URL as a path.
 /// TODO: Try to avoid allocating a new GuestPathBuf in more cases.
 pub fn to_rust_path(env: &mut Environment, url: id) -> Cow<'static, GuestPath> {
@@ -463,7 +474,7 @@ fn resolve_url_reference(base: &str, reference: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_url_reference, url_host};
+    use super::{resolve_url_reference, url_host, url_path};
 
     #[test]
     fn test_resolve_url_reference() {
@@ -534,5 +545,28 @@ mod tests {
         assert_eq!(url_host("http://:80/empty-host"), None);
         assert_eq!(url_host("http://example.com:/empty-port"), None);
         assert_eq!(url_host("http://bad%xx.example/"), None);
+    }
+
+    #[test]
+    fn test_url_path() {
+        assert_eq!(
+            url_path("https://example.com/a%20path/file?query=/ignored#fragment"),
+            Some("/a path/file".to_string())
+        );
+        assert_eq!(url_path("https://example.com"), Some(String::new()));
+        assert_eq!(
+            url_path("custom:relative%20path"),
+            Some("relative path".to_string())
+        );
+        assert_eq!(
+            url_path("/already/a/path"),
+            Some("/already/a/path".to_string())
+        );
+        assert_eq!(
+            url_path("https://example.com/path/;parameter?query"),
+            Some("/path".to_string())
+        );
+        assert_eq!(url_path("https://example.com/"), Some("/".to_string()));
+        assert_eq!(url_path("https://example.com/bad%xxpath"), None);
     }
 }

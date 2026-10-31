@@ -81,6 +81,23 @@ pub struct Thread {
     pub stack: Option<std::ops::RangeInclusive<u32>>,
 }
 
+fn decode_arm_direct_global_getter(target: u32, bytes: &[u8]) -> Option<u32> {
+    let first = u32::from_le_bytes(bytes.get(0..4)?.try_into().ok()?);
+    let second = u32::from_le_bytes(bytes.get(4..8)?.try_into().ok()?);
+    let third = u32::from_le_bytes(bytes.get(8..12)?.try_into().ok()?);
+    if first & 0xffff_f000 != 0xe59f_0000
+        || second != 0xe590_0000
+        || third != 0xe12f_ff1e
+    {
+        return None;
+    }
+
+    let literal_address = target.checked_add(8)?.checked_add(first & 0xfff)?;
+    let literal_offset: usize = literal_address.checked_sub(target)?.try_into().ok()?;
+    let literal = bytes.get(literal_offset..literal_offset.checked_add(4)?)?;
+    Some(u32::from_le_bytes(literal.try_into().ok()?))
+}
+
 impl Thread {
     fn is_blocked(&self) -> bool {
         !matches!(self.blocked_by, ThreadBlock::NotBlocked)
@@ -1709,6 +1726,70 @@ impl Environment {
                     log_no_panic!(
                         "{source} nearest preceding ARM BL at {instruction_address:#010x} targets {target:#010x} (64 bytes): {target_bytes:02x?}"
                     );
+                    if let Some(global_slot) = decode_arm_direct_global_getter(target, target_bytes)
+                    {
+                        let slot_ptr = mem::ConstVoidPtr::from_bits(global_slot);
+                        let slot_value = self
+                            .mem
+                            .get_bytes_fallible(slot_ptr, 4)
+                            .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()));
+                        if let Some(slot_value) = slot_value {
+                            log_no_panic!(
+                                "{source} ARM BL target is a direct getter for global slot {global_slot:#010x}; current value: {slot_value:#010x}"
+                            );
+                        } else {
+                            log_no_panic!(
+                                "{source} ARM BL target is a direct getter for global slot {global_slot:#010x}; current value unavailable"
+                            );
+                        }
+
+                        // Find a bounded set of other literal references to
+                        // the same slot in this image's text. Their surrounding
+                        // code can identify the initialization or setter path
+                        // without per-instruction tracing.
+                        let text_range = self
+                            .bins
+                            .iter()
+                            .find(|binary| {
+                                binary.text_segment_base.is_some_and(|base| {
+                                    base <= target && target < binary.last_segment_end
+                                })
+                            })
+                            .and_then(|binary| binary.get_section("__text"))
+                            .map(|section| (section.addr, section.size.min(16 * 1024 * 1024)));
+                        if let Some((text_start, text_size)) = text_range {
+                            let needle = global_slot.to_le_bytes();
+                            let references: Vec<u32> = self
+                                .mem
+                                .get_bytes_fallible(
+                                    mem::ConstVoidPtr::from_bits(text_start),
+                                    text_size,
+                                )
+                                .map(|text| {
+                                    text.chunks_exact(4)
+                                        .enumerate()
+                                        .filter_map(|(index, word)| {
+                                            (word == needle.as_slice()).then_some(
+                                                text_start + (index as u32).saturating_mul(4),
+                                            )
+                                        })
+                                        .take(12)
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            for reference in references {
+                                let context_start = reference.saturating_sub(16);
+                                let context_ptr = mem::ConstVoidPtr::from_bits(context_start);
+                                if let Some(context) =
+                                    self.mem.get_bytes_fallible(context_ptr, 48)
+                                {
+                                    log_no_panic!(
+                                        "{source} global-slot literal reference at {reference:#010x}, code/data context at {context_start:#010x}: {context:02x?}"
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
                 break;
             }
@@ -2291,6 +2372,30 @@ impl Drop for Environment {
             *self = env;
         }
         ENVIRONMENT_INSTANCE_EXISTS.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[cfg(test)]
+mod memory_fault_diagnostic_tests {
+    use super::decode_arm_direct_global_getter;
+
+    #[test]
+    fn decodes_direct_global_getter() {
+        let bytes = [
+            0x04, 0x00, 0x9f, 0xe5, 0x00, 0x00, 0x90, 0xe5, 0x1e, 0xff, 0x2f, 0xe1, 0x7c,
+            0xf8, 0xac, 0x00,
+        ];
+        assert_eq!(
+            decode_arm_direct_global_getter(0x0047_cff4, &bytes),
+            Some(0x00ac_f87c)
+        );
+
+        let mut not_a_getter = bytes;
+        not_a_getter[4] = 0x04;
+        assert_eq!(
+            decode_arm_direct_global_getter(0x0047_cff4, &not_a_getter),
+            None
+        );
     }
 }
 

@@ -3995,6 +3995,24 @@ int test_close() {
   return 0;
 }
 
+int test_NSURL_path_components() {
+  NSURL *url = [NSURL
+      URLWithString:@"https://user@example.com:443/a%20path/file?query=/ignored#fragment"];
+  if (![[url host] isEqualToString:@"example.com"])
+    return -1;
+  if (![[url path] isEqualToString:@"/a path/file"])
+    return -2;
+
+  NSURL *emptyPath = [NSURL URLWithString:@"https://example.com"];
+  if (![[emptyPath path] isEqualToString:@""])
+    return -3;
+
+  NSURL *relativePath = [NSURL URLWithString:@"relative%20path"];
+  if (![[relativePath path] isEqualToString:@"relative path"])
+    return -4;
+  return 0;
+}
+
 int test_CFMutableDictionary_NullCallbacks() {
   CFMutableDictionaryRef dict = CFDictionaryCreateMutable(NULL, 0, NULL, NULL);
   if (dict == NULL) {
@@ -4008,6 +4026,19 @@ int test_CFMutableDictionary_NullCallbacks() {
   if (retrievedValue != value) {
     CFRelease(dict);
     return -2;
+  }
+  retrievedValue = (const void *)0x1234;
+  if (!CFDictionaryGetValueIfPresent(dict, key, &retrievedValue) ||
+      retrievedValue != value ||
+      !CFDictionaryGetValueIfPresent(dict, key, NULL)) {
+    CFRelease(dict);
+    return -101;
+  }
+
+  const char *missingKey = "MissingKey";
+  if (CFDictionaryGetValueIfPresent(dict, missingKey, &retrievedValue)) {
+    CFRelease(dict);
+    return -102;
   }
 
   const char *valueNew = "NewValue";
@@ -4023,6 +4054,12 @@ int test_CFMutableDictionary_NullCallbacks() {
   if (retrievedValue != NULL) {
     CFRelease(dict);
     return -4;
+  }
+  retrievedValue = (const void *)0x1234;
+  if (!CFDictionaryGetValueIfPresent(dict, key, &retrievedValue) ||
+      retrievedValue != NULL) {
+    CFRelease(dict);
+    return -103;
   }
 
   CFDictionarySetValue(dict, key, valueNew);
@@ -7775,6 +7812,7 @@ struct {
     FUNC_DEF(test_NSThread_isExecuting_isFinished),
     FUNC_DEF(test_NSThread_exit_pthread_exit),
     FUNC_DEF(test_times_sysconf_clock_ticks),
+    FUNC_DEF(test_NSURL_path_components),
     FUNC_DEF(test_CFMutableDictionary_NullCallbacks),
     FUNC_DEF(test_CFMutableDictionary_CustomCallbacks_PrimitiveTypes),
     FUNC_DEF(test_CFMutableDictionary_CustomCallbacks_CFTypes),

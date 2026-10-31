@@ -193,6 +193,15 @@ impl CFDictionaryHostObject {
         }
         nil
     }
+    fn contains_key(&self, env: &mut Environment, key: id) -> bool {
+        let hash = self.hash(env, key);
+        let Some(collisions) = self.superclass.map.get(&hash) else {
+            return false;
+        };
+        collisions
+            .iter()
+            .any(|&(candidate_key, _)| self.equal_keys(env, candidate_key, key))
+    }
     fn insert(&mut self, env: &mut Environment, key: id, value: id) {
         let hash = self.hash(env, key);
         let key = self.retain_key(env, key);
@@ -437,6 +446,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)init {
     todo!("TODO: Implement [dictionary init] for custom subclasses")
+}
+
+// Private bridge used by CFDictionaryGetValueIfPresent. Ordinary
+// NSDictionary instances cannot contain nil values, so objectForKey: is
+// sufficient here. The CFDictionary-backed subclass overrides this because a
+// dictionary created with NULL callbacks may contain a NULL value.
+- (bool)_touchHLEContainsKey:(id)key {
+    let value: id = msg![env; this objectForKey:key];
+    value != nil
 }
 
 // These probably comes from some category related to plists.
@@ -992,6 +1010,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     let res = host_obj.lookup(env, key);
     *env.objc.borrow_mut(this) = host_obj;
     res
+}
+
+- (bool)_touchHLEContainsKey:(id)key {
+    let host_obj: CFDictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
+    let present = host_obj.contains_key(env, key);
+    *env.objc.borrow_mut(this) = host_obj;
+    present
 }
 
 - (id)valueForKey:(id)_key {
