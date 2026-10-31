@@ -280,6 +280,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     let buttons: Vec<String> = button_titles.iter().map(|&b| to_string(env, b)).collect();
     log!("UIAlertView: title: {:?}, message: {:?}, buttons: {:?}", title, message, buttons);
 
+    // UIKit owns an alert for the whole time that it is presented. The host
+    // presentation below is synchronous and may yield to another guest run
+    // loop/autorelease pool, so take that ownership before crossing into host
+    // UI. The delayed delegate callback releases it after dismissal.
+    retain(env, this);
+
     let cancel_button = usize::try_from(cancel_index)
         .ok()
         .filter(|&i| i < buttons.len());
@@ -312,13 +318,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Closing the alert without a button counts as the cancel button, like
     // UIKit does when the app is sent to the background.
     let Some(index) = index.or(cancel_button) else {
+        release(env, this);
         return;
     };
     log!("UIAlertView: button {} ({:?}) tapped", index, buttons[index]);
 
     // On a device, show returns at once and the delegate hears about the tap
     // later, from the run loop.
-    retain(env, this);
     let number: id = msg_class![env; NSNumber numberWithInteger:(index as NSInteger)];
     let sel = env
         .objc

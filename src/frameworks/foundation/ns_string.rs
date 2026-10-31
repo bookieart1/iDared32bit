@@ -38,6 +38,10 @@ use std::iter::Peekable;
 use std::string::FromUtf16Error;
 
 pub type NSStringEncoding = NSUInteger;
+pub type NSStringEncodingConversionOptions = NSUInteger;
+pub const NSStringEncodingConversionAllowLossy: NSStringEncodingConversionOptions = 1;
+pub const NSStringEncodingConversionExternalRepresentation: NSStringEncodingConversionOptions =
+    2;
 pub const NSASCIIStringEncoding: NSUInteger = 1;
 pub const NSUTF8StringEncoding: NSUInteger = 4;
 pub const NSISOLatin1StringEncoding: NSUInteger = 5;
@@ -827,6 +831,26 @@ pub const CLASSES: ClassExports = objc_classes! {
                                     maxLength:length
                                      encoding:encoding];
     assert!(res);
+}
+
+- (bool)getBytes:(MutPtr<u8>)buffer
+        maxLength:(NSUInteger)max_length
+        usedLength:(MutPtr<NSUInteger>)used_length
+          encoding:(NSStringEncoding)encoding
+           options:(NSStringEncodingConversionOptions)options
+             range:(NSRange)range
+    remainingRange:(MutPtr<NSRange>)remaining_range {
+    get_bytes_range_inner(
+        env,
+        this,
+        buffer,
+        max_length,
+        used_length,
+        encoding,
+        options,
+        range,
+        remaining_range,
+    )
 }
 
 - (id)componentsSeparatedByString:(id)separator { // NSString*
@@ -2289,6 +2313,171 @@ pub fn get_bytes_buffer_inner(
     }
 
     true
+}
+
+fn encode_utf16_units(
+    units: &[u16],
+    encoding: NSStringEncoding,
+    lossy: bool,
+    external: bool,
+) -> Option<Vec<u8>> {
+    let string = if lossy {
+        String::from_utf16_lossy(units)
+    } else {
+        String::from_utf16(units).ok()?
+    };
+
+    let mut bytes = match encoding {
+        NSUTF8StringEncoding => string.into_bytes(),
+        NSASCIIStringEncoding | NSMacOSRomanStringEncoding => {
+            if !lossy && !string.is_ascii() {
+                return None;
+            }
+            string
+                .chars()
+                .map(|character| {
+                    if character.is_ascii() {
+                        character as u8
+                    } else {
+                        b'?'
+                    }
+                })
+                .collect()
+        }
+        NSISOLatin1StringEncoding => {
+            if !lossy && string.chars().any(|character| character as u32 > 0xff) {
+                return None;
+            }
+            string
+                .chars()
+                .map(|character| u8::try_from(character as u32).unwrap_or(b'?'))
+                .collect()
+        }
+        NSWindowsCP1252StringEncoding => {
+            let (encoded, _, had_errors) = WINDOWS_1252.encode(&string);
+            if had_errors && !lossy {
+                return None;
+            }
+            encoded.into_owned()
+        }
+        NSShiftJISStringEncoding => {
+            let (encoded, _, had_errors) = SHIFT_JIS.encode(&string);
+            if had_errors && !lossy {
+                return None;
+            }
+            encoded.into_owned()
+        }
+        NSUTF16StringEncoding | NSUTF16LittleEndianStringEncoding => units
+            .iter()
+            .flat_map(|unit| unit.to_le_bytes())
+            .collect(),
+        NSUTF16BigEndianStringEncoding => units
+            .iter()
+            .flat_map(|unit| unit.to_be_bytes())
+            .collect(),
+        NSUTF32StringEncoding | NSUTF32LittleEndianStringEncoding => string
+            .chars()
+            .flat_map(|character| (character as u32).to_le_bytes())
+            .collect(),
+        NSUTF32BigEndianStringEncoding => string
+            .chars()
+            .flat_map(|character| (character as u32).to_be_bytes())
+            .collect(),
+        _ => return None,
+    };
+
+    if external && !units.is_empty() {
+        let prefix: &[u8] = match encoding {
+            NSUTF16StringEncoding => &[0xff, 0xfe],
+            NSUTF32StringEncoding => &[0xff, 0xfe, 0x00, 0x00],
+            _ => &[],
+        };
+        if !prefix.is_empty() {
+            let mut external_bytes = Vec::with_capacity(prefix.len() + bytes.len());
+            external_bytes.extend_from_slice(prefix);
+            external_bytes.append(&mut bytes);
+            bytes = external_bytes;
+        }
+    }
+
+    Some(bytes)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn get_bytes_range_inner(
+    env: &mut Environment,
+    string: id,
+    buffer: MutPtr<u8>,
+    max_length: NSUInteger,
+    used_length: MutPtr<NSUInteger>,
+    encoding: NSStringEncoding,
+    options: NSStringEncodingConversionOptions,
+    range: NSRange,
+    remaining_range: MutPtr<NSRange>,
+) -> bool {
+    let all_units: Vec<u16> = env
+        .objc
+        .borrow::<StringHostObject>(string)
+        .iter_code_units()
+        .collect();
+    let start = range.location as usize;
+    let requested = range.length as usize;
+    let end = start
+        .checked_add(requested)
+        .expect("NSString byte-conversion range overflow");
+    assert!(
+        end <= all_units.len(),
+        "NSString byte-conversion range out of bounds"
+    );
+    let units = &all_units[start..end];
+    let lossy = options & NSStringEncodingConversionAllowLossy != 0;
+    let external = options & NSStringEncodingConversionExternalRepresentation != 0;
+    let max_length = max_length as usize;
+
+    // Find the longest prefix that is representable in the requested encoding
+    // and fits. Never split a UTF-16 surrogate pair at the buffer boundary.
+    let mut converted_units = units.len();
+    let bytes = loop {
+        if converted_units > 0
+            && converted_units < units.len()
+            && (0xd800..=0xdbff).contains(&units[converted_units - 1])
+            && (0xdc00..=0xdfff).contains(&units[converted_units])
+        {
+            converted_units -= 1;
+        }
+        if let Some(bytes) = encode_utf16_units(
+            &units[..converted_units],
+            encoding,
+            lossy,
+            external,
+        ) {
+            if bytes.len() <= max_length {
+                break bytes;
+            }
+        }
+        if converted_units == 0 {
+            break Vec::new();
+        }
+        converted_units -= 1;
+    };
+
+    if !buffer.is_null() && !bytes.is_empty() {
+        env.mem.bytes_at_mut(buffer, bytes.len()).copy_from_slice(&bytes);
+    }
+    if !used_length.is_null() {
+        env.mem.write(used_length, bytes.len() as NSUInteger);
+    }
+    if !remaining_range.is_null() {
+        env.mem.write(
+            remaining_range,
+            NSRange {
+                location: range.location + converted_units as NSUInteger,
+                length: range.length - converted_units as NSUInteger,
+            },
+        );
+    }
+
+    converted_units == units.len()
 }
 
 /// Helper function used by

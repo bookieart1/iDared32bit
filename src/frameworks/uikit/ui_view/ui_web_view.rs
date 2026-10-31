@@ -59,6 +59,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [(UIWebView*) {:?} loadRequest:{:?} ({})]", this, request, url_string);
 }
 
+- (id)stringByEvaluatingJavaScriptFromString:(id)script { // NSString*
+    let script = if script == nil {
+        Cow::default()
+    } else {
+        to_rust_string(env, script)
+    };
+    // touchHLE does not currently embed a web engine, and loadRequest: does
+    // not create a document. UIWebView returns nil when a script cannot be
+    // evaluated, which is the truthful result for the current no-page model.
+    log!(
+        "TODO: [(UIWebView*) {:?} stringByEvaluatingJavaScriptFromString:{}] (no loaded document)",
+        this,
+        script
+    );
+    nil
+}
+
 @end
 
 };

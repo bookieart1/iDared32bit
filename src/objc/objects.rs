@@ -62,6 +62,10 @@ pub const nil: id = Ptr::null();
 /// and should not be reference-counted, e.g. it is a class.
 pub(super) struct HostObjectEntry {
     host_object: Box<dyn AnyHostObject>,
+    /// Static objects (classes and constant objects) are immortal. Keep this
+    /// separate from `refcount`: a dynamic object's count is temporarily None
+    /// after its final release while its `dealloc` chain is running.
+    static_lifetime: bool,
     refcount: Option<NonZeroU32>,
 }
 
@@ -173,6 +177,7 @@ impl super::ObjC {
             ptr,
             HostObjectEntry {
                 host_object,
+                static_lifetime: refcount.is_none(),
                 refcount,
             },
         );
@@ -229,6 +234,7 @@ impl super::ObjC {
             guest_object,
             HostObjectEntry {
                 host_object,
+                static_lifetime: true,
                 refcount: None,
             },
         );
@@ -246,7 +252,7 @@ impl super::ObjC {
         let Some(entry) = self.objects.get(&object) else {
             panic!("No entry found for object {object:?}, it may have already been deallocated");
         };
-        entry.refcount.is_none()
+        entry.static_lifetime
     }
 
     /// Get a reference to a host object and downcast it. Panics if there is
@@ -314,9 +320,12 @@ impl super::ObjC {
         let Some(entry) = self.objects.get_mut(&object) else {
             panic!("No entry found for object {object:?}, it may have already been deallocated");
         };
+        assert!(
+            !entry.static_lifetime,
+            "Attempt to get refcount on static-lifetime object {object:?}!"
+        );
         let Some(refcount) = entry.refcount.as_mut() else {
-            // Might mean a missing `retain` override.
-            panic!("Attempt to get refcount on static-lifetime object {object:?}!");
+            panic!("Attempt to get refcount on zero-refcount object {object:?}!");
         };
         *refcount
     }
@@ -328,9 +337,12 @@ impl super::ObjC {
         let Some(entry) = self.objects.get_mut(&object) else {
             panic!("No entry found for object {object:?}, it may have already been deallocated");
         };
+        assert!(
+            !entry.static_lifetime,
+            "Attempt to increment refcount on static-lifetime object {object:?}!"
+        );
         let Some(refcount) = entry.refcount.as_mut() else {
-            // Might mean a missing `retain` override.
-            panic!("Attempt to increment refcount on static-lifetime object {object:?}!");
+            panic!("Attempt to increment refcount on zero-refcount object {object:?}!");
         };
         *refcount = refcount.checked_add(1).unwrap();
     }
@@ -346,9 +358,12 @@ impl super::ObjC {
         let Some(entry) = self.objects.get_mut(&object) else {
             panic!("No entry found for object {object:?}, it may have already been deallocated");
         };
+        assert!(
+            !entry.static_lifetime,
+            "Attempt to decrement refcount on static-lifetime object {object:?}!"
+        );
         let Some(refcount) = entry.refcount.as_mut() else {
-            // Might mean a missing `release` override.
-            panic!("Attempt to decrement refcount on static-lifetime object {object:?}!");
+            panic!("Attempt to decrement refcount on zero-refcount object {object:?}!");
         };
         if refcount.get() == 1 {
             entry.refcount = None;
@@ -364,8 +379,14 @@ impl super::ObjC {
     pub fn dealloc_object(&mut self, object: id, mem: &mut Mem) {
         let HostObjectEntry {
             host_object,
+            static_lifetime,
             refcount,
         } = self.objects.remove(&object).unwrap();
+
+        assert!(
+            !static_lifetime,
+            "Attempt to deallocate static-lifetime object {object:?}!"
+        );
 
         if let Some(refcount) = refcount {
             // This is a serious bug if it ever happens in host code.
