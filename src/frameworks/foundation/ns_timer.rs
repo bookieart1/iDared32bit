@@ -35,18 +35,16 @@ struct NSTimerHostObject {
 }
 impl HostObject for NSTimerHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes! {
-
-(env, this, _cmd);
-
-// NSTimer doesn't seem to be an abstract class?
-@implementation NSTimer: NSObject
-
-+ (id)timerWithTimeInterval:(NSTimeInterval)ns_interval
-                     target:(id)target
-                   selector:(SEL)selector
-                   userInfo:(id)user_info
-                    repeats:(bool)repeats {
+fn new_timer(
+    env: &mut Environment,
+    class: id,
+    ns_interval: NSTimeInterval,
+    target: id,
+    selector: SEL,
+    user_info: id,
+    repeats: bool,
+    due_by: Instant,
+) -> id {
     let ns_interval = ns_interval.max(0.0001);
     let rust_interval = Duration::from_secs_f64(ns_interval);
 
@@ -60,11 +58,53 @@ pub const CLASSES: ClassExports = objc_classes! {
         selector,
         user_info,
         repeats,
-        due_by: Some(Instant::now().checked_add(rust_interval).unwrap()),
+        due_by: Some(due_by),
         run_loop: nil,
-        is_running_callback: false
+        is_running_callback: false,
     });
-    let new = env.objc.alloc_object(this, host_object, &mut env.mem);
+    env.objc.alloc_object(class, host_object, &mut env.mem)
+}
+
+pub const CLASSES: ClassExports = objc_classes! {
+
+(env, this, _cmd);
+
+// NSTimer doesn't seem to be an abstract class?
+@implementation NSTimer: NSObject
+
++ (id)alloc {
+    let selector = env.objc.lookup_selector("fire").unwrap();
+    let host_object = Box::new(NSTimerHostObject {
+        ns_interval: 0.0001,
+        rust_interval: Duration::from_secs_f64(0.0001),
+        target: nil,
+        selector,
+        user_info: nil,
+        repeats: false,
+        due_by: None,
+        run_loop: nil,
+        is_running_callback: false,
+    });
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
++ (id)timerWithTimeInterval:(NSTimeInterval)ns_interval
+                     target:(id)target
+                   selector:(SEL)selector
+                   userInfo:(id)user_info
+                    repeats:(bool)repeats {
+    let delay = Duration::from_secs_f64(ns_interval.max(0.0001));
+    let due_by = Instant::now().checked_add(delay).unwrap();
+    let new = new_timer(
+        env,
+        this,
+        ns_interval,
+        target,
+        selector,
+        user_info,
+        repeats,
+        due_by,
+    );
 
     log_dbg!(
         "New {} timer {:?}, interval {}s, target [{:?} {}], user info {:?}",
@@ -95,6 +135,39 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _: () = msg![env; run_loop addTimer:timer forMode:mode];
 
     timer
+}
+
+- (id)initWithFireDate:(id)fire_date
+              interval:(NSTimeInterval)interval
+                target:(id)target
+              selector:(SEL)selector
+              userInfo:(id)user_info
+               repeats:(bool)repeats {
+    let delay: NSTimeInterval = msg![env; fire_date timeIntervalSinceNow];
+    let due_by = Instant::now()
+        .checked_add(Duration::from_secs_f64(delay.max(0.0)))
+        .unwrap();
+    let interval = interval.max(0.0001);
+    retain(env, target);
+    retain(env, user_info);
+    let new_host_object = NSTimerHostObject {
+        ns_interval: interval,
+        rust_interval: Duration::from_secs_f64(interval),
+        target,
+        selector,
+        user_info,
+        repeats,
+        due_by: Some(due_by),
+        run_loop: nil,
+        is_running_callback: false,
+    };
+    let old_host_object = std::mem::replace(
+        env.objc.borrow_mut::<NSTimerHostObject>(this),
+        new_host_object,
+    );
+    release(env, old_host_object.target);
+    release(env, old_host_object.user_info);
+    this
 }
 
 - (())dealloc {

@@ -1156,6 +1156,48 @@ pub(super) fn class_replaceMethod(
     existing
 }
 
+pub(super) fn class_addMethod(
+    env: &mut Environment,
+    cls: Class,
+    name: SEL,
+    imp: IMP,
+    types: ConstPtr<u8>,
+) -> bool {
+    if cls == nil {
+        return false;
+    }
+
+    let types_string = if types.is_null() {
+        String::new()
+    } else {
+        env.mem.cstr_at_utf8(types).unwrap().to_owned()
+    };
+    let types_copy = if types.is_null() {
+        Ptr::null()
+    } else {
+        strdup(env, types).cast_const()
+    };
+
+    let &mut ClassHostObject {
+        ref mut methods,
+        ref mut guest_method_signatures,
+        ..
+    } = env.objc.borrow_mut(cls);
+    let Entry::Vacant(entry) = methods.entry(name) else {
+        if !types_copy.is_null() {
+            env.mem.free(types_copy.cast().cast_mut());
+        }
+        return false;
+    };
+
+    entry.insert(Method {
+        types: types_string,
+        imp,
+    });
+    guest_method_signatures.insert(name, types_copy);
+    true
+}
+
 pub(super) fn class_getInstanceMethod(
     env: &mut Environment,
     cls: Class,

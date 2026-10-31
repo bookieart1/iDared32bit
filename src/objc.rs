@@ -47,7 +47,7 @@ pub use selectors::{selector, SEL};
 use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, Ptr};
 use crate::Environment;
 use classes::{
-    class_copyPropertyList, class_getInstanceMethod, class_getInstanceSize,
+    class_addMethod, class_copyPropertyList, class_getInstanceMethod, class_getInstanceSize,
     class_getMethodImplementation, class_getProperty, class_getSuperclass, class_replaceMethod,
     method_getImplementation, method_getTypeEncoding, objc_getClass, ClassHostObject, FakeClass,
     UnimplementedClass,
@@ -273,6 +273,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_getSuperclass(_)),
     export_c_func!(class_getProperty(_, _)),
     export_c_func!(class_getInstanceMethod(_, _)),
+    export_c_func!(class_addMethod(_, _, _, _)),
     export_c_func!(method_getImplementation(_)),
     export_c_func!(method_getTypeEncoding(_)),
     export_c_func!(class_getMethodImplementation(_, _)),

@@ -39,6 +39,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)timeZoneWithAbbreviation:(id)abbreviation {
+    if abbreviation == nil {
+        return nil;
+    }
+    // touchHLE currently models all time zones as GMT, but returning a stable
+    // zone object here matches Foundation's object-level contract and lets
+    // callers proceed without depending on the host device's time zone data.
+    msg![env; this timeZoneWithName:abbreviation]
+}
+
 + (id)localTimeZone {
     // According to docs, `localTimeZone` is not cached in contrast to
     // `systemTimeZone`
