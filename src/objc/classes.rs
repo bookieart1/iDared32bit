@@ -1162,21 +1162,45 @@ pub(super) fn class_getInstanceMethod(
     name: SEL,
 ) -> MutPtr<method_t> {
     let mut class = cls;
-    let (imp, types) = loop {
+    let (imp, types, host_types) = loop {
         if class == nil {
             return Ptr::null();
         }
         let host_object: &ClassHostObject = env.objc.borrow(class);
-        match host_object.methods.get(&name).map(|method| &method.imp) {
-            Some(IMP::Guest(imp)) => {
+        match host_object.methods.get(&name) {
+            Some(Method {
+                imp: IMP::Guest(imp),
+                ..
+            }) => {
                 let types = host_object.guest_method_signatures.get(&name);
-                break (Some(*imp), types.copied().unwrap_or(Ptr::null()));
+                break (
+                    Some(*imp),
+                    types.copied().unwrap_or(Ptr::null()),
+                    None,
+                );
             }
             // Host methods can't be called directly by the app, but sending the
             // message has the same ABI and reaches them.
-            Some(IMP::Host(_)) => break (None, Ptr::null()),
+            Some(Method {
+                types,
+                imp: IMP::Host(_),
+            }) => break (None, Ptr::null(), Some(types.clone())),
             None => class = host_object.superclass,
         }
+    };
+    let types = if let Some(host_types) = host_types {
+        if let Some(&types) = env.objc.method_type_cstrings.get(&(class, name)) {
+            types
+        } else {
+            let types = env
+                .mem
+                .alloc_and_write_cstr(host_types.as_bytes())
+                .cast_const();
+            env.objc.method_type_cstrings.insert((class, name), types);
+            types
+        }
+    } else {
+        types
     };
     let imp = match imp {
         Some(imp) => imp,
@@ -1208,6 +1232,17 @@ pub(super) fn method_getImplementation(
         return GuestIMP::from_addr_with_thumb_bit(0);
     }
     env.mem.read(method).imp
+}
+
+#[allow(non_snake_case)]
+pub(super) fn method_getTypeEncoding(
+    env: &mut Environment,
+    method: ConstPtr<method_t>,
+) -> ConstPtr<u8> {
+    if method.is_null() {
+        return Ptr::null();
+    }
+    env.mem.read(method).types
 }
 
 pub(super) fn class_getMethodImplementation(env: &mut Environment, cls: Class, name: SEL) -> IMP {

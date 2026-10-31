@@ -2460,6 +2460,8 @@ void *nsthread_status_pthread(void *arg) {
 int test_NSThread_isExecuting_isFinished() {
   // The main thread.
   NSThread *main_thread = [NSThread currentThread];
+  if ([NSThread mainThread] != main_thread)
+    return -9;
   if (![main_thread isExecuting] || [main_thread isFinished] ||
       ![main_thread isMainThread] || ![NSThread isMainThread])
     return -1;
@@ -2754,6 +2756,20 @@ const char *path_test_app() {
   CFRelease(bundleURL);
   return path;
 #endif
+}
+
+int test_CFArraySetValueAtIndex() {
+  CFMutableArrayRef array = CFArrayCreateMutable(NULL, 0, NULL);
+  const void *first = (const void *)(uintptr_t)0x1234;
+  const void *second = (const void *)(uintptr_t)0x5678;
+  CFArrayAppendValue(array, first);
+  CFArraySetValueAtIndex(array, 0, second);
+  if (CFArrayGetCount(array) != 1 || CFArrayGetValueAtIndex(array, 0) != second) {
+    CFRelease(array);
+    return -1;
+  }
+  CFRelease(array);
+  return 0;
 }
 
 int test_dirent() {
@@ -6563,6 +6579,48 @@ int test_NSKeyedArchiver_encodeIntForKey() {
   return 0;
 }
 
+@interface FloatCoderObject : NSObject {
+@public
+  float value;
+}
+- (instancetype)initWithValue:(float)v;
+@end
+
+@implementation FloatCoderObject
+- (instancetype)initWithValue:(float)v {
+  self = [super init];
+  value = v;
+  return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+  [coder encodeFloat:value forKey:[NSString stringWithUTF8String:"value"]];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+  self = [super init];
+  value = [coder decodeFloatForKey:[NSString stringWithUTF8String:"value"]];
+  return self;
+}
+@end
+
+int test_NSKeyedArchiver_encodeFloatForKey() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+  FloatCoderObject *obj = [[FloatCoderObject alloc] initWithValue:123.25f];
+  NSData *data = [NSKeyedArchiver archivedDataWithRootObject:obj];
+  FloatCoderObject *decoded = [NSKeyedUnarchiver unarchiveObjectWithData:data];
+  int result = decoded->value == obj->value ? 0 : -1;
+  [obj release];
+  [pool drain];
+  return result;
+}
+
+int test_NSBundle_bundleForClass() {
+  return [NSBundle bundleForClass:[FloatCoderObject class]] == [NSBundle mainBundle]
+             ? 0
+             : -1;
+}
+
 int test_NSKeyedArchiver_NSKeyedUnarchiver() {
   NSAutoreleasePool *pool = [NSAutoreleasePool new];
   char buffer[100];
@@ -7710,6 +7768,7 @@ struct {
     FUNC_DEF(test_fscanf_eof_during_match),
     FUNC_DEF(test_fscanf_match_then_eof),
     FUNC_DEF(test_CFStringFind),
+    FUNC_DEF(test_CFArraySetValueAtIndex),
     FUNC_DEF(test_strcspn),
     FUNC_DEF(test_mbstowcs),
     FUNC_DEF(test_CFMutableString),
@@ -7778,6 +7837,8 @@ struct {
     FUNC_DEF(test_RespondsToSelector),
     FUNC_DEF(test_class_getInstanceMethod),
     FUNC_DEF(test_NSKeyedArchiver_encodeIntForKey),
+    FUNC_DEF(test_NSKeyedArchiver_encodeFloatForKey),
+    FUNC_DEF(test_NSBundle_bundleForClass),
     FUNC_DEF(test_NSKeyedArchiver_NSKeyedUnarchiver),
     FUNC_DEF(test_NSKeyedArchiver_NSDictionary_of_NSArray_of_NSStrings),
     FUNC_DEF(test_AutoreleasePool),

@@ -49,7 +49,8 @@ use crate::Environment;
 use classes::{
     class_copyPropertyList, class_getInstanceMethod, class_getInstanceSize,
     class_getMethodImplementation, class_getProperty, class_getSuperclass, class_replaceMethod,
-    method_getImplementation, objc_getClass, ClassHostObject, FakeClass, UnimplementedClass,
+    method_getImplementation, method_getTypeEncoding, objc_getClass, ClassHostObject, FakeClass,
+    UnimplementedClass,
 };
 pub(crate) use messages::objc_msgSend;
 use messages::{objc_msgSendSuper2, objc_msgSend_stret, MsgSendSignature, MsgSendSuperSignature};
@@ -142,6 +143,9 @@ pub struct ObjC {
     /// same `Method`.
     method_handles: HashMap<(Class, SEL), MutPtr<method_t>>,
 
+    /// Stable C strings used by the `types` field of host method handles.
+    method_type_cstrings: HashMap<(Class, SEL), ConstPtr<u8>>,
+
     /// Cache mapping metaclasses to classes.
     metaclass_classes: HashMap<Class, Class>,
 
@@ -166,6 +170,7 @@ impl ObjC {
             sync_mutexes: HashMap::new(),
             initializer_threads: HashMap::new(),
             method_handles: HashMap::new(),
+            method_type_cstrings: HashMap::new(),
             metaclass_classes: HashMap::new(),
             cached_guest_functions: HashMap::new(),
             class_name_cstrings: HashMap::new(),
@@ -269,6 +274,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_getProperty(_, _)),
     export_c_func!(class_getInstanceMethod(_, _)),
     export_c_func!(method_getImplementation(_)),
+    export_c_func!(method_getTypeEncoding(_)),
     export_c_func!(class_getMethodImplementation(_, _)),
     export_c_func!(class_replaceMethod(_, _, _, _)),
     export_c_func!(objc_msgSend(_, _)),

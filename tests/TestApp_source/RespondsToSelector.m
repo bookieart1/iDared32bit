@@ -56,6 +56,10 @@ int test_class_getInstanceMethod(void) {
   if (method == 0 || test_method_name(method) != answer_sel) {
     return -1;
   }
+  const char *answer_types = method_getTypeEncoding(method);
+  if (answer_types == 0 || answer_types[0] != 'i') {
+    return -7;
+  }
   if (method_getImplementation(0) != 0) {
     return -6;
   }
@@ -82,6 +86,10 @@ int test_class_getInstanceMethod(void) {
   if (inherited == 0 || ((retain_count_imp)test_method_imp(inherited))(
                             instance, retain_count_sel) != 1) {
     return -5;
+  }
+  const char *inherited_types = method_getTypeEncoding(inherited);
+  if (inherited_types == 0 || inherited_types[0] != 'I') {
+    return -8;
   }
   [instance release];
   return 0;

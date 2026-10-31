@@ -75,6 +75,15 @@ pub const CLASSES: ClassExports = objc_classes! {
    }
 }
 
++ (id)bundleForClass:(Class)class {
+    if class == nil {
+        return nil;
+    }
+    // Framework bundles are not modeled separately. Guest classes, which are
+    // the normal callers of this legacy API, live in the application's bundle.
+    msg![env; this mainBundle]
+}
+
 + (id)pathForResource:(id)name // NSString*
                ofType:(id)extension // NSString*
           inDirectory:(id)directory { // NSString*

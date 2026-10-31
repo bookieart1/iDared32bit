@@ -265,12 +265,10 @@ pub fn thread_id_for_pthread(env: &mut Environment, thread: pthread_t) -> Option
         .map(|host_object| host_object.thread_id)
 }
 
-pub fn pthread_self(env: &mut Environment) -> pthread_t {
-    let current_thread = env.current_thread;
-
+pub fn pthread_for_thread_id(env: &mut Environment, thread_id: ThreadId) -> Option<pthread_t> {
     // The main thread is a special case since it's not created via pthreads,
     // so we need to create its object on-demand.
-    if current_thread == 0 && !State::get(env).main_thread_object_created {
+    if thread_id == 0 && !State::get(env).main_thread_object_created {
         State::get(env).main_thread_object_created = true;
 
         let opaque = env.mem.alloc_and_write(OpaqueThread {
@@ -292,12 +290,16 @@ pub fn pthread_self(env: &mut Environment) -> pthread_t {
         );
     }
 
-    let (&ptr, _) = State::get(env)
+    State::get(env)
         .threads
         .iter()
-        .find(|&(_ptr, host_obj)| host_obj.thread_id == current_thread)
-        .unwrap();
-    ptr
+        .find(|&(_ptr, host_obj)| host_obj.thread_id == thread_id)
+        .map(|(&ptr, _)| ptr)
+}
+
+pub fn pthread_self(env: &mut Environment) -> pthread_t {
+    let current_thread = env.current_thread;
+    pthread_for_thread_id(env, current_thread).unwrap()
 }
 
 fn pthread_exit(env: &mut Environment, value_ptr: MutVoidPtr) {

@@ -61,6 +61,7 @@ static inline NSRange NSMakeRange(NSUInteger loc, NSUInteger len) {
 typedef struct objc_method *Method;
 Method class_getInstanceMethod(Class cls, SEL name);
 void (*method_getImplementation(Method m))(void);
+const char *method_getTypeEncoding(Method m);
 #ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
 SEL method_getName(Method m);
 #endif
@@ -295,6 +296,13 @@ typedef enum {
                       returnedLength:(NSUInteger *)lengthp;
 - (void)encodeInt:(int)value forKey:(NSString *)key;
 - (int)decodeIntForKey:(NSString *)key;
+- (void)encodeFloat:(float)value forKey:(NSString *)key;
+- (float)decodeFloatForKey:(NSString *)key;
+@end
+
+@interface NSBundle : NSObject
++ (NSBundle *)mainBundle;
++ (NSBundle *)bundleForClass:(Class)aClass;
 @end
 
 @interface NSKeyedArchiver : NSCoder
@@ -360,6 +368,7 @@ SEL NSSelectorFromString(NSString *);
 
 @interface NSThread : NSObject
 + (NSThread *)currentThread;
++ (NSThread *)mainThread;
 + (BOOL)isMainThread;
 + (void)exit;
 - (instancetype)initWithTarget:(id)target
