@@ -1,10 +1,13 @@
 # Compatibility development audit and flight recorder v1
 
 Audit date: 2026-10-31. Baseline: `c9c3f765` (device-tested Dev 1.65).
-This is a diagnostic-only change. Device validation of Dev 1.66 is pending.
-The detailed dated device evidence remains in the workspace's
-`outputs/iDared-tested-app-compatibility-ledger.md` and its two narrative audits
-and launch/app/error CSVs. They are historical evidence, not current pass lists.
+This is a diagnostic-only change. Dev 1.66 has now been validated on device;
+the result is recorded below. It remains instrumentation, not a compatibility
+fix.
+The detailed dated device evidence is preserved in the repository as
+`dev-docs/iDared-tested-app-compatibility-ledger.md`, mirrored from the
+workspace's maintained ledger. The workspace's two narrative audits and their
+launch/app/error CSVs remain dated historical evidence, not current pass lists.
 The audit samples the full accessible history and relevant implementations; it
 does not claim an exhaustive correctness review of every framework method.
 
@@ -192,6 +195,43 @@ slowdown, without destabilizing Spoing. If only the same final fault reappears,
 do not automatically increase ring size: use the recovered caller/selector to
 select a narrower probe or offline breakpoint. If timing becomes visibly worse,
 reduce the selected event set before drawing compatibility conclusions.
+
+## Device evaluation: the first implementation was useful
+
+The returned log identifies the delivered source `288a5e4` and workflow
+`41216006158`; all intended recorder presets activated. The user followed the
+requested sequence.
+
+- B'Blast's previously unknown six-word MIB is
+  `[4, 17, 0, 18, 3, 2]`. It follows `if_nametoindex("en0") -> 2` inside
+  `TFDeviceInfo -macAddressSha1` and is a sizing query (`oldp == NULL`) for the
+  `CTL_NET/PF_ROUTE/AF_LINK/NET_RT_IFLIST` record for interface 2. The next
+  implementation question is the historical 32-bit `if_msghdr` plus
+  `sockaddr_dl` contract, not whether to suppress the panic.
+- Addicus's producer is inside the retained history. `PHWebView` tries to
+  perform `loadHTMLString:baseURL:` on its underlying `UIWebView`.
+  `+instanceMethodSignatureForSelector:` returns nil because the emulator's
+  `UIWebView` does not implement that real API. The nil then reaches
+  `+[NSInvocation invocationWithMethodSignature:]` and the existing null-page
+  failure. This is a specific missing UIKit contract, not an unexplained random
+  dispatch and not justification for tolerating nil method signatures.
+- Blot's presentation rate changes from about 35–57/s while smooth, through
+  27/s, to a sustained 3.2–4.4/s after the reproduced transition. Main-loop
+  progress falls with it. Counts remain fixed at two timers, zero scheduled
+  selectors, one audio queue and zero audio units, with one thread slot. This
+  rejects simple timer/source/thread accumulation but does not yet distinguish
+  guest workload, long callbacks, resource growth or host blocking. A future
+  Blot-only diagnostic should freeze one bounded snapshot at the first slow
+  loop/present threshold; increasing the global ring would lose focus.
+- Spoing completed a level, returned through emulator Home, reopened and kept
+  its progress. Capture stayed enabled for the long session and reopen without
+  a visible functional regression. There is no instrument-off timing baseline,
+  so quantitative overhead remains unmeasured.
+
+The recorder therefore passes its practical acceptance test: one device run
+recovered two causal contracts, narrowed a third failure family and retained a
+working control. Keep it bounded, opt-in and behavior-neutral. No follow-up
+compatibility implementation or IPA is part of this evaluation.
 
 ## Durable workflow changes to keep
 

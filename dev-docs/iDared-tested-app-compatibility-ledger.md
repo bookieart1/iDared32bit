@@ -1,0 +1,2255 @@
+# iDared 32-bit tested-app compatibility ledger
+
+Last reconciled: October 31, 2026
+Latest device-tested checkpoint: **iDared Dev 1.66** (`288a5e40`)
+Latest built checkpoint: **iDared Dev 1.66** (`288a5e40`)
+Current activity: **Dev 1.66 validated the bounded flight recorder on device. It decoded B'Blast's link-interface query, recovered Addicus's missing `UIWebView` method as the null producer, measured Blot's sustained presentation-rate collapse without run-loop-source growth, and left Spoing gameplay/save/reopen working in the tested scope. No compatibility correction or follow-up build has been started from this result.**
+
+The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
+
+This is the durable resume point for hands-on compatibility testing. It records what the user actually observed, not merely whether a launch avoided a panic. “Working” therefore means usable gameplay; a title that opens but freezes, cannot be controlled, loses progress, or has severe audiovisual faults remains partial.
+
+## Status meanings
+
+- **Working:** usable gameplay and no known blocking fault in the tested portion.
+- **Working with minor issues:** usable, but has a documented non-blocking defect.
+- **Partial:** launches or plays, but a serious defect prevents a normal session.
+- **Blocked:** does not reach usable gameplay.
+- **Skipped:** deliberately removed from the current batch.
+- **Needs new dump:** the executable is explicitly encrypted or the package is invalid; emulator work cannot meaningfully test that copy.
+
+## Historical hands-on checkpoint: Dev 1.42 / planned 1.43
+
+| App | Status at 1.42 | Exact resume point / known issues | Next intended check |
+|---|---|---|---|
+| A Monster Ate My Homework | Blocked | Still fails during early startup. The original seven-page baseline ended in a null-page access. No visible improvement in the current batch. | Pause with this group; re-evaluate after broad memory/runtime fixes. |
+| Addicus | Blocked | 1.42 advanced past the prior missing `NSException -raise`, then raised “The capture argument is not valid” twice and hit a null-page access. Its executable also references missing Blocks runtime symbols. | 1.43 adds minimal shared Blocks ABI support. Test once; do not call it fixed merely for reaching a later blocker. |
+| Air Penguin | Working | Earlier revisions advanced it through the publisher logos, menu, world map, and first-level launch. Later user report said it appeared to work normally. | Regression-check after broad changes, not every narrow build. |
+| aqua baller | Needs new dump | Log evidence explicitly says its executable is FairPlay-encrypted. The user intentionally stopped clicking it in the current batch. | Obtain a fresh legitimate decrypted dump. |
+| Azada | Blocked | Still failed early in the current batch; baseline decisive error was a null-page access. | Pause; re-test after broader memory/filesystem work. |
+| B'Blast | Blocked | 1.42 advanced beyond the ASL logging blocker, then failed on process query `sysctl(1,14,1,1)`. | 1.43 supplies a safe general `kern.proc` fallback. |
+| Backdraft | Blocked | Still failed early; baseline decisive error was a null-page access. | Pause; revisit with the next null-memory cluster. |
+| Blockoban | Blocked | Still failed early; baseline decisive error was a null-page access, with possible service/resource complications. | Pause; first separate local runtime failure from unavailable service behavior. |
+| Blot | Partial | Full image is now visible and the game can be played, but it is letterboxed. It can slow progressively until unplayable. Dying calls missing `___vsnprintf_chk` and crashes. | 1.43 implements the checked formatter. Re-test death once and separately note whether slowdown changes; they are distinct defects. |
+| Bounce | Partial | Gameplay became smoother and progress was observed saving, but intermittent lag remains. Some secondary/menu buttons have crashed it. In 1.42 the new offline-render success path produced severely distorted/laggy audio because it returned artificial silence. | 1.43 replaces artificial silence with decoding of queued audio. Test normal gameplay audio, one progress save/reopen, and the known crashing secondary button. |
+
+## Previously established reference apps
+
+| App | Current status | Details worth preserving |
+|---|---|---|
+| Spoing | Working in tested portion | Original target. Early levels became smooth and playable; level transitions advanced; saved progress eventually worked. Keep as a core regression title. |
+| Diversion | Working with minor issues | Playable and saving progress. Publisher logo can flash briefly before a black interval; loading transitions sometimes have glitched or “crusty” audio. |
+| Sticky | Working with minor issues | At least three levels played and progress persisted. One early run reached an animated but unresponsive menu; later attempts worked. Intro can show a one-frame visual glitch and occasional crusty audio. |
+| AB Buster | Skipped | Emulator reached its publisher logo before `_CFHostCreateWithName` failed, but the same copy also stalls at its logo on the user’s original iPod while music plays. Test validity is therefore uncertain, and the user chose to skip it. |
+
+## Historical group handoff: Dev 1.43
+
+After 1.43, this group can be paused without losing continuity. The most valuable short retest is:
+
+1. Addicus: note the first decisive error only.
+2. B'Blast: note whether it passes the process query and its next blocker.
+3. Blot: die once, then spend long enough in one level/menu to assess the separate slowdown.
+4. Bounce: listen through gameplay and a transition, verify save/reopen, then try the known secondary button.
+
+If time is limited, prioritize B'Blast, Blot death, and Bounce audio. A Monster Ate My Homework, Azada, Backdraft, and Blockoban do not need another run for this narrow build.
+
+## Complete wider-library baseline
+
+The exhaustive seven-page audit remains the authoritative baseline for every other app tested. These companion files must stay with this ledger:
+
+- `iDared-compatibility-audit-7-pages-1.0.md` — full narrative audit, error-family landscape, encryption/corruption classifications, roadmap, and unresolved launches.
+- `iDared-launch-inventory-7-pages-1.0.csv` — all 127 recorded launch attempts and their boundaries.
+- `iDared-per-game-compatibility-7-pages-1.0.csv` — complete 123-game compatibility table.
+
+Baseline scope: **127 launch attempts, 123 unique loadable IPA files, 26 additional packages that could not be opened as ZIP archives, and 149 distinct IPA filenames in total.** Do not overwrite this baseline with later behavior. The next seven-page pass should be recorded as a new snapshot and compared launch-by-launch and error-family-by-error-family.
+
+## Completed Dev 1.00 to Dev 1.42 seven-page comparison
+
+The exhaustive longitudinal audit is complete. Its companion files are:
+
+- `iDared-longitudinal-compatibility-audit-1.00-vs-1.42.md` — complete source inventory, per-app comparison, recurrence analysis, attribution, roadmap, safety plan, and final lists.
+- `iDared-exact-launch-inventory-1.00-vs-1.42.csv` — all 275 raw launch segments, including the 20 Page 7 duplicates explicitly marked against Page 6.
+- `iDared-per-app-compatibility-delta-1.00-vs-1.42.csv` — the full 127-identity union with both outcomes, exact line references, and comparison classification.
+- `iDared-error-family-delta-1.00-vs-1.42.csv` — launch and unique-app counts for every first-blocker family in both snapshots.
+
+Verified comparison scope: **15 files, 77,376 physical lines, 275 raw launch segments, and 255 segments after removing the exact 20-launch Page 6/Page 7 duplication.** Dev 1.42 covers 122 of the baseline's 123 launched IPAs (99.2%). Crazy Pinball Galaxy is the only baseline omission; Crazy Pinball Jungle is a different title, not a replacement.
+
+Longitudinal result:
+
+- 5 shared apps became newly partial/no-panic sessions: Blot, Bounce, Bulba the Cat, Flick Buddies, and Paper Monsters.
+- 9 advanced to a later blocker: Addicus, B'Blast, Bungee Ball, Catacombs, Gesundheit, junny, Riddim, Silverfish, and Splode.
+- 7 reached user-ended runtime without a panic in both snapshots: Air Penguin, Daredevil Dav, Diversion, Floe, Kosmo Spin, Mini Beasts HD, and Sprinkle. This does not prove complete gameplay.
+- 100 union identities retained the same logged classification.
+- No definitive shared-app regression was proven. Rogue Sky is the principal unresolved stability concern: its former selector blocker is gone, but Dev 1.42 records 382 repeated reachability-callback registrations before the enclosing log terminates.
+- The explicit encrypted set remains 8 files. The corrupt/invalid set remains the same 26 files.
+
+The comparison supports continued general emulator work: the clearest gains come from shared AudioQueue, Foundation, cryptography, threading, locale, predicate, and reachability implementations. The results also show rising diminishing returns because most successful fixes expose another blocker instead of completing compatibility.
+
+## Regression set for broad fixes
+
+Every broad runtime, graphics, audio, filesystem, or persistence change should be checked against:
+
+- Spoing: launch, gameplay, level completion, return to map, saved progress.
+- Diversion: launch, transition audio, gameplay, saved progress.
+- Sticky: responsive menu, gameplay, saved progress.
+- Air Penguin: publisher logos, menu/world map, first-level launch.
+- Blot: complete framing, normal speed, death path.
+- Bounce: gameplay smoothness, audio, secondary-button behavior, saved progress.
+- The separately installed App Store iDared app must remain untouched; development builds keep the `com.bookieart1.idared32bit.dev` identity.
+
+## Maintenance rule
+
+Update this ledger only from a concrete test report or decisive log evidence. Preserve prior observations when a later run is ambiguous. “No crash notification” is not proof of compatibility, and “advanced to a new blocker” is progress but not a working result.
+
+## Dev 1.44 engineering checkpoint
+
+Dev 1.44 is a bounded legacy Foundation/Objective-C runtime batch selected from the completed Dev 1.00 versus Dev 1.42 audit. It implements five repeated decisive blockers without changing graphics, audio, app-picker identity, or save-container layout:
+
+| Contract | Known apps directly unblocked | Expected result |
+|---|---|---|
+| `CFArraySetValueAtIndex` | CrazyGolf; Mystery Agency 2 | Advance to the next blocker. |
+| `+[NSBundle bundleForClass:]` | DizzyWizards; Marblenauts | Advance to the next blocker. |
+| `method_getTypeEncoding` | Fly Kiwi Fly; Ski Jumping | Advance to the next blocker. |
+| `+[NSThread mainThread]` | Riddim; Tesla Wars | Advance to the next blocker. |
+| `-[NSKeyedArchiver encodeFloat:forKey:]` | HookWorld; QuickHook | Advance; these are the best candidates in this batch to reach playable UI because both already reached application/UI startup. |
+
+The implementation covers non-retaining Core Foundation arrays, guest and host Objective-C method encodings, stable main-thread identity, bundle lookup for a guest class, and keyed float archive values. No title is marked working until device testing confirms it.
+
+Required regression matrix for this batch:
+
+- Spoing: launch, gameplay, level completion, map return, save/reopen.
+- Diversion: launch, transition audio, gameplay, save/reopen.
+- Sticky: responsive menu, gameplay, save/reopen.
+- Air Penguin: logos, menu/world map, first-level launch.
+- Blot: complete framing, normal speed, death path.
+- Bounce: gameplay smoothness, audio, secondary button, save/reopen.
+- Packaging: verify development identity `com.bookieart1.idared32bit.dev`, unsigned packaging, and no effect on the separate App Store installation.
+
+### Dev 1.44 verification and artifact
+
+- Baseline was clean at `b6126818`; no pre-existing user changes were present or overwritten.
+- Final repository commit: `00178c3bcf54adc84decabf40ed3644c464a3e7d`.
+- GitHub build run 73 completed successfully and validated the separate `com.bookieart1.idared32bit.dev` / `iDared Dev` identity, unsigned packaging, and absence of an embedded provisioning profile.
+- The final lint/test run completed successfully on macOS, Windows, and Android. Development runs execute the current library tests; the repository's obsolete iPhone OS 3 guest linker and native Objective-C sanity compile remain release-only because current hosted toolchains cannot link/compile that unchanged legacy harness. Release-branch strict checks were not relaxed.
+- Final IPA SHA-256: `7AE313172D7901ADDCA9C4B9CCDF3E2B7EE7E9FC999F4944B7F4130BA3EADD9D`.
+- Device testing covered all ten target apps. The original target blocker was removed in every case; one title became usable in the tested portion and nine exposed later blockers.
+
+### Dev 1.44 device results (`Log11.txt`)
+
+| App | Dev 1.44 result | Decisive evidence / next blocker |
+|---|---|---|
+| Crazy Golf | **Working in tested portion** | Opened and accepted gameplay input with no panic (lines 32–146; user-confirmed functional). |
+| DizzyWizards | Advanced to later blocker | Both attempts reached a one-byte null-page access (`0x3365e`, lines 184–186 and 273–275). |
+| Fly Kiwi Fly | Advanced to later blocker | Ignored “capture argument is not valid” exceptions, then a one-byte null-page access (lines 500–502). |
+| HookWorld | Advanced to later blocker | Reached UI startup, then attempted to insert `nil` into `NSMutableDictionary` (lines 777–779). |
+| Marblenauts | Advanced to later blocker | One-byte null-page access (line 867). |
+| Mystery Agency 2 | Advanced to later blocker | Four-byte null-page access and `MemoryError` (lines 966–968). |
+| QuickHook | Advanced to later blocker | Reached UI startup, then attempted to insert `nil` into `NSMutableDictionary` (lines 1215–1217). |
+| Riddim | Advanced to later blocker | Missing `NSTimer initWithFireDate:interval:target:selector:userInfo:repeats:` (line 1415). |
+| Ski Jumping | Advanced to later blocker | Missing `_class_addMethod` (line 1552). |
+| Tesla Wars | Advanced to later blocker | Missing `+[NSTimeZone timeZoneWithAbbreviation:]` (line 1848). |
+
+This is a meaningful but bounded result: **10/10 intended blockers were removed, 1/10 titles became functional in the tested portion, and 9/10 advanced to a later blocker.** It does not establish full-game compatibility for Crazy Golf.
+
+## Dev 1.45 engineering checkpoint
+
+Dev 1.45 deliberately addresses only the three exact, standard runtime contracts exposed by Dev 1.44:
+
+| Contract | Target app | Expected result |
+|---|---|---|
+| `-[NSTimer initWithFireDate:interval:target:selector:userInfo:repeats:]` | Riddim | Advance beyond timer construction. |
+| `_class_addMethod` | Ski Jumping | Advance beyond dynamic Objective-C method installation. |
+| `+[NSTimeZone timeZoneWithAbbreviation:]` | Tesla Wars | Advance beyond legacy time-zone lookup; best chance of reaching usable UI in this batch. |
+
+The batch leaves the raw null-page cluster and `NSMutableDictionary setObject:nil` failures unchanged because either requires deeper causal evidence; globally accepting `nil` dictionary values would violate Foundation behavior and could conceal the actual missing-data bug.
+
+Required device test order for Dev 1.45:
+
+1. Riddim
+2. Ski Jumping
+3. Tesla Wars
+
+No other title needs testing for this narrow build unless a concerning system-wide symptom appears. The standing broad regression matrix remains Spoing, Diversion, Sticky, Air Penguin, Blot, Bounce, persistence, audio, rendering, and the separate App Store iDared installation.
+
+### Dev 1.45 verification and artifact
+
+- Baseline was clean at `00178c3b`; no pre-existing user changes were present or overwritten.
+- Objective-C/Foundation implementation commit: `2ae4e709e04061ac6d528240f344fa6d02809e6f`.
+- Final repository commit: `0a2680c63ff2da78753c80cb07b46c77c3edf1ac`. The follow-up extends the general host-method bridge from five to six Objective-C parameters, which is required by the legacy `NSTimer` initializer.
+- GitHub lint/test run 10 completed successfully on macOS, Windows, and Android.
+- GitHub unsigned-IPA run 75 completed successfully and produced one verified artifact.
+- The downloaded artifact ZIP matched GitHub's SHA-256 digest: `25A770C1B26ECB00CD2365661456FCE2FA8AC72DBCBB1FADF63D069B1D90D1CE`.
+- Final IPA SHA-256: `1A8BAF0EC8F042F9233FBD982DB6CCD9F1EDE795DBFBD7A28549DEBC1F72B541`.
+- Package inspection found one `Payload/*.app` bundle and no embedded provisioning profile. The binary plist contains the separate development identity `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable `iDared 32bit`.
+- Device testing confirmed that all three target contracts were exercised and removed. Riddim and Tesla Wars still failed before presenting usable UI, while Ski Jumping newly reached its title/menu screen before failing.
+
+### Dev 1.45 device results (`Log12.txt`)
+
+| App | Dev 1.45 result | Decisive evidence / next blocker |
+|---|---|---|
+| Riddim | Advanced to later blocker | Passed timer construction and continued through network/audio startup, then the emulator panicked while treating binary-plist bytes as UTF-8 through a failable `NSString` initializer (lines 180–200). |
+| Ski Jumping | Newly reached title/menu, then crashed | Passed dynamic method installation and visibly reached the title/menu. After numerous unsupported audio files and one missing `start4.jpg`, an opaque host-object lookup panicked without reporting the requested object type (lines 422–465). |
+| Tesla Wars | Advanced to later blocker | Passed time-zone abbreviation lookup and reached substantially later UI/audio/analytics startup, then called the missing standard property `-[NSDateFormatter setLocale:]`; `setTimeZone:` immediately beforehand was only a no-op (lines 736–764). |
+
+The Dev 1.45 result is **3/3 prior blockers removed**, with three later blockers exposed and no title yet confirmed playable. Ski Jumping made the only visible UI advance.
+
+## Dev 1.46 engineering checkpoint
+
+Dev 1.46 is a small Foundation-correctness and diagnostic batch:
+
+| Contract | Target app | Expected result |
+|---|---|---|
+| Failable `NSString` UTF-8 initialization | Riddim | Invalid binary data now returns `nil` instead of crashing the emulator. This is standard behavior and may let the app use its own fallback; it may instead expose a later missing-data assumption. |
+| `NSDateFormatter` locale/time-zone properties and ownership | Tesla Wars | Advance through `setLocale:` and preserve both configured objects correctly. This is a general Foundation implementation, not an app-specific bypass. |
+| Typed missing-host-object panic diagnostics | Ski Jumping | The next failure will identify both the guest object address and exact host object type, making the opaque lifecycle/image crash actionable. This is diagnostic progress and is not expected by itself to make the game playable. |
+
+Apple's published XNU contract says hardware frequency sysctls are 64-bit values. Dev 1.46 therefore deliberately does **not** force Ski Jumping's four-byte `hw.cpufrequency`/`hw.busfrequency` buffers to succeed; that would be an inaccurate global compatibility hack.
+
+Required device test order for Dev 1.46 remains alphabetical:
+
+1. Riddim
+2. Ski Jumping
+3. Tesla Wars
+
+Capture the first decisive error for each. For Ski Jumping, the new panic text containing “while borrowing” or “while mutably borrowing” is the essential evidence. No other title needs testing for this narrow build unless a broad regression is noticed.
+
+### Dev 1.46 verification and artifact
+
+- Baseline was clean at `0a2680c6`; no pre-existing user changes were present or overwritten.
+- Final repository commit: `26f0a4a053e4e7c26488acac60289c4ae1ad1ec6`.
+- GitHub lint/test run 11 completed successfully on macOS, Windows, and Android.
+- GitHub unsigned-IPA run 76 completed successfully and produced exactly one artifact.
+- The downloaded artifact ZIP matched GitHub's SHA-256 digest: `21C7834E46ED0502ECFADAC9178F036969A1E601D0CDF5FEB3348E9EA7AD4B79`.
+- Final IPA SHA-256: `6B2A65B5971D3A3909215EBB37A4C43F30309204F554E5446828A51CFDE4F126`.
+- Package inspection found one `Payload/*.app` bundle, one `Info.plist`, and no embedded provisioning profile.
+- Device testing was pending at artifact delivery; the results are recorded immediately below.
+
+### Dev 1.46 device results (pasted report, build `26f0a4a`)
+
+| App | Dev 1.46 result | Decisive evidence / next blocker |
+|---|---|---|
+| Riddim | **Newly reached its menu/start interface, then crashed** | The failable UTF-8 change removed the binary-plist panic. The app passed network/audio/UI startup and then called missing `_CGPathAddArcToPoint` (lines 32–253). |
+| Ski Jumping | Still reached title/menu, then crashed | The typed diagnostic identified an unregistered pointer requested as a `UIFontHostObject` during text rendering (line 527). It does **not** establish that this was once a valid font or why the pointer is invalid. Numerous WAV assets also fail to decode (lines 434–512), and `files_ipod/start4.jpg` is missing (line 522), but neither is the recorded panic. |
+| Tesla Wars | Advanced to later blocker before visible startup | Locale and time-zone property handling succeeded. The next blocker is the standard Unicode date-format pattern `ccc` in `NSDateFormatter` (line 825). |
+
+Dev 1.46 therefore removed **2/2 intended behavioral blockers** and converted Ski Jumping's diagnostic target into actionable evidence. Riddim made the clearest visible advance; no title is yet confirmed playable.
+
+## Dev 1.47 engineering checkpoint
+
+Dev 1.47 attempts to advance the three newly decisive blockers while keeping audio, persistence, display/orientation, app-picker identity, and save-container code unchanged. This is a historical description of the delivered patch, not semantic or device validation; see the maintainer review below:
+
+| Contract | Target app | Expected result |
+|---|---|---|
+| `CGPathAddArcToPoint` tangent-arc geometry | Riddim | Advance past menu/start-interface path construction. The implementation stores a smooth polyline so both the existing renderer and path-animation consumer can use it. |
+| Provisional `UIFont` substitution | Ski Jumping | Substitute a 17-point system font when selected text helpers receive an unregistered or non-font object. This may hide a lifetime/dispatch defect and is not an established root-cause fix; unsupported WAV assets are a separate issue. |
+| Unicode date patterns `c`, `cc`, `ccc`, and `cccc` | Tesla Wars | Advance through stand-alone weekday formatting; the exact `ccc` call should now produce the abbreviated weekday. |
+
+Required Dev 1.47 device test order remains alphabetical:
+
+1. Riddim
+2. Ski Jumping
+3. Tesla Wars
+
+For Riddim, attempt to start gameplay if the menu remains responsive. For Ski Jumping, note whether it passes the title/menu crash and whether missing audio is audible. For Tesla Wars, record the first visible screen and first decisive error. No other app needs testing for this narrow build unless a broad regression is noticed.
+
+### Dev 1.47 implementation status
+
+- Clean baseline: `26f0a4a053e4e7c26488acac60289c4ae1ad1ec6`.
+- Implementation commit: `d7f34ba107ba0c28aad0c9812e29697423a04f78`.
+- GitHub lint/test run 12 completed successfully on Android, Windows, and macOS.
+- GitHub unsigned-IPA run 77 completed successfully and produced exactly one artifact.
+- Downloaded artifact ZIP SHA-256: `7ADD11897FB6C5A57B643573FB138BBF6D6E8A3BD932C7CE1DDD6A91C58BFFDB`, matching GitHub's recorded digest.
+- Final IPA SHA-256: `21699C4FCE4C0AD801737B67B11478694C6DD2F86182860856C9D83912D1A062`.
+- Package inspection found one `Payload/*.app`, one `Info.plist`, and no embedded provisioning profile. The binary plist contains the separate development identity `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable `iDared 32bit`.
+- Direct device-testing IPA: `artifacts/1.47-d7f34ba1/iDared-Dev-1.47.ipa`.
+
+## Maintainer reconstruction and operating checkpoint — October 31, 2026
+
+### Scope and provenance
+
+This review reconstructs the working model from the conversation, the saved audit and ledger, local commit history, the current source, relevant upstream differences, CI configuration, and decisive contexts in the latest Dev 1.46 report. It is **not** a fresh exhaustive reread of every historical raw log or a full correctness audit of the fork. Unverified attribution stays unverified.
+
+- Active checkout: `repo/`; origin `bookieart1/iDared32bit`; branch `ci/unsigned-ipa-baseline`; HEAD `d7f34ba107ba0c28aad0c9812e29697423a04f78`. Working tree was clean at review start.
+- Local upstream ref: `touchHLE/touchHLE`, `upstream/trunk` at `ca1de89c578e79746f33c1332e28efd106c334ba` (October 13, 2026). It is an ancestor of HEAD, **not a verified latest remote snapshot**. The fork also contains work predating this chat; do not attribute every upstream difference to these compatibility batches.
+- Latest device evidence: `C:/Users/booki/.codex/attachments/69eb9ac7-b077-4b8d-9832-699b24ee507d/Pasted text.txt`, embedded `26f0a4a`. Riddim reaches menu/start then crashes; Ski Jumping still reaches title/menu then crashes; Tesla Wars has not visibly opened.
+- Dev 1.47 remains a preserved, untested artifact. This review changes documentation only; no source behavior, commit, push, workflow run or IPA is changed.
+- Persistent workflow rules are in the workspace-root `AGENTS.md`; future work must consult this ledger before interpreting a new crash in isolation.
+
+### Recovered technical model and evidence strength
+
+| Area | Existing work and observed result | Limits / retained investigation |
+|---|---|---|
+| Foundation, coding and persistence | The Spoing sequence crossed missing calendar/date components, cookie storage, numeric encoding, `NSNumber objCType`, string coding, no-copy string initialization, decimal numbers and process-info behavior. Local commits preserve these implementations. User eventually confirmed smooth early levels, progress surviving reopen/crash, and advancement past the former level-5 freeze. | These are observed aggregate improvements, not proof that every individual implementation is complete or that a particular commit alone fixed a particular symptom. Keep serialization/readback tests and old saves. |
+| Guest memory / POSIX I/O | History includes `vm_allocate` conflicts, `MAP_FIXED` replacement, partial deallocation, invalid descriptors, memory protection and output handling. Earlier Spoing failures included `AddressUnavailable` and `posix_io.rs` unwraps. | Null-page faults in other games are not automatically the same bug, a shortage of phone storage, or solved by these patches. Trace the origin of nil/invalid values and guest callers. |
+| Offline services and dynamic lookup | `dlsym` missing-symbol behavior and local `NSUbiquitousKeyValueStore` support preceded user-confirmed Diversion play/saving. Fake legacy SDK classes and unsupported network requests remain in current logs. | Local storage is not iCloud synchronization. SDK substitutions and offline responses are accommodations, not evidence that remote services work. Riddim can encounter a service-dependent blocker after graphics is repaired. |
+| Rendering and layout | Blot moved from a cropped/offset corner through repeated unsuccessful viewport/layout attempts to full visible but smaller framing. Current source also has Blot-scoped layout diagnostics. | Full framing is not proof of correct scaling, input coordinates or orientation. Preserve the successful visibility result; do not repeat earlier zoom/offset guesses without measuring view bounds, backing size, viewport and touch mapping together. |
+| Performance and audio | Blot's `MAGICK_THREAD_LIMIT=1` is an explicit app-scoped accommodation (`c0b81b0b`, `src/environment.rs`), not a proven general slowdown fix. Dev 1.42's AudioQueue offline path returned artificial silence; 1.43 changed it to queued-data decoding (`b6126818`). | User reports still show Blot severe slowdown and Bounce distracting audio/performance faults. No supplied later device result establishes that 1.43 eliminated them. Separate render/guest CPU time, callback timing, decoding and log overhead. Do not count silent/fabricated audio success as fidelity. |
+| Shared runtime batch | Dev 1.44 added CF array replacement, bundle-for-class lookup, method encodings, main-thread identity and keyed float encoding. All ten prior blockers disappeared; Crazy Golf alone was user-confirmed usable. | Nine games exposed later failures. HookWorld/QuickHook's nil dictionary values and the null-fault cluster require provenance, not global acceptance of invalid state. |
+| ABI and call machinery | Dev 1.45 added a timer initializer, dynamic method addition and time-zone abbreviation lookup; a follow-up extended the Objective-C host bridge to six parameters. Ski reached its menu; all three exposed later errors. | Inspect argument/return layouts, struct returns and dynamic signatures when a typed object is wrong. Compiler success and pure Rust tests do not exercise all guest ABI paths. |
+| Diagnostic progress | Dev 1.46 replaced an opaque host-object failure with a pointer and requested host type. It also corrected failable UTF-8 initialization and added retained formatter properties. | The font diagnostic narrows the investigation but does not prove use-after-free; retained properties do not imply their behavioral effects are implemented. |
+
+### Current three-game decision record
+
+| Problem / apps | Subsystem and strongest evidence | Current code / implementation status | Competing hypotheses or missing proof | Next useful discriminating evidence |
+|---|---|---|---|---|
+| Riddim: missing `_CGPathAddArcToPoint` | Core Graphics, Dev 1.46 line 253; missing symbol is definite. Register dump has a null transform at this call. | `src/frameworks/core_graphics/cg_path.rs`, `CGPathAddArcToPoint`, `arc_to_points`; introduced by `d7f34ba1`. **Partial, approximate contract; device-unverified.** Existing consumers use move/line elements, so the new code flattens arcs. | It transforms control points then scales radius by the mean basis length. That does not implement a general affine transform for nonuniform scale/shear. Fixed angular sampling is not a pixel-error guarantee. Only quarter-circle endpoint and collinear fallback unit tests exist. Null-transform support may advance this call but cannot justify calling the whole primitive complete. | Validate both turn directions, degenerate/empty/subpath cases and nonuniform/reflected/sheared transforms; compare to a native reference where available. Check drawing and path-animation consumers together. Observe menu geometry and actual gameplay separately. |
+| Ski Jumping: unregistered pointer used as font | UIKit/text plus possible object lifetime, dispatch or ABI. Dev 1.46 line 527 requests `UIFontHostObject` for `0x300154f0`; stack includes unnamed host functions. | `src/frameworks/uikit/ui_font.rs`, `font_properties`; introduced by `d7f34ba1`. **Provisional accommodation, not root-cause correction.** Four text helpers accept missing/wrong-type objects by substituting 17-point regular font. Instance font getters still use strict borrowing. | Was it allocated as a font and freed? Was the caller argument decoded incorrectly? Was an earlier object corrupted or reused? Was a UIKit owner missing a retain? An app-side bug is possible but not demonstrated. The comment asserting old-app dependence on cached-font lifetime is an unsupported hypothesis. Current `UILabel::setFont:` already retains, so adding a second retention scheme without tracing is unjustified. | Bounded allocation-generation and retain/release/deallocation records for fonts; text selector, decoded arguments, guest caller, thread and pool drain; safe object-table presence/type. Compare call ABI including struct returns before blaming the app. Never dereference an invalid pointer just to log its class. Record known font creation metadata so a fallback does not erase evidence. |
+| Tesla Wars: unsupported `ccc` | Foundation formatting, Dev 1.46 line 825. Token parsing is definitely incomplete; caller expectations beyond this token are not yet established. | `src/frameworks/foundation/ns_date_formatter.rs`, `format_date` and `stringFromDate:`; properties added by `26f0a4a0`, token handling by `d7f34ba1`. **Partial contract, not full locale/time-zone support.** `stringFromDate:` ignores the stored properties and calculates UTC/en_US output. | Correctness needs locale, time zone, weekday boundaries and pattern-width behavior, not merely accepting the token. Longer weekday widths collapse to full names and `cc` is zero-padded by the current implementation. Historical target behavior still needs checking before a comprehensive correction. | Capture requested format, locale/time-zone identifiers and input timestamp once; test zone-crossing midnight, pre-reference dates, style changes and weekday widths using existing Foundation time/locale machinery. Confirm game startup after the narrow token call; do not infer complete formatting from that result. |
+
+Pattern-width reference: the [Unicode date-field table](https://unicode.org/reports/tr35/tr35-dates.html#Date_Field_Symbol_Table) distinguishes numeric, abbreviated, wide, narrow and short stand-alone weekdays. It supports treating the current formatter as partial; the guest-era Apple/Unicode contract must still be checked rather than applying modern changes indiscriminately.
+
+### Negative knowledge and guardrails
+
+- **Font fallback:** do not expand this into global invalid-object tolerance. A later crash or visible menu is not evidence of correct ownership. Instrument first if lifetime/ABI remains ambiguous.
+- **Blot:** repeated coordinate adjustments did not cure the original issue until later full framing; preserve that history. A thread-limit workaround did not establish the cause of later slowdown. Measure before adding another special case.
+- **Bounce:** smoother gameplay and saved progress coexist with broken audio and secondary-menu crashes. Keep these independent test dimensions. Do not revert to success-with-silence merely to suppress a failure.
+- **Null faults / nil dictionary values:** do not suppress the fault or accept nil insertions globally. Trace the upstream missing resource/API result and return-value handling. The shared symptom does not prove a shared cause.
+- **Frequency sysctls:** the prior review deliberately retained the 64-bit contract instead of making a four-byte guest buffer appear successful. Do not revive that proposed shortcut absent contrary guest-era evidence.
+- **AB Buster:** deliberately skipped; the same app copy stalls on original hardware. Do not interpret it as a clean emulator-only test case.
+- **Inputs:** retain the explicit eight-encrypted and 26-unreadable archive sets separately. Do not reclassify other failures as encryption, or infer undamaged assets from successful ZIP opening.
+- **Rogue Sky / giant logs:** callback repetition and log termination indicate a serious stability investigation, not proof of a watchdog cause or deadlock. Log throttling must retain event counts, and is not a substitute for repairing a loop.
+- **No-panic sessions:** some wider-audit apps freeze or behave incorrectly despite no panic. Historical no-terminal-error counts are not a playable-games count.
+
+### Verification limits that change future handoffs
+
+The current `.github/workflows/iDared32bit_lint-test.yml` runs library unit tests on Windows/macOS for this development branch. Formatting checks, the guest integration harness and native Objective-C sanity checks are release-branch-only. Development lint is allowed to fail, and Android is lint-only. Thus a green workflow must not be summarized as strict lint plus full multi-platform/guest/device validation. Preserve recorded artifact/build success, but describe its actual coverage. Improving the guest-ABI test path is a separate engineering target; do not silently weaken checks to get a green badge.
+
+No new runtime tests were run in this documentation review, and Dev 1.47 is not promoted to a device-validated checkpoint.
+
+### Focused regression plan and immediate next decision
+
+Keep the last delivered 1.47 artifact unchanged as a comparison checkpoint. For further changes, start with the evidence above, not another automatic three-error batch. Ski Jumping's invalid font is the strongest instrumentation-first candidate. Riddim's geometry needs contract-level tests; Tesla's formatter needs explicit supported semantics and relevant state wired through existing time/locale machinery. Do not assume the three must ship together.
+
+| Change area | Minimum relevant checks beyond the target app |
+|---|---|
+| Object ownership / dispatch / ABI | Spoing, Diversion and Sticky menus and level transitions; Air Penguin world-to-level transition; Crazy Golf gameplay; repeated launch/exit. Add focused guest fixtures for affected signatures, retain/autorelease and teardown. |
+| Text / path drawing | Riddim menu/input and geometry; Ski title text; Blot complete framing and touch mapping; compare screenshots before/after. Expand to all reference-app menus for shared text changes. |
+| Date / serialization / persistence | Deterministic format and ownership tests; Spoing, Diversion, Sticky and Bounce existing-save read, new progress write, normal relaunch and crash recovery. Test relevant locale/time-zone boundary behavior without overwriting original saves. |
+| Audio / scheduling / performance | Bounce gameplay and transitions, Diversion/Sticky transition audio, Blot prolonged session and death path, Spoing level-five completion; bounded timing/callback/log-volume measurements, not just subjective launch success. |
+| Packaging / isolation | Same development bundle ID `com.bookieart1.idared32bit.dev`; stable development save location; separate App Store app and its data untouched. Verify artifact commit and report direct IPA download on requested build deliveries. |
+
+For each subsequent fix append: problem, affected apps, subsystem, root-cause hypothesis and confidence, changed files/commit, provisional versus verified scope, predicted result, actual test result, regression exposure and remaining uncertainty. Reconsider the hypothesis when the result contradicts it. Do not overwrite older failed attempts; mark them superseded with the evidence that changed the decision.
+
+## Dev 1.47 device results and Dev 1.48 decision — October 31, 2026
+
+The user ran two complete Riddim → Ski Jumping → Tesla Wars sequences. The log embeds build `d7f34ba` and GitHub Actions run `41174826973`, so it is confirmed Dev 1.47 evidence. Both sequences reproduced the same decisive blockers.
+
+| App | Dev 1.47 result | Evidence and interpretation |
+|---|---|---|
+| Riddim | Advanced to a later blocker; still not playable | It passed `_CGPathAddArcToPoint` and twice stopped at missing `_CGPathCloseSubpath` (new log lines 253 and 1102). This validates only that the prior call no longer aborts. It does not validate arc geometry or menu behavior. |
+| Ski Jumping | Advanced through one helper, then exposed the same invalid object | The provisional fallback ran once (line 527), immediately followed by `orig_class != nil` in Objective-C dispatch (line 528). The receiver was `0x30015500`; the second launch reproduced the assertion with the same receiver address and registers (line 1376). This shows that substituting rendering properties did not repair the receiver stored in guest state. The unsupported WAV set and missing `start4.jpg` remain separate defects. |
+| Tesla Wars | Advanced to a later formatter token; still no visible startup | It passed `ccc` and twice stopped at `LLL` (lines 829 and 1677). `LLL` is the standard stand-alone abbreviated month pattern. This is another incomplete formatter surface, not evidence that locale/time-zone behavior is now complete. |
+
+### Dev 1.48 implementation boundary
+
+- **Core Graphics, general implementation:** add `_CGPathCloseSubpath` with an actual close element (no points), current-point restoration to the subpath start, closing-segment consumption by the existing renderer, and closed-loop points for path animations. This follows the documented Core Graphics close semantics within touchHLE's existing flattened line renderer. It does not make Dev 1.47's approximate arc transforms complete.
+- **Foundation formatting, partial but general implementation:** add `L` stand-alone month widths to the formatter's explicitly documented English/UTC model and correct the existing `E`/`c` abbreviated, wide, narrow and short widths. Locale-specific month forms and configured time-zone effects remain unimplemented and must not be claimed as solved.
+- **UIKit/Objective-C, instrumentation-first:** remove the permissive invalid-font substitution. Record a bounded set of recently deallocated fonts and produce a precise tombstone or wrong-type diagnostic at the first invalid text operation. Improve nil-`isa` dispatch diagnostics with the receiver and selector. This intentionally seeks root-cause evidence; it is not predicted to make Ski Jumping playable in this build.
+
+Predicted focused test:
+
+1. Riddim: start gameplay if possible; capture geometry problems and first decisive blocker.
+2. Ski Jumping: capture the exact font tombstone/unregistered/wrong-type message. No extended play is expected yet.
+3. Tesla Wars: record whether visible startup begins and the next decisive blocker.
+
+Regression exposure is concentrated in path drawing/animation and date strings. If target testing advances, run Riddim menu geometry, Blot framing/touch mapping, reference-app menus, and deterministic date-format unit tests. The Ski diagnostics do not alter valid-font behavior. No audio, persistence, save-container, orientation or packaging code is intentionally changed.
+
+### Dev 1.48 build and verification record
+
+- Primary implementation commit: `af42aeba01fa24a3416d9f936f0cf6c12e9c87eb` (`Implement Dev 1.48 path and formatter batch`).
+- First verification attempt failed before compilation because the `objc_classes!` macro requires class methods before instance methods; the new `UIFont -dealloc` diagnostic had been placed before class methods. Failed runs: lint/test 13 (`41176741168`) and unsigned IPA 78 (`41176741192`). This was a source-order issue, not device evidence or a change in the implementation decision.
+- Ordering correction and final build commit: `5300db7dda7a16439d50c3fda0b76e03daaf3595` (`Fix UIFont macro method ordering`). The diagnostic implementation was moved after the class methods without changing its behavior.
+- GitHub lint/test run 14 (`41177206187`) completed successfully. Under the current development-branch workflow this covers Windows/macOS library tests and Android lint; it does not constitute physical-device, guest-harness or strict-formatting validation.
+- GitHub unsigned-IPA run 79 (`41177206191`) completed successfully and produced exactly one artifact.
+- Downloaded artifact ZIP SHA-256: `439E9D44F8A3D77FFDF99E0D37BF564AE73CAE0DB09EB67F3FC08C2A2E833A8C`, matching GitHub's recorded digest.
+- Final IPA SHA-256: `A88FE1ECC0D540A48BC2842A8EF1C2885405FF4D830B34A6098521B4377CD397`.
+- Package inspection found one `Payload/*.app`, one `Info.plist`, and no embedded provisioning profile. The binary plist contains the separate development identity `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable `iDared 32bit`.
+- Direct device-testing IPA: `artifacts/1.48-5300db7d/iDared-Dev-1.48.ipa`.
+
+## Dev 1.48 device results and Dev 1.49 decision — October 31, 2026
+
+The user tested Riddim, Ski Jumping, and Tesla Wars on the delivered Dev 1.48
+artifact. The supplied log embeds build `5300db7`, so it is confirmed Dev 1.48
+evidence rather than an inferred version match.
+
+| App | Dev 1.48 result | Evidence and interpretation |
+|---|---|---|
+| Riddim | Advanced to another Core Graphics blocker; still not playable | It passed the prior `_CGPathAddArcToPoint` and `_CGPathCloseSubpath` calls, then stopped at missing `_CGContextAddPath` (log line 253). This is evidence that execution moved later, not that the prior flattened arc geometry is correct. |
+| Ski Jumping | Reached the same title/menu region and exposed a definite font-lifetime failure | The bounded tombstone diagnostic reports that receiver `0x300154f0` had actually been deallocated and was a 15-point `SansRegular` `UIFont` (line 527). This resolves the earlier wrong-type/ABI ambiguity in favor of a lifetime problem for this object. Unsupported WAV assets, missing `files_ipod/start4.jpg`, and four-byte buffers for 64-bit frequency sysctls remain separate warnings/defects. |
+| Tesla Wars | Advanced to another standard formatter token before visible startup | It passed `ccc` and `LLL`, then stopped at Unicode date-format pattern `ZZ` (line 825). This is another partial `NSDateFormatter` surface, not evidence that locale or time-zone behavior is complete. |
+
+The repeated corrupt-archive warnings in this log are the known app-picker
+inputs and are not new failures in these three launches.
+
+### Dev 1.49 implementation boundary
+
+- **Core Graphics, general implementation:** `_CGContextAddPath` now copies the
+  source path elements into the context's mutable current path without drawing
+  or aliasing the source. Coordinates remain in user space for the existing
+  context rendering path. This should remove Riddim's exact missing-symbol
+  blocker, but it does not validate Dev 1.47's approximate arc flattening or
+  imply that the menu/gameplay geometry is correct.
+- **Foundation formatting, partial general implementation:**
+  `NSDateFormatter` now applies its configured/default time-zone offset when
+  deriving the local Gregorian date and supports Unicode `Z`, `ZZ`, `ZZZ`,
+  `ZZZZ`, and `ZZZZZ` offset forms. Unit coverage includes UTC and a synthetic
+  negative half-hour offset. `NSTimeZone` itself remains a fixed-offset GMT
+  model, so regional zones and daylight-saving behavior remain outside this
+  implementation's verified boundary.
+- **UIKit lifetime, general compatibility cache with a bounded scope:** UIFont
+  factory methods now return immutable flyweights held by a framework-owned
+  retain while callers still receive normal autoreleased references. This
+  repairs the demonstrated pool-drain lifetime gap instead of fabricating font
+  properties after deallocation. It can help other older apps that retain
+  system-font pointers the same way, but historical UIKit object-identity
+  behavior has not been native-reference tested and the result remains
+  device-unverified. The tombstone diagnostic remains active for genuinely
+  deallocated fonts.
+
+No audio decoding, persistence, orientation, viewport, input, save-container,
+or app-picker identity code was intentionally changed. The focused device test
+remains:
+
+1. Riddim — reach the menu, try to start gameplay, and note geometry/input as
+   well as the next decisive blocker.
+2. Ski Jumping — confirm whether it remains beyond the title/menu transition;
+   separately note missing/distorted audio rather than conflating it with a
+   crash.
+3. Tesla Wars — record the first visible screen and first decisive blocker.
+
+If these targeted calls advance, the relevant regression set is Riddim menu
+geometry and input, Blot framing/touch mapping, Ski and reference-app text,
+deterministic date strings, and existing saved-progress relaunches. The separate
+App Store iDared installation remains outside the development bundle and must
+not be altered.
+
+### Dev 1.49 build and verification record
+
+- Clean source baseline: `5300db7dda7a16439d50c3fda0b76e03daaf3595`.
+- Final implementation commit: `9cb9939513c727b7a8adc0b86083bcff04ec2d79`
+  (`Implement Dev 1.49 path, date, and font lifetime batch`).
+- GitHub lint/test run 15 (`41178310650`) completed successfully: macOS and
+  Windows library-test jobs passed and the Android job completed successfully.
+  Development-branch lint remains configured as allowed-to-fail, and the guest
+  integration harness, release-only formatting checks, native Objective-C
+  sanity test, and physical-device behavior are not covered by this result.
+- GitHub unsigned-IPA run 80 (`41178310643`) completed successfully and
+  produced exactly one artifact.
+- Downloaded artifact ZIP SHA-256:
+  `14BA4C89FAA4945D3C5C3B7801D565431784BDA684768DB6EDE55F3C4DB25BDF`,
+  matching GitHub's recorded digest.
+- Final IPA SHA-256:
+  `4353DF2F6D19C3F446291FEFEA42511E111865234757F3747AC9D704E02EC084`.
+- Package inspection found one `Payload/*.app` bundle, one `Info.plist`, and no
+  embedded provisioning profile. The plist contains bundle identifier
+  `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable
+  `iDared 32bit`.
+- Direct device-testing IPA:
+  `artifacts/1.49-9cb99395/iDared-Dev-1.49.ipa`.
+
+## Dev 1.49 device results and Dev 1.50 decision — October 31, 2026
+
+The supplied device log identifies build `9cb9939`, matching the delivered
+Dev 1.49 artifact. The user's accompanying Tesla Wars screenshot confirms that
+the host alert displayed its title and buttons but omitted the guest text
+field that should have appeared between them.
+
+| App | Dev 1.49 result | Evidence and interpretation |
+|---|---|---|
+| Riddim | Advanced to a later Core Graphics blocker; still not playable | It passed `_CGContextAddPath` and then called missing `_CGContextClip` (line 253). The current path and context registers are non-null. This requires persistent clipping state and nonzero-winding behavior, not a no-op symbol stub. |
+| Ski Jumping | Advanced past the font lifetime failure to a standard OpenGL ES extension query | It reached `_glGetBufferPointervOES` with `GL_ARRAY_BUFFER`, `GL_BUFFER_MAP_POINTER_OES`, and a valid output address (lines 529–532). The existing map-buffer shadowing also contained a real binding-query bug: it queried vertex-array client state and wrote through a temporary, effectively keying mappings as buffer zero. Unsupported WAV files, the missing `start4.jpg`, and undersized frequency-sysctl buffers remain secondary. |
+| Tesla Wars | Newly partially functional; menu reached quickly, but new-profile entry is unusable | The game repeatedly creates a `UITextField`, makes it active, and shows `UIAlertView` titled “Enter Your Name” (lines 840–854). The modern keyboard appears, but the SDL message-box replacement discards the alert's guest subviews and blocks the guest event loop, so there is no visible field and keystrokes cannot update it. On exit the SDL input responder remains active and the keyboard covers the native app picker. There is no game panic in this launch. |
+
+### Dev 1.50 implementation boundary
+
+- **Core Graphics, general clipping implementation:** represent every clip
+  operation as transformed device-space subpaths, apply the nonzero winding
+  rule, intersect successive clips, include clipping state in save/restore,
+  implicitly close open subpaths, and reset the current path after
+  `CGContextClip`. Apply the same state to bitmap fills, images and glyphs.
+  This follows Core Graphics' documented contract within touchHLE's existing
+  flattened-line renderer; it does not repair the earlier approximate
+  tangent-arc transform model.
+- **OpenGL ES, general OES map-buffer correction:** implement
+  `glGetBufferPointervOES` using the guest-visible shadow allocation, return
+  null when the current buffer is not mapped, and correct the shared binding
+  lookup to query `GL_ARRAY_BUFFER_BINDING`/`GL_ELEMENT_ARRAY_BUFFER_BINDING`
+  into actual mutable storage. This changes Map, Get and Unmap together so
+  their buffer identity is coherent.
+- **UIKit/iOS host integration, general legacy alert text-entry bridge:** when
+  an old `UIAlertView` contains guest `UITextField` subviews, present a native
+  text-capable alert on iOS, transfer initial text/placeholder/security state,
+  write the submitted text back to the guest fields, end guest editing, then
+  deliver the original button callbacks. Ordinary alerts continue to use the
+  existing message box. The native app picker also forcibly resigns any stale
+  host first responder so a game keyboard cannot leak into it.
+
+Predicted focused device test for Dev 1.50:
+
+1. Riddim — note menu geometry, whether controls render correctly, and the
+   first decisive blocker after clipping.
+2. Ski Jumping — note title/menu stability, then attempt to enter gameplay;
+   record visual behavior separately from known missing audio/assets.
+3. Tesla Wars — choose New, type a visible name, submit it, and attempt to
+   start the game; also exit once while the keyboard is visible and confirm
+   that the app picker is unobstructed.
+
+Regression exposure is concentrated in bitmap rendering/clipping, mapped VBO
+state, and legacy text alerts. If the targets advance, retest Riddim and Blot
+rendering/touch alignment, Ski Jumping and one known OpenGL title, Tesla's
+cancel/submit/exit paths, one ordinary non-text alert, and app-picker keyboard
+cleanup. Audio and persistence code, the development bundle ID, save-container
+isolation, and the separate App Store iDared installation are not intentionally
+changed.
+
+### Dev 1.50 build and verification record
+
+- Clean source baseline: `9cb9939513c727b7a8adc0b86083bcff04ec2d79`.
+- Final implementation commit: `0781c5c6b52d9da28570bad9969be85718e545b9`
+  (`Implement Dev 1.50 graphics, GL, and text input batch`).
+- GitHub lint/test run 16 (`41179847603`) completed with all three platform
+  jobs green. The macOS and Windows library-test steps passed; development-
+  branch lint returned nonzero but remains explicitly allowed to fail, so this
+  is not evidence of a clean strict-lint pass. Physical-device behavior and
+  the native alert's end-to-end text transfer remain device-test requirements.
+- GitHub unsigned-IPA run 81 (`41179847647`) completed successfully and
+  produced exactly one artifact.
+- Downloaded artifact ZIP SHA-256:
+  `7998B9E95140008833B555942805F033AE2F93A5C60E4B085285BEF7FC5E0E5A`,
+  matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `8745CCB2F1EE87249E819A0C9E2DF1F655ABFAAC1E7423D059FD40B912CFC332`.
+- Local package inspection found 36 archive entries, exactly one guest app
+  bundle and `Info.plist` (`Payload/iDared 32bit.app/Info.plist`), and no
+  embedded provisioning profile. The successful workflow's identity check
+  verified bundle identifier `com.bookieart1.idared32bit.dev`, display name
+  `iDared Dev`, and the unsigned development package boundary.
+- Direct device-testing IPA:
+  `artifacts/1.50-0781c5c6/iDared-Dev-1.50.ipa`.
+
+## Dev 1.50 device results and Dev 1.51 decision — October 31, 2026
+
+All three supplied device logs identify build `0781c5c`, matching Dev 1.50.
+The repeated Tesla Wars launches are not contradictory: they expose three
+different timing-dependent failure paths around the same native text-entry
+transition.
+
+| App | Dev 1.50 result | Evidence and interpretation |
+|---|---|---|
+| Riddim | Advanced through the clipping change to its menu, then crashed on Play | The first decisive blocker is Objective-C class lookup for `UITableViewController`, specifically its inherited `+initialize` path. The game now requires a functional table-controller class rather than another graphics bypass. |
+| Ski Jumping | Advanced through `glGetBufferPointervOES` to the title/menu, then crashed on Play | The first decisive blocker is `UITextField` not responding to `font`. This is a missing UIKit property-forwarding behavior. Repeated WAV-open failures and missing `files_ipod/start4.jpg` remain secondary and may still affect audio or later rendering after this crash moves. |
+| Tesla Wars, launch 1 | Native name alert appeared, then the entire iDared host disappeared without a guest panic | The log ends immediately after presenting the alert. This is consistent with the Swift bridge's process-fatal `precondition(Thread.isMainThread)` being reached from a guest worker thread. It is a host-integration failure, not proof of a Tesla guest crash. |
+| Tesla Wars, launch 2 | Name field appeared and accepted typing; submitting it crashed the guest | The decisive panic is `Attempt to increment refcount on static-lifetime object`. The runtime was treating an Objective-C class/constant object like an ordinary heap object. |
+| Tesla Wars, launch 3 | Failed before the name alert | The decisive blocker is missing `-[NSDate dateByAddingTimeInterval:]`, a standard Foundation alias absent from the current implementation. |
+
+### Dev 1.51 implementation boundary
+
+- **UIKit, real table-controller support:** register
+  `UITableViewController : UIViewController`; support `allocWithZone:`,
+  `initWithStyle:`, a real `UITableView` root view, controller data-source and
+  delegate wiring, `tableView` replacement, and
+  `clearsSelectionOnViewWillAppear`. This is general UIKit behavior intended
+  for Riddim and any other legacy app using table controllers, not a Riddim
+  name check.
+- **UIKit, text-field font behavior:** expose `-[UITextField font]` through
+  the existing backing label, matching the already implemented setter. This
+  addresses Ski Jumping's exact selector failure without changing audio or
+  game assets.
+- **Foundation, date API completeness:** implement
+  `-[NSDate dateByAddingTimeInterval:]` as the modern spelling of the existing
+  date-offset behavior.
+- **Objective-C lifetime correctness:** make retain, release and autorelease
+  no-ops for static-lifetime objects, with an effectively immortal retain
+  count. Classes and constant/static objects must not enter ordinary heap
+  reference-count accounting; this fixes Tesla's exact panic at the runtime
+  boundary rather than bypassing a Tesla call site.
+- **Native alert thread safety:** remove the process-killing main-thread
+  precondition. Copy the guest JSON before crossing threads and synchronously
+  present the native alert on the main queue when invoked off-main. The helper
+  retains a main-queue dispatch precondition internally so actual UIKit work
+  remains constrained to the correct thread.
+
+Focused Dev 1.51 device test:
+
+1. **Riddim** — choose Play from the menu and report table/menu geometry,
+   input, and the next decisive blocker.
+2. **Ski Jumping** — choose Play and report whether gameplay begins; record
+   missing or distorted audio and missing imagery separately from a crash.
+3. **Tesla Wars** — launch at least three times because Dev 1.50 proved the
+   transition is timing-sensitive. Test name submit once, Cancel once, and
+   exit once while the alert or keyboard is active. Record whether the entire
+   host still disappears and whether the app picker is left with a keyboard.
+
+The regression boundary is table-backed UIKit screens, text-field appearance,
+date offset callers, Objective-C static objects, and native alert threading.
+No graphics, OpenGL buffer, audio, save-container, game-persistence, app
+identity, or separate App Store iDared code was intentionally changed.
+
+### Dev 1.51 build and verification record
+
+- Clean source baseline: `0781c5c6b52d9da28570bad9969be85718e545b9`.
+- Final implementation commit: `c62a893d24c72697edb97dfa7ae8141d44705263`
+  (`Implement Dev 1.51 UIKit and lifetime batch`).
+- GitHub lint/test run 17 (`41181083600`) completed successfully in 3m35s.
+  The macOS, Windows and Android jobs are green. As in prior development
+  builds, their lint steps returned exit code 101 but are explicitly
+  allowed-to-fail; this is not a clean strict-lint result. The library-test
+  jobs completed, but physical-device UIKit, guest-thread alert timing, and
+  end-to-end gameplay remain device-test requirements.
+- GitHub unsigned-IPA run 82 (`41181083585`) completed successfully and
+  produced exactly one artifact,
+  `iDared32bit-dev-unsigned-c62a893d24c72697edb97dfa7ae8141d44705263`.
+- Downloaded artifact ZIP SHA-256:
+  `272086873B1EF7E8F3ABFEB01857C2E6E739691DC2FAADFEF791BA3FB64D7F4B`,
+  matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `39EE0822E02F25B3D84371C8622C9A8F110D2B4AC0C3DCB0AD29EC4C0224138A`.
+- Local package inspection found 36 archive entries, exactly one guest app
+  bundle and `Info.plist` (`Payload/iDared 32bit.app/Info.plist`), and no
+  embedded provisioning profile. The successful workflow verified the
+  development bundle identity (`com.bookieart1.idared32bit.dev`, display name
+  `iDared Dev`) and preserves separation from the App Store installation.
+- Direct device-testing IPA:
+  `artifacts/1.51-c62a893d/iDared-Dev-1.51.ipa`.
+
+## Dev 1.51 device results and Dev 1.52 decision — October 31, 2026
+
+The supplied log identifies build `c62a893` and contains five launches:
+Riddim, Ski Jumping, and three repeat launches of Tesla Wars. All three apps
+advanced beyond their Dev 1.50 blockers, but none is yet confirmed compatible.
+
+| App | Dev 1.51 result | Evidence and interpretation |
+|---|---|---|
+| Riddim | Advanced from Play to track/store selection; Back then crashed | The game displayed its track-choice screen and its own “Connection Required” message. No bundled tracks were visible, so downloadable content may be an unavailable external-service dependency. The immediate emulator blocker on Back is missing `-[UIWebView stringByEvaluatingJavaScriptFromString:]`, not the connection warning itself. |
+| Ski Jumping | Advanced to character/outfit selection; Next → Tutorial crashed | The decisive blocker is missing `-[NSString getBytes:maxLength:usedLength:encoding:options:range:remainingRange:]`. Repeated WAV-open failures and missing `files_ipod/start4.jpg` remain secondary and may become visible after the string-conversion blocker moves. |
+| Tesla Wars, three launches | Consistently skipped name entry, reached a new still/loading screen, then crashed | Every launch fails on thread 1 by sending `initWithTimeIntervalSinceNow:` to an object whose `isa` has become nil. Combined with Dev 1.50's refcount panic immediately after submitting the native alert, this strongly indicates delayed-callback object-lifetime corruption rather than a missing NSDate selector. |
+
+### Dev 1.52 implementation boundary
+
+- **Objective-C runtime, lifetime-state correctness:** store an object's
+  static/immortal status independently from its current reference count. A
+  normal object whose final release has set its refcount to zero is no longer
+  misclassified as a static object during its deallocation chain.
+- **UIKit, alert presentation ownership:** retain `UIAlertView` before
+  entering synchronous host UI, then release it after the delayed delegate
+  callback (or immediately when dismissal produces no callback). This models
+  UIKit's presentation ownership and prevents the guest autorelease pool from
+  destroying the alert while the native prompt is blocking/yielding.
+- **Foundation, range-aware string conversion:** implement
+  `getBytes:maxLength:usedLength:encoding:options:range:remainingRange:` with
+  range validation, partial writes, remaining-range reporting, lossless/lossy
+  handling, UTF-8/16/32 and legacy encodings, and surrogate-pair-safe buffer
+  boundaries. This is a general NSString capability, not a Ski Jumping
+  accommodation.
+- **UIKit, no-document UIWebView JavaScript behavior:** implement
+  `stringByEvaluatingJavaScriptFromString:` and return `nil` when there is no
+  loaded web document. touchHLE still has no embedded web engine and cannot
+  restore Riddim's remote track store; the change supplies the historical
+  failure result rather than fabricating JavaScript output.
+
+Focused Dev 1.52 device test:
+
+1. **Riddim** — choose Play, dismiss the connection/store message, then use
+   Back. Report whether Back returns safely. Absence of downloadable tracks
+   remains an external-content limitation even if the crash is gone.
+2. **Ski Jumping** — proceed through customization, Next, and Tutorial. Record
+   the next blocker and separately note missing images or broken/missing audio.
+3. **Tesla Wars** — launch three times because the prior failure was
+   timing-sensitive. Report whether the loading screen advances; if the name
+   prompt reappears, test one submit and one Cancel path and note any host-app
+   disappearance.
+
+The highest regression exposure is Objective-C object teardown and legacy
+alert callbacks. Retest one ordinary non-text alert if any target behaves
+unexpectedly. Graphics, OpenGL buffer handling, audio, save containers,
+development bundle identity, and the separate App Store installation were not
+intentionally changed.
+
+### Dev 1.52 build and verification record
+
+- Clean source baseline: `c62a893d24c72697edb97dfa7ae8141d44705263`.
+- Primary implementation commit: `34d323fe3675e6827c2aeaf2e9f0bb658a32b4d8`
+  (`Implement Dev 1.52 text, web view, and alert lifetime batch`). Its first
+  CI attempt correctly rejected two compile-time integration details: the
+  host Objective-C method bridge generated signatures only through six
+  explicit parameters, and a host `usize` needed conversion to guest `u32`.
+- Final build commit: `d77df52f6b6d8e63b633ae68fb4e88569ebe709c`
+  (`Fix Dev 1.52 host method ABI compilation`). The correction extends the
+  general host-method bridge to seven parameters and uses checked guest-size
+  conversion; it does not reduce the NSString implementation to a stub.
+- GitHub lint/test run 19 (`41182634306`) completed successfully. macOS,
+  Windows and Android jobs are green; all three lint steps and both library-
+  test jobs completed successfully.
+- GitHub unsigned-IPA run 84 (`41182634276`) completed successfully and
+  produced exactly one artifact,
+  `iDared32bit-dev-unsigned-d77df52f6b6d8e63b633ae68fb4e88569ebe709c`.
+- Downloaded artifact ZIP SHA-256:
+  `25A3A1A145A5BFCFA1D71AAB5E4D4435BBCA7B52468F0661C7D3176E0E25866C`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `5182BBAF98F99D7E35CE0E5CCBD05B456F9A487898957A511AB5051BEA13108A`.
+- Local package inspection found 36 archive entries, exactly one guest app
+  bundle and `Info.plist` (`Payload/iDared 32bit.app/Info.plist`), no embedded
+  provisioning profile and no code-signature directory. The successful
+  workflow also verified the separate development bundle identity and
+  unsigned packaging boundary.
+- Direct device-testing IPA:
+  `artifacts/1.52-d77df52f/iDared-Dev-1.52.ipa`.
+
+## Dev 1.52 device results and Dev 1.53 decision — October 31, 2026
+
+The supplied log identifies build `d77df52` and contains one Riddim launch,
+one Ski Jumping launch, seven Tesla Wars launches, and one incidental Ramps
+launch. Ski Jumping is the first title in this focused batch to reach an
+apparently playable state. Riddim and Tesla Wars now expose two different
+UIKit/runtime problems.
+
+| App | Dev 1.52 result | Evidence and interpretation |
+|---|---|---|
+| Riddim | Reached its track/store screen; Back still crashed | The no-document `UIWebView` query now returns safely. Execution proceeds to `-[TracksViewController isViewLoaded]`, which fails because touchHLE lacks the standard inherited `UIViewController` query. The external track-store limitation remains separate. |
+| Ski Jumping | Smooth gameplay, good frame rate, extensive interaction, no crash | The launch ended normally through iDared's on-screen Home button rather than a guest panic. This is **apparently playable**, not yet proof of complete compatibility. The log still reports multiple undecoded WAV files and missing optional/localized image paths, although the tester did not report an audible or visible defect in this run. |
+| Tesla Wars | Seven launches reached the main menu; Play and Back from several submenus crashed | All seven paths converge on `Attempt to increment refcount on zero-refcount object` on guest thread 1. The repeatable object address changes with allocation layout, and the current pointer-only panic does not identify its class. This strongly supports one shared use-during-deallocation defect rather than separate menu implementations. The missing name prompt may simply reflect already-saved profile state, so this run does not independently validate or falsify alert presentation. |
+| Ramps (incidental) | Did not start | The unchanged blocker is unsupported startup orientation `LandscapeRight`; it was not part of the requested focused test. |
+
+### Dev 1.53 implementation boundary
+
+- **UIKit, view-controller lifecycle completeness:** implement
+  `-[UIViewController isViewLoaded]` as a side-effect-free query of the
+  controller's current root-view state. It must not call `-view`, load a nib,
+  or invoke `viewDidLoad`. This is standard UIKit behavior and is not keyed to
+  Riddim.
+- **Objective-C runtime, actionable lifetime diagnostics:** retain the strict
+  rejection of attempts to resurrect a dynamic zero-refcount object, but add
+  the object's Objective-C class and host-object type to the panic. Allowing
+  the retain would hide a use-during-deallocation error and risk corrupting
+  arbitrary games. The next Tesla log should identify the ownership subsystem
+  that needs a semantic correction.
+- **No Ski Jumping change:** preserve the newly working gameplay path. Its
+  audio-decoding and missing-path warnings remain ledgered as secondary until
+  a user-visible defect is reproduced.
+
+Focused Dev 1.53 device test:
+
+1. **Riddim** — use Back from the track/store screen. Report whether it
+   returns to the preceding screen and, if it advances, exercise Play once.
+2. **Tesla Wars** — one Play attempt and one submenu → Back attempt are enough.
+   The new panic should name the zero-refcount object's class; repeated launches
+   are unnecessary unless the two actions produce different named classes.
+3. **Ski Jumping** — a brief launch and one jump is a regression check only;
+   another long play session is not required for this batch.
+
+The separate App Store iDared identity, save containers, graphics pipeline,
+audio implementation, alert UI, and persistence code are unchanged in Dev
+1.53.
+
+### Dev 1.53 build and verification record
+
+- Clean source baseline: `d77df52f6b6d8e63b633ae68fb4e88569ebe709c`.
+- Primary implementation commit: `6237c55104ea15913150ac1df8156e97dcf70fea`
+  (`Implement Dev 1.53 view lifecycle and lifetime diagnostics`). Its first CI
+  attempt exposed a format-string syntax error confined to the new diagnostic.
+- Final build commit: `36ed596ef7b0bbd53da3eda82b6173d5649ebafd`
+  (`Fix Dev 1.53 diagnostic formatting`).
+- GitHub lint/test run 21 (`41184344003`) completed successfully: macOS,
+  Windows and Android jobs are green.
+- GitHub unsigned-IPA run 86 (`41184344045`) completed successfully and
+  produced exactly one artifact,
+  `iDared32bit-dev-unsigned-36ed596ef7b0bbd53da3eda82b6173d5649ebafd`.
+- Downloaded artifact ZIP SHA-256:
+  `68CAEE656AF4A87D7DD0670E7CD92F4C7A26328BD707910A7AC0C857819B9590`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `3A115280D8F0CFAD26CB429DE5AB802BEDE6689B3F75BC7BF440C790752503BA`.
+- Local package inspection found 36 archive entries, exactly one guest app
+  bundle and `Info.plist` (`Payload/iDared 32bit.app/Info.plist`), no embedded
+  provisioning profile, and no code-signature directory. The successful
+  workflow verified the separate development bundle identity and unsigned
+  packaging boundary.
+- Direct device-testing IPA:
+  `artifacts/1.53-36ed596e/iDared-Dev-1.53.ipa`.
+
+## Dev 1.53 device results and Dev 1.54 decision — October 31, 2026
+
+The supplied 1,893-line device report identifies build `36ed596` and contains
+one Riddim launch, four Tesla Wars launches, and one Ski Jumping launch. The
+Dev 1.53 diagnostics disproved the earlier idea that Tesla's crash involved one
+particular menu object: the same lifetime failure follows whichever screen is
+active on the worker thread.
+
+| App | Dev 1.53 result | Evidence and interpretation |
+|---|---|---|
+| Riddim | Back navigation now works smoothly; Options reaches a later UIKit blocker | The launch advances to `-[UIScrollView setCanCancelContentTouches:]` (device log line 303). This is a standard `UIScrollView` Boolean property, not an app-specific selector. Internet-required/store paths remain an external-content limitation. |
+| Tesla Wars | Name entry works, but Play and submenu Back paths still crash | Four independent launches fail while retaining the active `MainMenu`, `Options`, `Help`, or `Profiles` object (lines 660, 987, 1306, and 1632). Every failure occurs on guest thread 1 at the same retain-on-zero site. The common pattern strongly supports a cross-thread ownership/order problem rather than four broken menu implementations. The current log does not reveal which thread performed the final release or whether the screen object crossed a raw pthread boundary without ownership. |
+| Ski Jumping | Remains smooth and working in the tested scope | There is no guest panic. The launch ends through the ordinary app-resign path (lines 1892–1893). Existing WAV decode and missing optional/localized asset warnings remain secondary because no matching user-visible defect was reported. |
+
+### Dev 1.54 implementation boundary
+
+- **UIKit, scroll-view property state (partial contract):** implement the
+  historical Boolean state and defaults for `delaysContentTouches`,
+  `canCancelContentTouches`, and `bounces`, including correctly typed getters
+  and setters. This removes Riddim's decisive Options blocker without
+  pretending that touch-delay, cancellation, or rubber-band animation are
+  fully modeled by the current rudimentary scroll implementation.
+- **Objective-C lifetime instrumentation (diagnostic-only):** retain the strict
+  prohibition on resurrecting a dynamic object after its final release.
+  Record the guest thread plus PC/LR at the transition to zero and report them
+  if another retain races the deallocation chain. This distinguishes same-thread
+  reentrancy from a main-thread-to-worker lifetime race.
+- **pthread ownership instrumentation (diagnostic-only):** when a raw pthread
+  is created with a registered Objective-C object as its untyped context,
+  record the new thread, entry point, object and class once. This is bounded at
+  thread creation and will determine whether Tesla relies on an unretained
+  Objective-C context crossing. It does not retain the pointer or alter
+  scheduling, either of which would be an unsafe guess before provenance is
+  known.
+- **No Ski Jumping change:** preserve the working gameplay path and use it only
+  as a brief regression check.
+
+Focused Dev 1.54 device test:
+
+1. **Riddim** — open Options, interact with one control, then use Back. If it
+   advances, report the first later failure or non-crash defect.
+2. **Tesla Wars** — one Play attempt plus one submenu → Back attempt. Two
+   launches are sufficient if they produce the expanded ownership diagnostic;
+   repeated launches across every menu are unnecessary.
+3. **Ski Jumping** — launch and perform one jump as a UIKit/runtime regression
+   check only.
+
+The separate App Store iDared identity, development save container, graphics
+pipeline, audio implementation, alert input and persistence code are unchanged
+in this batch.
+
+### Planned pause and next scouting batch
+
+After one focused Dev 1.54 check, the user elected to pause the Riddim/Tesla
+Wars blocker chain and explore a fresh cross-application batch.
+
+| Paused app | Durable resume status |
+|---|---|
+| Riddim | Partial. Menu and Back navigation are smooth on Dev 1.53, but several track/store paths depend on unavailable remote content. Options currently stops at `setCanCancelContentTouches:`; Dev 1.54 implements that standard property and is awaiting device verification. Resume only if local/bundled gameplay can be distinguished from the discontinued service path. |
+| Tesla Wars | Partial. Menu, legacy name alert and typing work, but Play and submenu Back paths fail in the same worker-thread retain-on-zero pattern for the active screen object. Dev 1.54 adds final-release and raw-pthread provenance without altering ownership. Resume from one Play and one submenu/Back trace rather than repeating every menu. |
+
+The recommended next **scouting** batch is alphabetical and intentionally uses
+apps whose Dev 1.42 first blockers are already implemented by later general
+work, so it can reveal the current landscape without writing speculative code:
+
+1. **Sandwiches** (IPA `Bring_Me_Sandwiches_v2_1.ipa`, display name
+   `Sandwiches!!`) — retest its old `NSDictionary allValues` blocker.
+2. **SimplePhysics** — retest its old `NSString initWithContentsOfURL:`
+   blocker.
+3. **Spirits** — its old inherited `UIViewController isViewLoaded` blocker is
+   implemented in Dev 1.53.
+4. **Splode** — its old `NSTimeZone timeZoneWithAbbreviation:` blocker and
+   several adjacent date-format tokens were implemented during the current
+   Foundation work.
+
+This is a discovery pass, not a claim that any of the four is now playable.
+Capture the first decisive blocker and any visible rendering, input, audio,
+network or persistence behavior for each. The resulting blockers should decide
+the next coherent engineering batch; known-unimplemented apps need not be
+retested merely to reproduce the same selector.
+
+### Dev 1.54 build and verification record
+
+- Clean source baseline: `36ed596ef7b0bbd53da3eda82b6173d5649ebafd`.
+- Final repository commit: `fd10c9de5b54e76c881b4d8cd8a15f8c18f477c0`
+  (`Implement Dev 1.54 scroll state and ownership tracing`). The working tree
+  is clean after the push.
+- GitHub unsigned-IPA run 87 (`41185462025`) completed successfully and
+  produced exactly one artifact,
+  `iDared32bit-dev-unsigned-fd10c9de5b54e76c881b4d8cd8a15f8c18f477c0`.
+- Downloaded artifact ZIP SHA-256:
+  `A55F44F8FAC8715D316094810213BB19DF97D58BAEF0280F88233FD010D499F`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `6676040FB67DD8C23EB749A98558ACE522820C0B613B713F5108CC7C0A4A84FD`.
+- Local package inspection found 36 entries, exactly one guest app bundle and
+  `Info.plist` (`Payload/iDared 32bit.app/Info.plist`), no embedded provisioning
+  profile and no code-signature directory. The local plist contains the
+  separate development bundle identity `com.bookieart1.idared32bit.dev`,
+  display name `iDared Dev`, and executable `iDared 32bit`; the packaged
+  executable contains commit `fd10c9d`.
+- GitHub lint/test run 22 (`41185462063`) completed successfully. The macOS and
+  Windows library-test jobs passed. As at earlier checkpoints, development
+  clippy on macOS, Windows and Android emitted historical diagnostics and
+  exited 101 under the workflow's explicit `continue-on-error`; this is not a
+  strict lint pass, and Android remains lint-only.
+- Direct device-testing IPA:
+  `artifacts/1.54-fd10c9de/iDared-Dev-1.54.ipa`.
+
+## Dev 1.54 scouting result and Dev 1.55 Foundation/media contract batch
+
+The four-app scouting log is from the expected Dev 1.54 executable
+`fd10c9d` (workflow run `41185462025`) and contains four launch segments.
+The corrected user-facing name of the first app is **Sandwiches**; retain its
+IPA filename and bundle ID as identity evidence, but do not label it “Bring Me
+Sandwiches” in future test instructions.
+
+| App | Dev 1.54 result | First decisive blocker / evidence |
+|---|---|---|
+| Sandwiches | Crashes during startup before usable UI | Immutable `_touchHLE_NSDictionary` does not respond to `allValues` (scouting log lines 32–181; panic line 142). The existing implementation was mistakenly located only on `_touchHLE_NSMutableDictionary`, so the prior ledger claim that this immutable path was implemented was incorrect. |
+| SimplePhysics | Crashes during startup after its main NIB and settings probe | `_touchHLE_NSString` does not respond to the deprecated one-argument `initWithContentsOfURL:` (lines 182–411; panic line 341, worker thread 1). The current code had only the encoding/error overload, so the prior ledger claim that this exact selector was implemented was incorrect. |
+| Spirits | Opens; selecting Play reaches the intro-movie path, then crashes | It advances beyond the old `isViewLoaded` blocker and constructs an `MPMoviePlayerController` for `intro_iphone.m4v` (line 512), then guest code dereferences nil (lines 514–516). The strongest current hypothesis is the emulator's explicitly nil `MPMoviePlayerController.view`; the current log cannot prove which selector returned nil. |
+| Splode | Opens and loads substantially farther, but crashes before its menu | `NSFileHandle` does not respond to `truncateFileAtOffset:` (lines 561–1422; panic line 1321). This is standard file-handle behavior and maps directly to the emulator's existing POSIX `ftruncate` and guest filesystem machinery. |
+
+### Dev 1.55 implementation boundary
+
+- **NSDictionary contract (general, semantically complete for this method):**
+  provide a generic `allValues` implementation on the abstract `NSDictionary`
+  class using `keyEnumerator` and `objectForKey:`. This covers immutable
+  touchHLE dictionaries and genuine guest subclasses without assuming the
+  private host-map representation; the mutable concrete class may retain its
+  optimized override.
+- **NSString historical URL loading (general, bounded):** implement both the
+  deprecated class convenience method and one-argument initializer. Loading is
+  delegated to `NSData`; BOM/default-encoding behavior matches the existing
+  file initializer. Unsupported remote schemes still fail with `nil` rather
+  than being falsely reported as working network I/O.
+- **NSFileHandle truncation (general, semantically complete within current file
+  error handling):** implement `truncateFileAtOffset:` through the existing
+  guest `ftruncate` machinery, preserving the current file position and adding
+  invalid-descriptor/negative-length error handling to the shared POSIX path.
+- **MPMoviePlayerController view lifecycle (general partial contract):** replace
+  the incorrect always-`nil` `view` property with a lazily created,
+  screen-framed, retained `UIView`. Video decoding remains unimplemented; this
+  only establishes the UIKit object/lifetime contract used while configuring
+  playback.
+- **Memory-fault diagnostics (diagnostic-only):** for a fatal guest memory
+  fault, report registered Objective-C objects in R0–R3 and decode R1 when it
+  is a selector string. The log is emitted only at the terminal fault and does
+  not weaken memory checks or change execution.
+
+Expected immediate outcomes are **advancement**, not proven playability:
+Sandwiches, SimplePhysics and Splode should pass their exact recorded selectors;
+Spirits may pass the intro setup if the nil movie view is causal, and otherwise
+the next log should identify the relevant selector/object register. These APIs
+are shared Foundation/MediaPlayer contracts and are not bundle-ID special
+cases, but this dataset only directly proves one known app at each decisive
+blocker.
+
+Focused Dev 1.55 device test:
+
+1. **Sandwiches** — launch through the first screen and report the next blocker
+   or any visible menu.
+2. **SimplePhysics** — launch and report whether a menu/gameplay screen appears.
+3. **Spirits** — select Play once; if it still faults, preserve the new
+   Objective-C candidate and selector-candidate lines.
+4. **Splode** — wait through loading to its first interactive screen.
+5. **Regression checks:** briefly launch Spoing and one intro/movie-heavy title
+   (Diversion or Sticky); verify one existing saved-progress relaunch. A full
+   replay of Air Penguin, Blot and Bounce is unnecessary unless a shared
+   Foundation, movie, filesystem or persistence regression appears.
+
+The separate App Store iDared bundle identity and container, graphics and audio
+pipelines, and existing development saves are not changed by this batch.
+
+### Dev 1.55 build and verification record
+
+- Final repository commit: `fe72e52ba6eb9d0a71c3fab26522152a0886add8`
+  (`Implement Dev 1.55 Foundation and movie contracts`). The branch was clean
+  at the commit and pushed to `origin/ci/unsigned-ipa-baseline`.
+- GitHub unsigned-IPA run 88 (`41187026689`) completed successfully and
+  produced exactly one artifact,
+  `iDared32bit-dev-unsigned-fe72e52ba6eb9d0a71c3fab26522152a0886add8`.
+- Downloaded artifact ZIP SHA-256:
+  `6E5B81F227B4A1FEF03F3570A31A545E345CCCA121902BD2624C5D2C9CB1F904`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `69DFADA623FDD48C88D75FCB101C5923F977A6995D2EBE0B7D37744D8C40D77C`.
+- Local package inspection found 36 entries, exactly one app bundle and
+  `Info.plist`, no embedded provisioning profile and no code-signature
+  directory. The plist contains the separate development identity
+  `com.bookieart1.idared32bit.dev` and display name `iDared Dev`; the packaged
+  executable contains commit prefix `fe72e52`.
+- GitHub lint/test run 23 (`41187026633`) completed successfully. macOS and
+  Windows library tests passed. macOS, Windows and Android lint steps also
+  passed; full integration tests and the native macOS Objective-C sanity step
+  remain intentionally skipped on the development branch by workflow design.
+- Direct device-testing IPA:
+  `artifacts/1.55-fe72e52b/iDared-Dev-1.55.ipa`.
+
+## Dev 1.55 device result and Dev 1.56 request/linker/archive batch
+
+Both returned logs embed the expected Dev 1.55 commit `fe72e52` and workflow
+run `41187026689`. The Sandwiches log contains one launch; the combined log
+contains exactly one launch each for SimplePhysics, Spirits and Splode.
+
+| App | Dev 1.55 device result | Current first decisive blocker / interpretation |
+|---|---|---|
+| Sandwiches | Advances past immutable-dictionary startup, then remains indefinitely black and silent; taps have no target window | `UIWebView loadRequest:` receives `nil`, followed by repeated “Couldn't find a window for touch” messages (Sandwiches report lines 142–155). `NSURLRequest` currently returns `nil` solely because emulator network access is disabled, which is incorrect construction behavior and can also suppress local-file requests. When the user exits, state serialization separately reaches missing `-[NSKeyedArchiver initForWritingWithMutableData:]` (lines 156–158). This is **advanced but not functional**. Even after request construction is fixed, a web-content dependency may remain because touchHLE has no embedded web engine. |
+| SimplePhysics | User reports smooth, working gameplay; the original app is also silent on the physical iPod touch | This is **apparently functional within the tested scope**. The physical-device comparison confirms that silence is native app behavior, not an emulator audio regression, and its emulator log contains no audio API calls. Remote notification/score URLs fail offline without affecting local gameplay (combined report lines 177–196). |
+| Spirits | Menu opens; selecting Play still crashes during intro setup | Dev 1.55 disproves the claim that only an always-nil movie view explained the crash. The new terminal diagnostic shows guest code dereferencing nil immediately after constructing the intro `MPMoviePlayerController` (combined report lines 301–330). The binary also has an unresolved standard `_MPMoviePlayerDidExitFullscreenNotification` constant. Add that real constant and make the one-time movie-view creation diagnostic visible; do not ignore a nil observer or weaken memory checks. This remains **partial/menu only**. |
+| Splode | Reaches its menu, starts live gameplay and runs well until a later arbitrary crash | This is a clear advancement from pre-menu failure, but not playable. Immediately before the crash, Unity/Mono asks `dlsym(RTLD_DEFAULT, ...)` for native functions exported by its own executable; touchHLE's `dlsym` only searches host shims. The terminal state is a nil receiver followed by `componentsSeparatedByString:` (combined report lines 1129–1177), consistent with the missing locale bridge. This is a general dynamic-linker scope defect, not justification to stub Unity locale strings. |
+
+### Dev 1.56 implementation boundary
+
+- **Process-wide dynamic lookup (general, semantic correction):** make
+  `dlsym(RTLD_DEFAULT, name)` search defined symbols in the main guest
+  executable and loaded guest dylibs before touchHLE's host exports. Preserve
+  the Mach-O slide and Thumb bit. Specific-library handles remain scoped to the
+  corresponding host library until real guest `dlopen` handles are modeled.
+  Splode is the directly observed beneficiary; other Unity and middleware apps
+  using `DllImport("__Internal")` may also advance.
+- **NSURLRequest construction (general, semantic correction):** construct a
+  request whenever its URL is non-nil, regardless of current connectivity.
+  Offline behavior belongs to connection/socket/reachability layers, not the
+  request value object. This should turn Sandwiches' suppressed request into a
+  diagnosable URL and may advance local-file web requests without enabling
+  external network access.
+- **NSKeyedArchiver mutable-data initializer (general, bounded complete
+  contract):** retain the caller's `NSMutableData`, serialize into it on
+  `finishEncoding`, and release it at teardown. This removes Sandwiches' exit
+  serialization failure and also addresses the audit's unchanged first blocker
+  for GarbageSprite (file labeled Mech Guardian).
+- **MediaPlayer constants and bounded diagnostics (general/diagnostic):** export
+  the observed standard load-state and did-exit-fullscreen notification names,
+  and emit the movie view's one-time creation at normal log level. This may
+  repair Spirits if the missing notification pointer is causal; otherwise the
+  next run will establish whether the real view was requested before the nil
+  dereference. Video decoding remains unimplemented.
+
+Focused Dev 1.56 device test:
+
+1. **Sandwiches** — launch once, wait through the black-screen interval, and
+   report the URL now shown by `UIWebView loadRequest:` plus any visible screen.
+   Exit once so the keyed-archive path is exercised.
+2. **Spirits** — select Play once and retain the movie-view line and terminal
+   fault context if it still fails.
+3. **Splode** — play until the previous arbitrary gameplay crash or for several
+   minutes; preserve any remaining unresolved `dlsym` messages.
+4. **SimplePhysics** — no full replay required. Check its sound setting and one
+   short launch only as a Foundation regression test.
+5. **Regression checks:** one saved-progress relaunch (Spoing or Bounce) and one
+   short Diversion/Sticky launch cover serialization, request, and MediaPlayer
+   exposure. The separate App Store iDared installation remains untouched.
+
+### Dev 1.56 build and verification record
+
+- Implementation commit: `a22c7e18ffa0ad8fa8939df888a85ceb4d546dfd`
+  (`Implement Dev 1.56 request and linker contracts`). The first IPA and test
+  runs exposed only an Objective-C macro declaration-order error; no device
+  behavior was involved.
+- Final repository commit: `e18ef60d9b4d75c2813dc03f17fd18456c5dc782`
+  (`Fix NSKeyedArchiver method declaration order`). The correction only moves
+  the initializer below all class methods as required by `objc_classes!`; it
+  does not change the initializer's behavior. The working tree is clean.
+- GitHub unsigned-IPA run 90 (`41189314263`) completed successfully and
+  produced exactly one artifact,
+  `iDared32bit-dev-unsigned-e18ef60d9b4d75c2813dc03f17fd18456c5dc782`.
+- Downloaded artifact ZIP SHA-256:
+  `35DB8830FF464A7852935464CCBEAAEC30C55C6DD33EF03D9B8D0AF224C18011`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `CD525CAE0E2029AA1E029B20057DDB2477709606067BA683F5996F591EA39BD8`.
+- Local package inspection found 36 entries, a valid `Payload` app bundle, no
+  embedded provisioning profile and no code-signature directory. The binary
+  plist contains the separate development identity
+  `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable
+  `iDared 32bit`.
+- GitHub lint/test run 25 (`41189314238`) completed successfully. This confirms
+  the Rust build and the development branch's configured library checks; the
+  native Objective-C CLI test added for the mutable-data archiver path remains
+  outside this branch's intentionally skipped native integration stage, so the
+  physical device exit/relaunch test remains meaningful.
+- Direct device-testing IPA:
+  `artifacts/1.56-e18ef60d/iDared-Dev-1.56.ipa`.
+
+## Dev 1.56 device result and Dev 1.57 Foundation/export-trie batch
+
+The returned log embeds the expected Dev 1.56 commit `e18ef60` and workflow
+run `41189314263`. It contains one Sandwiches launch, six Spirits launches and
+two Splode launches. The repeated launches are useful here: Splode reaches the
+same terminal guest address after its level transition twice, while the
+different Spirits menu paths expose both standard missing APIs and a repeated
+unidentified guest-code fault.
+
+| App | Dev 1.56 device result | Current first decisive blocker / interpretation |
+|---|---|---|
+| Sandwiches | Remains fully black; it eventually returns to the iDared picker without a recorded panic | Dev 1.56 repaired request construction: `UIWebView loadRequest:` now receives the actual `http://www.bango.com` URL rather than `nil`. The remaining launch depends on real web content, but touchHLE's UIWebView has no web engine or renderable window. The repeated touch warnings and hidden exit control are consequences of that architectural gap. This is **advanced to an external web/UIWebView blocker**, not functional compatibility. |
+| Spirits | Main menu and music work. Play reaches its tutorial/intro path, but gameplay-area taps do not advance; How To, Options, Credits, Select Level and tutorial Next lead to crashes on the tested paths | Select Level reaches a real table reload and then missing `+[NSIndexPath indexPathForRow:inSection:]`. Options creates its slider and then reaches missing `-[NSString canBeConvertedToEncoding:]`. Several other paths terminate at the same guest PC `0x62fac` after a null access, with different callers; the current exported-symbol map cannot name that address. This is **partial/menu only**. |
+| Splode | Live gameplay works through a level, then crashes reproducibly while transitioning after completion | Both launches end at guest PC `0x46d0c4` after the executable's native bridge functions fail `dlsym(RTLD_DEFAULT, ...)` lookup. Dev 1.56 corrected lookup scope, but the Mach-O loader only records classic `LC_SYMTAB` definitions. Stripped iOS executables commonly carry runtime exports in the dyld export trie, so the process-wide search has no symbols to find. This is a **general loader-model gap**, not evidence that the individual Unity bridge results should be stubbed. |
+
+### Dev 1.57 implementation boundary
+
+- **Mach-O export-trie ingestion (general, semantic loader correction):** parse
+  exports from both the export fields of `LC_DYLD_INFO` and the newer
+  `LC_DYLD_EXPORTS_TRIE` command, map image-relative addresses through the
+  loaded `__TEXT` base and merge them with classic symbol-table definitions.
+  Prefer an existing symbol-table entry on duplicates so its explicit ARM
+  Thumb metadata is preserved. Re-exports remain the responsibility of the
+  referenced dylib. This completes the data-source half of Dev 1.56's
+  process-wide `dlsym` correction and is broadly relevant to stripped games,
+  Unity `DllImport("__Internal")` bridges and other native middleware.
+- **NSIndexPath (general Foundation/UIKit contract):** implement immutable
+  index storage, construction, comparison, hashing, copying and the standard
+  table/collection `section`, `row` and `item` accessors. The implementation
+  supports genuine index-path behavior rather than returning a synthetic row
+  solely for Spirits.
+- **NSString conversion capability (general Foundation contract):** implement
+  `canBeConvertedToEncoding:` as a lossless conversion check using the abstract
+  NSString primitives and the emulator's existing encoding implementation.
+  This does not claim support for encodings the existing converter cannot
+  represent.
+- **Guest memory-fault symbol context (bounded diagnostic):** when a terminal
+  guest memory fault occurs inside a loaded image, report the nearest preceding
+  exported guest symbol and offset. This runs only at the terminal fault and
+  changes no guest execution. It is intended to identify Spirits' repeated
+  `0x62fac` path and to make future stripped-game failures substantially more
+  actionable.
+- **No Sandwiches workaround:** do not fake a successful webpage load or
+  fabricate obsolete Bango content. Its standard request/value-object blocker
+  is fixed; implementing a web engine or a justified app-content replacement
+  is a separate, much larger decision.
+
+Predicted immediate outcomes remain **advancement**, not verified playability.
+Spirits should pass the exact Select Level and Options blockers; its Play,
+tutorial input and other menu faults may remain, but the next terminal log
+should name their guest-code neighborhood. Splode should expose its executable
+bridge exports to `dlsym`; if those bridge functions themselves rely on missing
+APIs, it will advance to those real later blockers.
+
+Focused Dev 1.57 device test:
+
+1. **Spirits** — try Select Level and Options first. Then make one Play/tutorial
+   attempt, including one gameplay-area tap and tutorial Next. Preserve any
+   `CPU memory-fault nearest symbol` line.
+2. **Splode** — complete one level and observe the transition. Preserve any
+   unresolved `dlsym` names and the nearest-symbol line if it still faults.
+3. **Sandwiches** — no retest is needed in this batch; its remaining blocker is
+   outside the changed subsystems.
+4. **Regression checks:** briefly launch Spoing or Bounce and verify one saved
+   progress relaunch. Launch Diversion or Sticky through its intro once. These
+   cover loader lookup, Foundation object behavior, transitions and persistence
+   without replaying unrelated titles.
+
+The separate App Store iDared bundle identity/container, save files, graphics,
+audio and web-view implementations are unchanged by this batch.
+
+### Dev 1.57 build and verification record
+
+- Final repository commit: `22c51128f7b6c6d2eec18c2ff96155be3ff7e370`
+  (`Implement Dev 1.57 Foundation and export trie contracts`). The commit is
+  pushed to `origin/ci/unsigned-ipa-baseline`, and the repository working tree
+  is clean.
+- GitHub unsigned-IPA run 91 (`41190801054`) completed successfully and
+  produced exactly one artifact,
+  `iDared32bit-dev-unsigned-22c51128f7b6c6d2eec18c2ff96155be3ff7e370`.
+- Downloaded artifact ZIP SHA-256:
+  `29A821631B7DF420449FDE521B134F200D23D81C60531DB2C34E27125629CA9A`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `B7CF9C5829B692E0DAF297BDC796BBAD4E0962EF6B9A3A7F36729B3E1C8347AC`.
+- Local package inspection found 36 entries, exactly one app bundle and one
+  binary `Info.plist`, no embedded provisioning profile and no code-signature
+  directory. The plist contains the separate development identity
+  `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable
+  `iDared 32bit`; the packaged executable contains commit prefix `22c5112`.
+- GitHub lint/test run 26 (`41190801112`) completed successfully. macOS and
+  Windows development library tests passed; macOS, Windows and Android lint
+  passed. Full integration tests, the native Objective-C sanity test and the
+  workflow formatting step remain intentionally skipped on this development
+  branch, so they are not claimed as passes. The separate iOS build, identity
+  verification, packaging and artifact upload steps all passed.
+- Direct device-testing IPA:
+  `artifacts/1.57-22c51128/iDared-Dev-1.57.ipa`.
+
+## Dev 1.57 device result and Dev 1.58 table/request/diagnostic batch
+
+The returned log embeds the expected Dev 1.57 commit `22c5112` and workflow
+run `41190801054`. The user's spoken report initially called the extra failing
+title “Balance,” then clarified that this was only a naming slip. The tested
+title was **Bounce 1.1** (`com.backflipstudios.bouncethebunny`, `bounce.app`);
+no separate Balance test occurred.
+
+| App | Dev 1.57 device result | Current first decisive blocker / interpretation |
+|---|---|---|
+| Spirits | Main menu remains partial. Select Level, Options, How To/Credits-style paths and tutorial Next still crash; Play reaches the tutorial, but touches in the gameplay area do not advance it | Select Level **did advance** past the new NSIndexPath constructor and now stops on missing `-[UITableView scrollToRowAtIndexPath:atScrollPosition:animated:]`. Options also passes `-[NSString canBeConvertedToEncoding:]`, creates two still-unrendered UISlider objects, then reaches a host-side null-page access. The other paths likewise panic in the host memory accessor at common PC `0x62fac` but different guest callers. Dev 1.57's CPU-fault diagnostic did not run because these are host-side memory-access panics, so the selector/register context remains unknown. The tutorial input symptom may be an overlay/state/input issue; the log does not yet justify changing touch coordinates or swallowing the fault. |
+| Splode | Gameplay still reaches level completion and then crashes during the transition | All seven executable bridge lookups remain unresolved, including `_GetCurrentNSLocaleCode` and `_GetNSLocalizedString`; the export-trie ingestion therefore disproves the hypothesis that the functions were present only in a dyld export trie. The nearest exported symbol is merely `start`, far from the fault, and does not identify a bridge implementation. The bridge functions may be stripped/static, generated into a different native-plugin path, or absent from this package. Returning fabricated locale/achievement/stat values remains unjustified. Capture the guest caller for each failed `dlsym` before deciding whether any shared implementation is possible. |
+| Bounce | The logged launch now crashes before the game loads | Startup proceeds into Burstly advertising and then sends `mutableCopyWithZone:` to `NSMutableURLRequest`, which lacks the standard NSMutableCopying contract. This is a concrete Foundation blocker. It is not established as a Dev 1.57 loader regression: Dev 1.56 deliberately made offline request construction return a real request instead of `nil`, so the ad path can now expose this later missing method. Dev 1.42's audit only proves a no-panic/user-exit session, not that this particular startup branch ran. |
+| Spoing | User reports behavior unchanged and working; the log reaches gameplay/level transitions and returns normally through the Home control | This is a focused pass for launch, Unity/Mono startup, rendering/input and normal exit in the observed scope. It does not by itself verify every save/audio path, but it argues against a general loader or UIKit startup regression. |
+
+The repeated invalid-ZIP warnings for the same 26 files are unchanged picker
+inventory noise and are not part of this batch.
+
+### Dev 1.58 implementation boundary
+
+- **UITableView layout/scrolling (general partial contract):** make
+  `reloadData` obtain section and row counts from the data source, establish
+  uniform-row content geometry, and implement all four historical
+  `UITableViewScrollPosition` behaviors with clamped content offsets. Cell
+  creation, drawing, variable row heights and selection remain unimplemented;
+  this removes Spirits' exact selector blocker without claiming a complete
+  table view.
+- **NSURLRequest copying (general semantic correction):** implement independent
+  immutable and mutable snapshots which preserve URL, cache policy, timeout,
+  method, body and headers. Add the matching property accessors and real
+  cache-policy/timeout setters, and allow `setValue:nil` to remove a header as
+  Foundation specifies. This directly addresses Bounce's Burstly failure and
+  remains independent of whether network transport is enabled.
+- **Host-side null-fault diagnostics (diagnostic-only):** extend the bounded
+  terminal diagnostic to null-page panics raised while a guest-to-host API is
+  reading guest memory. Report PC, LR/caller, image/symbol neighborhood,
+  Objective-C argument candidates and a selector-shaped R1. Do not weaken the
+  null page or continue execution. This is aimed at Spirits' repeated
+  `0x62fac` family, which bypassed the CPU-fault-only Dev 1.57 logging.
+- **Unresolved `dlsym` provenance (diagnostic-only):** add the guest LR and its
+  loaded-image/symbol neighborhood to each failed lookup. Splode performs a
+  bounded set of seven observed lookups during the transition. No
+  app-specific bridge stub or fabricated locale/stat/achievement result is
+  added.
+
+Predicted immediate outcomes are advancement rather than verified
+compatibility. Spirits should pass its exact table-scroll exception and either
+remain on a usable level screen or reveal the next table limitation; its other
+paths should finally identify the host API/selector neighborhood. Bounce
+should pass mutable request copying, after which offline connection behavior
+or a later SDK contract may still appear. Splode is expected to keep failing
+in this diagnostic build, but its next log should distinguish which guest
+callers own the absent bridge lookups.
+
+Focused Dev 1.58 device test:
+
+1. **Spirits** — open Select Level once and report whether rows/controls are
+   visible and interactive. Then try Options and one Play/tutorial Next path;
+   preserve every `Host memory-fault` line.
+2. **Bounce** — launch with the existing development save/container intact. If
+   it passes startup, enter gameplay briefly and verify the existing progress
+   still appears; do not reset or delete data.
+3. **Splode** — complete one level once and preserve the unresolved `dlsym`
+   lines with their new guest-caller contexts plus the terminal fault.
+4. **Spoing** — one short existing-save launch is enough for the focused
+   regression check. Add either Diversion or Sticky through its intro if
+   practical because the batch touches Foundation objects and UI transitions.
+
+The separate App Store installation, development bundle identity/container,
+saved data, graphics/audio pipelines and network-transport policy are not
+changed by this batch.
+
+### Dev 1.58 build and verification record
+
+- Implementation commit: `230f62ee23b6b9549d2675d849c8131b3683b065`
+  (`Implement Dev 1.58 request and table contracts`). Its first IPA and
+  lint/test workflows failed at compile time because the new `dlsym`
+  diagnostic returned a local variable named `context` where the computed
+  variable was named `nearest`; no package was produced and no device behavior
+  is associated with that failed run.
+- Final repository commit: `e8b4d9f7b6ff15f5f56049e6d21d3b358c9d6d5a`
+  (`Fix dlsym diagnostic symbol context`). The one-line correction changes
+  only that diagnostic value name. It is pushed to
+  `origin/ci/unsigned-ipa-baseline`, the local and remote-tracking heads agree,
+  and the working tree is clean.
+- GitHub unsigned-IPA run 93 (`41192503247`) completed successfully and
+  produced exactly one artifact,
+  `iDared32bit-dev-unsigned-e8b4d9f7b6ff15f5f56049e6d21d3b358c9d6d5a`.
+  The separate iOS compile, development identity/package verification and
+  artifact upload steps all passed.
+- Downloaded artifact ZIP SHA-256:
+  `1DD057DCD7F1DE5153881DCE71581FB4598927BE906907890924C3CADF8D6BDE`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `96D9BF74DC13929E13F93EBEB7C6DFCE8485C86248F7F7CFC538EDC7A6E03E1D`.
+- Local package inspection found 36 entries, exactly one app bundle and one
+  binary `Info.plist`, no embedded provisioning profile and no code-signature
+  directory. The plist contains the separate development identity
+  `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable
+  `iDared 32bit`; the packaged executable contains commit prefix `e8b4d9f` and
+  workflow run `41192503247`.
+- GitHub lint/test run 28 (`41192503256`) completed successfully. macOS and
+  Windows development library tests passed; macOS, Windows and Android lint
+  passed. The workflow formatting checks, full integration tests and macOS
+  native sanity checks remain intentionally skipped on this development
+  branch, so they are not claimed as passes.
+- Direct device-testing IPA:
+  `artifacts/1.58-e8b4d9f7/iDared-Dev-1.58.ipa`.
+
+## Dev 1.58 device result and Dev 1.59 animation/request diagnostic batch
+
+The returned log embeds the expected Dev 1.58 commit `e8b4d9f` and workflow
+run `41192503247`. It contains four Spirits launches, one Bounce launch, two
+Splode launches and one Spoing launch. The two Splode tests cover different
+game paths but converge at the same terminal function, which is stronger
+evidence than another repeat of one level-completion route.
+
+| App | Dev 1.58 device result | Current first decisive blocker / interpretation |
+|---|---|---|
+| Spirits | Select Level no longer crashes, but the resulting screen has no visible choices and some text appears oversized. How To, Options and Credits still crash. Play reaches the tutorial image; pressing Next still crashes. | The Select Level result matches the explicit Dev 1.58 boundary: table geometry/scrolling exists, but cell creation, drawing and selection do not. It is **blocker removed, not a usable level selector**. All four logged crashes now identify one concrete contract family. Three send `+[UIView setAnimationDidStopSelector:]` with a null selector and tutorial Next sends `+[UIView setAnimationWillStartSelector:]` with a null selector. The implementation incorrectly dereferences every selector as a C string. Options also constructs two UISlider objects that remain unrendered, so removing its animation crash will not make the controls complete. |
+| Bounce | Still terminates during startup before gameplay | Dev 1.58's mutable request snapshot works: Burstly advances past `mutableCopyWithZone:` and now sends the standard `setHTTPShouldHandleCookies:` property to `NSMutableURLRequest`. This is another concrete Foundation value-object blocker, not evidence of a save failure or a general loader regression. |
+| Splode | Quitting from a different game mode on the return-to-menu path crashes; completing the previously tested level also still crashes | Both routes converge on guest PC `0x46d0c4`, dereferencing address `0x8` from a null R0, with the same impending `componentsSeparatedByString:` selector. Their managed call stacks differ in the route-specific middle but share the later tail. The new `dlsym` caller is the same stripped Mono/Unity resolver for every missing bridge name, so it does not identify a bridge consumer. A common return/menu string or locale path is plausible, but the log still cannot prove which object became nil or justify fabricating locale, analytics or achievement results. |
+| Spoing | Behavior remains unchanged and working; the log reaches its Unity scenes and returns normally through the Home control | This is a focused pass for launch, Unity/Mono startup, rendering/input, scene transitions and normal exit in the observed scope. It argues against a general regression in the shared loader, request or Unity paths. |
+
+The tutorial's apparent gameplay area is an instructional image, correcting
+the earlier input interpretation; no touch-coordinate or event-dispatch defect
+is inferred from that image. The repeated invalid-ZIP picker warnings remain
+unchanged inventory noise.
+
+### Dev 1.59 implementation boundary
+
+- **Nullable UIView animation selectors (general semantic correction):**
+  accept `NULL` for both legacy animation-selector setters. Preserve the fork's
+  existing default-callback compatibility only when the app never called the
+  corresponding setter; an explicit `NULL` is stored distinctly and disables
+  that callback. This addresses the exact four Spirits terminal faults without
+  swallowing a memory error or inventing a delegate call.
+- **NSURLRequest cookie-handling state (general Foundation contract):** add
+  `HTTPShouldHandleCookies` to immutable and mutable requests, default it to
+  true, preserve it across copy/mutable-copy snapshots, expose the immutable
+  getter and implement the mutable setter. Network transport and cookie-store
+  behavior remain outside this narrow value-object change.
+- **Stripped-code terminal context (diagnostic-only):** retain the existing
+  terminal memory fault and add a fixed 96-byte guest-code window plus a fixed
+  64-byte stack window. This does not continue execution or alter the nil
+  object. The next Splode result should make the common stripped function
+  disassemblable and show how the null receiver is obtained.
+- **No table-cell, slider or Splode bridge accommodation in this batch:** the
+  malformed Spirits level screen and invisible Options sliders are confirmed
+  partial UIKit implementations, but completing those controls is materially
+  larger than the two proven crash contracts. No app-specific locale,
+  localization, analytics or achievement result is fabricated for Splode.
+
+Predicted immediate outcomes remain advancement rather than verified
+compatibility. Spirits should pass the four null-selector crashes and expose
+the next real limitation on each path; its Select Level and slider rendering
+are still expected to be incomplete. Bounce should pass the cookie-property
+message and may reveal another request/advertising contract. Splode is expected
+to retain its current failure in this diagnostic build, with more actionable
+terminal code and stack bytes.
+
+Focused Dev 1.59 device test:
+
+1. **Spirits** — try How To, Options and Credits once each, then Play and
+   tutorial Next. Report the first screen reached after each action. Open Select
+   Level only once to confirm it remains stable; its missing choices and large
+   text are already known and are not claimed fixed.
+2. **Bounce** — launch with the existing development save/container intact. If
+   it reaches gameplay, verify that existing progress remains; do not reset or
+   delete data.
+3. **Splode** — repeat only one return-to-menu route. Preserve the terminal
+   `nearby guest code` and `guest stack` lines; both prior routes already prove
+   the common crash.
+4. **Spoing** — one short launch and normal Home exit is enough for the focused
+   regression check. No unrelated full replay is required.
+
+The separate App Store installation, development bundle identity/container,
+saved data, graphics/audio pipelines, table-cell/slider rendering and network
+transport policy are unchanged by this batch.
+
+### Dev 1.59 build and verification record
+
+- Final repository commit: `0d712ecec7e888844c9f9465398ffb41eb3fba09`
+  (`Implement Dev 1.59 animation and request contracts`). It is pushed to
+  `origin/ci/unsigned-ipa-baseline`.
+- GitHub unsigned-IPA run `41193921362` completed successfully for that exact
+  commit. The separate iOS compile, development identity/package verification
+  and artifact upload steps all passed. The produced artifact is
+  `iDared32bit-dev-unsigned-0d712ecec7e888844c9f9465398ffb41eb3fba09`.
+- Downloaded artifact ZIP SHA-256:
+  `2A52DFF897A7091C13D1664A09C0222B72B7AB04E472FD7BE2D50F6F0E6DC78B`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `FF41DE5068FBDF75BC4DE6B398BC927CFE557C52BD962E26580704EFC05566B6`.
+- Local package inspection found 36 entries and exactly one app bundle, no
+  embedded provisioning profile and no code-signature directory. The plist
+  contains the separate development identity
+  `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable
+  `iDared 32bit`; the packaged executable contains commit prefix `0d712ec` and
+  workflow run `41193921362`.
+- GitHub lint/test run `41193921322` completed successfully. macOS and Windows
+  development library tests passed; macOS, Windows and Android lint passed.
+  The workflow formatting checks, full host/integration `Test` steps and macOS
+  native sanity checks were skipped, so they are not claimed as passes.
+- Direct device-testing IPA:
+  `artifacts/1.59-0d712ece/iDared-Dev-1.59.ipa`.
+
+## Dev 1.59 device result and Dev 1.60 string/URL/diagnostic batch
+
+The returned log embeds the expected Dev 1.59 commit `0d712ec` and workflow
+run `41193921362`. The reported improvement is supported by the transition
+points in the log rather than inferred from the build label.
+
+| App | Dev 1.59 device result | Current first decisive blocker / interpretation |
+|---|---|---|
+| Spirits | How To, Options, Credits and Select Level now open; the level selector appears more normal. Play advances through tutorial Next. Both logged attempts crash only when leaving the tutorial to start gameplay. | Both attempts converge on missing `-[NSString rangeOfCharacterFromSet:options:range:]`. The previous four nullable-animation-selector crashes are absent. This is verified menu/tutorial advancement, not yet verified gameplay. The requested overload has a documented general contract supporting range restriction plus backwards/anchored search. |
+| Bounce | Still terminates during startup | Mutable request copying and `setHTTPShouldHandleCookies:` now pass. Burstly starts its network gateway thread, which sends the standard `host` accessor to a valid `NSURL`. `NSURL` currently stores the URL spelling but exposes no host component. This is the next concrete Foundation blocker and is unrelated to saved progress. |
+| Splode | In-game Menu and return to the main menu now work cleanly. Level completion still crashes. | The menu-return route is now an observed pass in this scope, narrowing the remaining failure to the level-completion path. The terminal site remains guest PC `0x46d0c4`, null R0, address `0x8`, immediately before `componentsSeparatedByString:`. The new code window shows a direct ARM call at `0x46d0b0` returning null before the dereference; its target is `0x47cff4`. The current log does not contain that target's code or establish which missing locale/service bridge owns the value. |
+| Spoing | Continues to work and returns normally through the Home control | Focused regression pass for launch, Unity/Mono startup, scene transitions and normal exit in the observed scope. |
+
+The log also contains an unreported Cannon Cadets 2.3.6 launch which stops on
+missing `+[UIView setAnimationBeginsFromCurrentState:]`. That API has real
+presentation-state semantics for replacing an in-flight animation. It is
+recorded as an incidental blocker, but this batch does not add a misleading
+no-op or partial implementation merely to advance that launch.
+
+### Dev 1.60 implementation boundary
+
+- **NSString character-set search (general partial contract):** implement the
+  two missing `rangeOfCharacterFromSet:options:` variants, including the
+  range-limited form used by Spirits. For a valid non-nil character set and an
+  in-bounds UTF-16 range, support forward, backwards and anchored searches and
+  return `{NSNotFound, 0}` when no character matches. Unsupported option bits
+  are diagnosed rather than silently changing the search. Raising the exact
+  historical Objective-C exception for invalid arguments remains outside this
+  boundary.
+- **NSURL host component (general contract within parsed non-file URLs):**
+  expose the authority host, excluding user information and numeric port,
+  decode valid UTF-8 percent escapes, handle bracketed IP literals, and return
+  nil for relative, missing-host or malformed spellings. File-URL host/base
+  semantics and the other NSURL component accessors are not expanded here.
+- **Splode direct-producer context (diagnostic-only):** on terminal ARM memory
+  faults, decode the nearest preceding direct `BL` and record a fixed 64-byte
+  window at its target. This remains bounded to termination and does not alter
+  the null value or continue execution.
+- **No Splode bridge fabrication and no Cannon Cadets animation no-op:** the
+  evidence still does not justify invented locale/localization/analytics or
+  achievement results, and the animation API needs real in-flight presentation
+  behavior rather than unconditional success.
+
+Predicted immediate outcomes remain advancement rather than full
+compatibility. Spirits should pass the exact tutorial-to-game string search
+and either enter gameplay or expose its next dependency. Bounce should pass
+the URL host query and may proceed to a later network-request contract. Splode
+is expected to retain the level-completion failure in this diagnostic build,
+but its next log should include the direct null-producing function bytes.
+
+Focused Dev 1.60 device test:
+
+1. **Spirits** — use Play and complete the tutorial once, then report whether
+   gameplay starts. The menu pages do not need another exhaustive pass.
+2. **Bounce** — launch once with the existing development save/container; do
+   not reset or delete data.
+3. **Splode** — complete one level once and preserve the new `nearest preceding
+   ARM BL` line. The already-passing in-game menu-return path need not be
+   repeated.
+4. **Spoing** — one short launch and normal Home exit is sufficient.
+
+The separate App Store installation, development bundle identity/container,
+saved data, graphics/audio pipelines, network transport policy and Cannon
+Cadets animation behavior are unchanged by this batch.
+
+### Dev 1.60 build and verification record
+
+- Final repository commit: `93193016374e36092af8e2e68b768c59f42c0136`
+  (`Implement Dev 1.60 string and URL contracts`). It is pushed to
+  `origin/ci/unsigned-ipa-baseline`.
+- GitHub unsigned-IPA run `41194912134` completed successfully for that exact
+  commit. The separate iOS compile, development identity/package verification
+  and artifact upload steps all passed. The produced artifact is
+  `iDared32bit-dev-unsigned-93193016374e36092af8e2e68b768c59f42c0136`.
+- Downloaded artifact ZIP SHA-256:
+  `D5DBBCD373CF5268AA6C877F563DDBF33C0C9CFAA5A6C2EE4FFC790C2531489A`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `5E6A9AAAC375922B070696289F220D8C4078B46527753A76CE7E99993F549F22`.
+- Local package inspection found 36 entries and exactly one app bundle, no
+  embedded provisioning profile and no code-signature directory. The plist
+  contains the separate development identity
+  `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable
+  `iDared 32bit`; the packaged executable contains commit prefix `9319301` and
+  workflow run `41194912134`.
+- GitHub lint/test run `41194912130` completed successfully. macOS and Windows
+  development library tests passed; macOS, Windows and Android lint passed.
+  The workflow formatting checks, full host/integration `Test` steps and macOS
+  native sanity checks were skipped, so they are not claimed as passes.
+- Direct device-testing IPA:
+  `artifacts/1.60-93193016/iDared-Dev-1.60.ipa`.
+
+## Dev 1.60 device result and Dev 1.61 dictionary/URL diagnostic batch
+
+The returned log embeds the expected Dev 1.60 commit `9319301` and workflow
+run `41194912134`. The user's visible results appear unchanged, but the log
+shows that both Dev 1.60 contract changes executed and advanced to later,
+independent blockers.
+
+| App | Dev 1.60 device result | Current first decisive blocker / interpretation |
+|---|---|---|
+| Spirits | Still crashes when leaving the tutorial to start gameplay | The new character-set search completes. The next blocker is the missing general C API `CFDictionaryGetValueIfPresent`, called with a valid dictionary, key and non-null output pointer. This is a later Core Foundation dependency, not a repeat of the Dev 1.59 string failure. |
+| Bounce | Still terminates during startup before gameplay | The new `NSURL host` accessor completes and Burstly's network gateway thread starts. That thread then asks the same valid full URL for `path`; the current implementation asserts that every non-file URL is already only a path. Dev 1.42 genuinely reached gameplay, ran more smoothly and preserved progress. The present observed-usability regression traces to Dev 1.56's semantically correct change from returning `nil` for offline `NSURLRequest` construction to constructing a real request: Bounce's advertising path now runs and exposes incomplete URL component support that the older incorrect `nil` behavior skipped. The repair target is therefore the earlier gameplay state without reverting the general request contract or deleting the existing save. |
+| Splode | Still crashes at level completion | The direct target at `0x47cff4` is now captured. Its first three ARM instructions load and return the pointer stored in global slot `0x00acf87c`; that slot is null at the terminal dereference. This establishes an uninitialized/cleared shared value before the impending `componentsSeparatedByString:` call, but not yet which initialization path owns it. It still does not justify fabricating locale, localization, analytics or achievement results. |
+| Spoing | Continues to work as before and returns normally through the Home control | Focused regression pass for launch, Unity/Mono startup, scene transitions and normal exit in the observed scope. |
+
+The repeated invalid-ZIP picker warnings remain unchanged inventory noise.
+
+### Dev 1.61 implementation boundary
+
+- **CFDictionaryGetValueIfPresent (general Core Foundation contract):** return
+  false when a key is absent; return true for a present key and write its value
+  when the output pointer is non-null. Callers must not rely on output storage
+  when the key is absent because the documented contents are undefined.
+  Presence is tracked separately from value so a CF dictionary created with
+  NULL callbacks can correctly report a stored NULL value. Tests cover present,
+  absent, stored-NULL and NULL-output cases.
+- **NSURL path component (general Foundation contract):** split non-file URLs
+  into components, exclude query and fragment text, decode valid UTF-8 percent
+  escapes, support full and relative URL spellings and return nil for malformed
+  escapes. File URL behavior and unrelated URL component accessors are not
+  expanded by this change.
+- **Splode global-slot context (diagnostic-only):** recognize the small ARM
+  direct-global-getter form at a terminal fault, report the slot and current
+  value, then report at most 12 aligned literal references from at most 16 MiB
+  of the owning image's `__text` section with fixed 48-byte contexts. This is
+  bounded, runs only at termination and neither changes the slot nor continues
+  execution.
+- **No app-specific Bounce bypass or Splode value fabrication:** the Burstly
+  path is not disabled, network success is not faked and the older
+  request-construction bug is not restored merely to skip the current startup
+  path.
+
+Predicted immediate outcomes remain advancement rather than verified
+compatibility. Spirits should pass its exact missing dictionary API and either
+enter gameplay or expose the next dependency. Bounce should pass the asserted
+full-URL `path` query; reaching the prior Dev 1.42 gameplay state is the
+regression target, but another advertising/network contract may still appear.
+Splode is expected to retain the level-completion failure in this diagnostic
+build; its next terminal log should identify other code paths that reference
+the null global slot.
+
+Focused Dev 1.61 device test:
+
+1. **Spirits** — use Play and finish the tutorial once; report whether gameplay
+   starts and preserve the first terminal error if it does not.
+2. **Bounce** — launch once with the existing development save/container
+   intact. If it reaches the menu or gameplay, confirm whether the old progress
+   remains; do not reset or delete data.
+3. **Splode** — complete one level once and preserve the new `direct getter for
+   global slot` and `global-slot literal reference` lines. No other mode needs
+   replaying in this batch.
+4. **Spoing** — one short launch and normal Home exit is sufficient.
+
+The separate App Store installation, development bundle identity/container,
+saved data, graphics/audio pipelines and network transport policy are unchanged
+by this batch.
+
+### Dev 1.61 build and verification record
+
+- Final repository commit: `acb1dbc21a803fc683851451e173fb10c16ed3df`
+  (`Implement Dev 1.61 dictionary and URL contracts`). It is pushed to
+  `origin/ci/unsigned-ipa-baseline`.
+- GitHub unsigned-IPA run `41196030682` completed successfully for that exact
+  commit. The separate iOS compile, development identity/package verification
+  and artifact upload steps all passed. The produced artifact is
+  `iDared32bit-dev-unsigned-acb1dbc21a803fc683851451e173fb10c16ed3df`.
+- Downloaded artifact ZIP SHA-256:
+  `8E58C95E6417282F6D1B4F53D38E22886B122EDDD34416FED6F82EC3C759A231`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `30D374D09F044389BA466C3C7AA324D9F5B408EF2A64E2607854AC78B108A81F`.
+- Local package inspection found 36 entries and exactly one app bundle, no
+  embedded provisioning profile and no code-signature entries. The plist
+  contains the separate development identity
+  `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable
+  `iDared 32bit`; the packaged executable contains commit prefix `acb1dbc` and
+  workflow run `41196030682`.
+- GitHub lint/test run `41196030699` completed successfully. macOS and Windows
+  development library tests passed; macOS, Windows and Android lint passed.
+  The workflow formatting checks, full host/integration `Test` steps and macOS
+  native sanity checks were skipped, so they are not claimed as passes.
+- Direct device-testing IPA:
+  `artifacts/1.61-acb1dbc2/iDared-Dev-1.61.ipa`.
+
+## Dev 1.61 device result and Dev 1.62 URL/producer diagnostic batch
+
+The returned log embeds the expected Dev 1.61 commit `acb1dbc` and workflow
+run `41196030682`.
+
+| App | Dev 1.61 device result | Current status / first decisive blocker |
+|---|---|---|
+| Spirits | The tutorial completed, a full level and the start of the next level were played, menu navigation and return worked, normal exit/relaunch worked, and the existing progress was restored | Functionally compatible within this tested gameplay, menu, transition and save/relaunch scope. This is stronger than merely reaching gameplay, but it is not a claim that every level or optional service has been exhaustively tested. The general `CFDictionaryGetValueIfPresent` implementation removed the observed tutorial-to-game blocker. |
+| Bounce | Still terminates during startup before its menu or gameplay | The Dev 1.61 `path` implementation executes successfully. Burstly's gateway then requests the `scheme` of the same valid `NSURL`, which is the next missing general Foundation component accessor. |
+| Splode | Still terminates after completing a level | The global-slot diagnostic confirms that direct getter `0x0047cff4` returns the null value in slot `0x00acf87c`. It found five literal occurrences. In particular, the code immediately before the literal at `0x0047d17c` loads the slot address, passes zero to a helper and returns, which is consistent with a clearing/release path. The current evidence still cannot distinguish never initialized from initialized and cleared too early, nor identify the value's documented owner. |
+| Spoing | Continues through its established working path and returns normally through Home | Focused regression pass in the observed scope. |
+
+The repeated invalid-ZIP picker warnings remain unchanged inventory noise.
+
+### Dev 1.62 implementation boundary
+
+- **NSURL scheme (general Foundation contract):** expose `file` for represented
+  file URLs, return the stored valid scheme without percent-decoding for other
+  absolute/custom URLs, and return nil for relative or invalid scheme
+  spellings. Scheme validation follows the RFC grammar: an ASCII letter first,
+  followed by ASCII letters, digits, `+`, `-` or `.`. Tests cover HTTP, custom,
+  file, relative and invalid forms.
+- **Splode literal-use context (diagnostic-only):** after a terminal fault has
+  identified a direct global getter, decode ARM PC-relative literal-load
+  instructions that target the already bounded set of matching slot literals.
+  Report at most 24 uses, each with a fixed 192-byte context. This runs only at
+  termination and does not write the slot, invent a string or resume execution.
+- **No app-specific Burstly bypass or Splode value fabrication:** network
+  success remains unfaked and no guessed locale/localization/analytics value is
+  substituted for the null receiver.
+
+Predicted immediate outcomes remain advancement rather than a promise of full
+compatibility. Bounce should pass the exact missing `scheme` selector and may
+reach its prior Dev 1.42 menu/gameplay state or expose another URL/network
+contract. Splode is expected to retain its level-completion failure in this
+diagnostic build, but the new literal-load contexts should identify which
+routines read, initialize or clear the shared slot.
+
+Focused Dev 1.62 device test:
+
+1. **Bounce** — launch once with the existing development save/container. If
+   it reaches the menu or gameplay, confirm whether the old progress remains;
+   do not reset or delete data.
+2. **Splode** — complete one level once and preserve the new
+   `global-slot literal loaded by ARM instruction` lines.
+3. **Spoing** — one short launch and normal Home exit is sufficient as the
+   URL/Unity regression check.
+
+Spirits does not need to be replayed for this focused batch. Its Dev 1.61
+result remains recorded, and neither change modifies the dictionary or save
+implementation that removed its observed blocker.
+
+### Dev 1.62 build and verification record
+
+- The implementation commit was
+  `4537306b20a606b0acdb2416f843cc59267c1dee`. Its first automatic build run
+  `41197003776` and lint/test run `41197003738` failed compilation with Rust
+  error E0382 because the diagnostic's first loop consumed the collected
+  reference vector before the second loop borrowed it. No IPA was produced by
+  that run. The one-line ownership correction is commit
+  `cda3daedd7e699238cdfb262caaf23cf348d4ca5`; both commits are pushed to
+  `origin/ci/unsigned-ipa-baseline` and the latter is the final packaged source.
+- Replacement unsigned-IPA run `41197279597` completed successfully for exact
+  commit `cda3daedd7e699238cdfb262caaf23cf348d4ca5`. The separate iOS compile,
+  development identity/package verification and artifact upload steps all
+  passed. The artifact is
+  `iDared32bit-dev-unsigned-cda3daedd7e699238cdfb262caaf23cf348d4ca5`
+  (artifact ID `13041510704`).
+- Downloaded artifact ZIP SHA-256:
+  `984245379F204CA205A0C120F9F46C2DE3A594F4381D28C57A026B598F741AD6`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `7221735076CB68783333EE8E27D9C84D9C1D0F4ABA778F00A7AB2C9C150C0AD8`.
+- Local package inspection found 36 entries and exactly one app bundle,
+  `iDared 32bit.app`, with no embedded provisioning profile and no
+  `_CodeSignature` entries. The binary plist contains development identifier
+  `com.bookieart1.idared32bit.dev` and display name `iDared Dev`; the packaged
+  executable contains commit prefix `cda3dae` and workflow run
+  `41197279597`.
+- Replacement lint/test run `41197279599` completed successfully. macOS and
+  Windows development library tests passed; macOS, Windows and Android lint
+  passed. Formatting checks, full host/integration `Test` steps and the macOS
+  native sanity checks were skipped by this branch workflow, so they are not
+  claimed as passes.
+- Direct device-testing IPA:
+  `artifacts/1.62-cda3daed/iDared-Dev-1.62.ipa`.
+
+## Dev 1.62 device result and current rotation decision
+
+The returned log embeds the expected Dev 1.62 commit prefix `cda3dae` and
+workflow run `41197279597`. It contains separate Bounce, Splode and Spoing
+sessions.
+
+| App | Dev 1.62 device result | Current interpretation / boundary |
+|---|---|---|
+| Bounce | Reached its earlier usable state again, according to the user. The log contains no Bounce panic, loads several Unity scenes/assets, and returns normally to the picker through Home. | The general `NSURL scheme` implementation repaired the Dev 1.56-era startup regression without reverting request construction or adding a Burstly/app-specific bypass. This restores the previously observed partial/usable baseline; it does not establish that the historical intermittent lag, audio defects or secondary-button crashes are all gone. |
+| Splode | Still crashes immediately after the first level completes. | The terminal fault is unchanged in behavior: a direct getter returns null from global slot `0x00acf87c`, after which the game tries to use the result as the receiver of `componentsSeparatedByString:`. The new context does identify a routine that stores zero into the slot, but its surrounding argument setup is the standard shape of a static initializer registering a destructor. It therefore explains the slot's initial null state rather than proving premature teardown. No direct non-null producer was identified. |
+| Spoing | Continues through its established working path and returns normally through Home. | Focused regression pass for the shared Unity/Mono, input, scene-transition and normal-exit path in the observed scope. |
+
+### Splode durable resume point
+
+- The first decisive blocker is still a missing shared string/object value, not
+  the later null-page exception itself.
+- The five direct references found by the bounded diagnostic include the
+  getter, consumers/destruction-related code and the static zero initializer;
+  they do not reveal the legitimate non-null initialization path. The producer
+  may be indirect.
+- Immediately before the failure, the game also looks up absent native bridge
+  names including `_GetCurrentNSLocaleCode`, `_GetNSLocalizedString`, analytics
+  calls and an OpenFeint achievement call. Their proximity is useful but does
+  not prove which bridge owns this slot or what its historical return contract
+  is.
+- Returning a guessed locale/localized string, swallowing the fault, or
+  inventing analytics/achievement success would be an app-shaped workaround
+  without contract evidence and is not authorized by this result.
+- Runtime write provenance would require materially more intrusive memory
+  watching in the current CPU path and could change timing/performance. Another
+  Splode-only build is therefore not justified now.
+
+Splode is **parked, not abandoned**. Resume it when either (a) another title or
+general bridge work identifies and implements the historical locale/
+localization provider contract, or (b) a bounded, low-intrusion way to capture
+the slot's actual non-null writer becomes available. Preserve this level-end
+save/test path as the reproducer.
+
+### Batch outcome and next scouting pass
+
+- Spirits remains functionally compatible within its Dev 1.61 tested gameplay,
+  menu, transition and save/relaunch scope.
+- Bounce moves back to the regression backlog at its recovered prior usable
+  baseline.
+- Spoing remains the passing control.
+- Splode rotates out at the evidence boundary above. No source patch, new
+  commit, build or save reset follows from this report.
+
+The next high-information scouting pass should use the existing Dev 1.62 IPA,
+in two related pairs: **HookWorld and QuickHook**, then **Bulba the Cat and
+Paper Monsters**. The first pair shares a developer/engine lineage and can show
+whether one remaining dictionary/serialization contract generalizes across
+both. The second pair had previously advanced to partial/no-panic behavior
+after shared AudioQueue work and may expose smaller, broadly useful next
+blockers. Record the first decisive failure and visible behavior for each; do
+not reset any development saves.
+
+## Dev 1.62 four-app scouting result
+
+The returned log again embeds exact Dev 1.62 commit prefix `cda3dae` and
+workflow run `41197279597`.
+
+| App | User-observed result | Log evidence and current classification |
+|---|---|---|
+| HookWorld | Crashes before presenting usable UI | The app reaches OpenGL and settings initialization, reports `Loaded Version: (null)`, then calls `NSMutableDictionary setObject:forKey:` with a nil object. Foundation correctly rejects that invalid insertion. **Blocked.** |
+| QuickHook | Same visible result as HookWorld | It follows the same engine path: OpenGL and settings initialization, `Loaded Version: (null)`, then the same nil-object dictionary insertion. **Blocked.** |
+| Bulba the Cat | Opens without crashing, but appears to show a zoomed fragment/image and does not respond usefully to taps | The session has no terminal panic. It constructs a request for bundled resource `Data/Raw/ENLanguage.unity3d`, but the current `NSURLConnection` stub returns nil. Four later touches are ignored because the target view already has an active touch while multiple touch is disabled. **Partial/unusable:** the frozen resource-loading path is currently stronger evidence than a proven viewport transform error. |
+| Paper Monsters | Smooth playable gameplay in the tested portion; saving works; no defect observed | The log loads several Unity scenes, contains no panic and returns normally through Home. **Functionally compatible within the observed gameplay, performance and local-save scope.** Missing iCloud, Game Center and iCade dynamic hooks mean those optional services are not claimed to work. |
+
+### Hook pair: shared contract and next discriminator
+
+The matching failures establish a shared engine/settings problem, but not yet
+the source of the nil value. Both apps also attempt to open bundled `data.db3`
+for writing and receive `AccessDenied`, then continue from a readable database
+descriptor. Competing hypotheses include an absent first-launch/defaults value,
+missing bundle-version metadata, and a failed writable database initialization
+or migration. The next diagnostic should remain terminal and bounded: when
+`setObject:forKey:` receives nil, report the key's class/string when safely
+decodable and the guest caller context, then preserve the exception/failure.
+Globally accepting nil dictionary objects is explicitly rejected.
+
+### Bulba: general implementation candidate
+
+Dev 1.42 reached the same no-panic runtime with a nil request; later general
+`NSURLRequest` work now constructs the local resource request and exposes the
+next missing contract. A file-URL/file-path `NSURLConnection` must return a
+real connection, load the bundled bytes or report a real file error, and
+deliver delegate callbacks with correct ordering/lifetime. It must not enable
+arbitrary network success or synchronously fake completion. Before changing
+viewport or touch transforms, test whether completing this resource load
+advances Bulba past the apparent frozen image.
+
+No source change, new commit, push, build or save reset was initiated from
+this scouting report. A focused future build should combine the general local-
+file connection implementation with the bounded Hook diagnostic. The relevant
+regression set is Bulba, HookWorld, QuickHook, Paper Monsters and Bounce; Paper
+Monsters and Bounce ensure remote/offline request behavior and existing Unity
+gameplay do not regress.
+
+## Dev 1.63 local-file connection and Hook provenance batch
+
+### Implementation boundary
+
+- **Local-file URL connections (general partial Foundation contract):**
+  `NSURLConnection` now recognizes represented local-file requests, snapshots
+  the request, retains its delegate through completion/cancellation, and
+  schedules asynchronous work on the initiating/current run loop. Successful
+  asynchronous callbacks are delivered in response, data, finish order; a
+  missing file reports an actual file-not-found error. The synchronous API
+  returns the real bundled bytes plus an `NSURLResponse`. `start`, `cancel` and
+  explicit run-loop scheduling are bounded by a one-shot connection state.
+- **Remote behavior deliberately unchanged:** non-file requests continue down
+  the existing offline/nil path. This is not arbitrary network success and does
+  not pretend that unavailable services answered.
+- **Hook pair diagnostic-only:** `NSMutableDictionary setObject:forKey:` still
+  rejects a nil object. At that terminal boundary it now reports the key class,
+  a safely decoded string key when applicable, and guest thread/PC/LR. It does
+  not accept invalid dictionary contents or invent the missing value.
+- **No per-app branch:** there is no Bulba, HookWorld or QuickHook identifier,
+  executable-name check or hard-coded resource/value bypass in the source
+  change.
+- **Verification status:** the implementation is a partial contract, not yet a
+  device-verified compatibility result. A guest contract fixture covers
+  synchronous bytes/response and asynchronous callback order, but this branch's
+  workflow skips the full integration-test step, so the fixture is recorded as
+  added rather than executed.
+
+Predicted immediate outcomes are intentionally narrow. Bulba may advance past
+the frozen language-resource screen or expose a later blocker. HookWorld and
+QuickHook may still terminate at the same invalid dictionary insertion, but the
+new key/caller details should discriminate the remaining producer hypotheses.
+Paper Monsters and Bounce should retain their previously observed behavior.
+
+### Dev 1.63 build and verification record
+
+- Final repository commit:
+  `cf293e45bba066b22cc6077bae6dbe3cbbf2ec01`
+  (`Implement local-file URL connections`). It is pushed to
+  `origin/ci/unsigned-ipa-baseline`; the checkout was clean at packaging time.
+- GitHub unsigned-IPA run `41199950938` completed successfully for that exact
+  commit. The separate iOS archive compile, development identity/package
+  verification and artifact upload steps passed. Artifact ID `13042600533` is
+  `iDared32bit-dev-unsigned-cf293e45bba066b22cc6077bae6dbe3cbbf2ec01`.
+- Downloaded artifact ZIP SHA-256:
+  `C93E755544AA8DA16A79E3F9DDF3745FBF380D79F2E5FF753CA1A0743870FA09`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `5564F8F23727F3197CAB655EA1AFCDF782B6C56F6BAB31C81A9CC8AAC7FB892B`.
+- Local package inspection found 36 entries and exactly one app bundle,
+  `Payload/iDared 32bit.app`, with no embedded provisioning profile and no
+  `_CodeSignature` entries. Its binary plist contains development identifier
+  `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable
+  `iDared 32bit`; the packaged executable contains commit prefix `cf293e4` and
+  workflow run `41199950938`.
+- GitHub lint/test run `41199951063` completed successfully. macOS and Windows
+  development library tests passed; macOS, Windows and Android lint passed.
+  Formatting checks, full host/integration `Test` steps and the macOS native
+  Objective-C sanity check were skipped by the development-branch workflow, so
+  they are not claimed as passes. The local Windows checkout has no Rust/iPhone
+  guest toolchain, so no additional local compile or guest test is claimed.
+- Direct device-testing IPA:
+  `artifacts/1.63-cf293e45/iDared-Dev-1.63.ipa`.
+
+### Focused Dev 1.63 device test
+
+Preserve the existing development containers and saves; do not reset or delete
+them.
+
+1. **Bulba the Cat** — launch it first and wait briefly at the screen that was
+   previously frozen/zoomed. Report whether the screen advances or becomes
+   normally interactive. If gameplay becomes available, play briefly, return
+   normally, and reopen once to check that the prior resource load and save
+   path remain stable.
+2. **HookWorld** — launch once. If it terminates, that is sufficient; preserve
+   the new nil-dictionary line with its key and guest PC/LR.
+3. **QuickHook** — launch once under the same rule. Do not keep tapping after a
+   terminal failure.
+4. **Paper Monsters** — play briefly, then return and reopen once to confirm its
+   prior gameplay and save behavior did not regress under the shared Unity/file
+   path.
+5. **Bounce** — launch to its previously recovered menu/gameplay state and exit
+   normally through Home. This checks that remote/offline request behavior was
+   not accidentally broadened.
+
+One combined log is sufficient. Spoing and Spirits do not need replaying for
+this narrowly scoped batch.
+
+## Dev 1.63 device result and Hook identity boundary
+
+The returned log embeds expected commit prefix `cf293e4` and workflow run
+`41199950938`. It contains two Bulba launches, one HookWorld launch, one
+QuickHook launch, two Paper Monsters launches and one Bounce launch.
+
+| App | Dev 1.63 device result | Current interpretation / boundary |
+|---|---|---|
+| Bulba the Cat | The formerly frozen screen advanced into clean, responsive gameplay. Buttons and play worked without an observed glitch. Progress was made, the app exited normally, and relaunch restored that progress. | **Functionally compatible within the observed menu/input/gameplay/save-relaunch scope.** The log shows real local-file `NSURLConnection` instances repeatedly loading the bundled `ENLanguage.unity3d`, no panic in either session, and normal Home exits. This verifies that the general local-file transport removed the observed blocker; it does not claim exhaustive coverage of every level or optional service. |
+| HookWorld | Still terminates before visible UI. | The terminal diagnostic identifies the rejected dictionary key as constant string `qh/uID`, guest thread 0, with caller LR `0x000722a0`. The app logs `Loaded Version: (null)` and equips initial items immediately beforehand. **Blocked.** |
+| QuickHook | Same visible result as HookWorld. | It rejects nil for the same constant key `qh/uID` at the corresponding startup stage, with caller LR `0x00052138`. The shared key and parallel flow establish one engine/settings producer problem rather than two independent crashes. **Blocked.** |
+| Paper Monsters | A new level was completed, the app exited normally, and relaunch restored the new progress. | **Functionally compatible within the observed gameplay/level-transition/save-relaunch scope.** Both sessions have normal Home exits and no panic. Optional iCloud hooks remain unavailable and are outside this result. |
+| Bounce | Continues to work as it did in the recovered Dev 1.62 state. | Focused regression pass for existing Unity gameplay and remote/offline URL behavior. Historical intermittent lag, audio and secondary-button issues remain outside this short check unless separately retested. |
+
+### Hook pair: what the new evidence proves
+
+- The decisive invalid insertion is specifically a missing value for
+  `qh/uID`; globally accepting nil dictionary values remains incorrect.
+- Both apps reach the same settings phase and fail on corresponding call sites,
+  so a shared Rocketcat/QuickHook settings or persistent-identity producer is
+  now the primary subsystem boundary.
+- The existing general `UIDevice uniqueIdentifier` path already returns a
+  non-nil 40-character value and matches the locally available upstream
+  implementation. That makes a wholly missing `UIDevice` selector less likely,
+  but the current log does not prove which API the game used to obtain
+  `qh/uID`.
+- Both apps contain Security/keychain-related imports and both attempt a
+  read/write open of bundled `data.db3` before continuing from readable state.
+  Either is nearby evidence, but neither is proven as the nil producer. A
+  guessed identifier, global keychain success stub or writable-app-bundle
+  accommodation would therefore be premature.
+
+The next discriminating step is one bounded general diagnostic at the existing
+nil-insertion boundary: retain a small per-thread history of recent Objective-C
+message returns and report only the immediately preceding nil-returning calls,
+plus a short fixed guest-code context around the recorded caller. That should
+separate a missing first-run/defaults value, optional-service identity, keychain
+lookup and other producer paths without accepting invalid state or inventing an
+ID. If that diagnostic still does not reveal the producer, rotate to another
+app group rather than repeatedly elaborating the same Hook hypothesis.
+
+No source patch, commit, push, build or save reset was initiated from this
+device-result report.
+
+## Dev 1.63 Blot, B'Blast and Addicus rotation result
+
+The returned log embeds the expected Dev 1.63 commit prefix `cf293e4` and
+workflow run `41199950938`. It contains two Blot launches, two matching
+B'Blast launches and one Addicus launch.
+
+| App | Dev 1.63 device result | Current interpretation / boundary |
+|---|---|---|
+| Blot | Dying no longer reproduced the historical crash. Entering Classic directly and returning to the home screen worked. Entering Challenges and then using Back triggered severe progressive slowdown affecting both video and audio; once triggered, it persisted, with other buttons producing varying severity. | **Partial.** The old missing `___vsnprintf_chk` death blocker appears removed within this test, but the order-sensitive slowdown is independently unresolved. Both sessions end normally through Home with no panic. The log shows repeated ImageMagick environment probes and continued heap growth while the existing Blot-only `MAGICK_THREAD_LIMIT=1` accommodation is active. That does not yet distinguish a guest workload/resource leak, duplicated scheduling/callbacks, or another state-transition defect. Do not call death universally fixed from one action order, and do not add another performance workaround without bounded measurements. |
+| B'Blast | Both launches show a fraction of opening audio, remain black, and terminate. | **Blocked, but advanced to a precise shared contract.** Each run reaches the same four-element `kern.proc` query `(KERN_PROC_PID, 1)`. The current emulator deliberately returns `-1/ENOENT`; guest code immediately calls `___assert_rtn` at source line 43. This matches the historical current-process-information pattern used to inspect `kinfo_proc`, and is not evidence that the assert should be swallowed. A bounded implementation should return the emulated current process record with no traced/debugger flag, while preserving failure for unsupported process queries. |
+| Addicus | Launching terminates the entire iDared application rather than returning to the picker. | **Blocked; two faults are now separated.** The first fault is a guest null-page access at PC `0x001d7adc`, called from `-[PHInvocation initWithTarget:selector:arguments:]` (`0x001d33dc + 0xa8`) after initial views are configured. While reporting that fault, the terminal diagnostic itself triggers a second null-page panic before register/stack output; the log then ends. The nested diagnostic panic explains the whole-iDared termination, but fixing the reporter will not fix Addicus's original nil producer. Harden only the bounded diagnostic first, then use the completed register/selector context to classify the app fault. |
+
+### Next engineering boundary
+
+The highest-confidence general correction is the historical 32-bit
+`KERN_PROC_PID` read used by B'Blast. Apple's XNU 1504 interface identifies
+subtype `1` as `KERN_PROC_PID` and returns a 32-bit `kinfo_proc`; the emulated
+process PID is already `1`. Support should be limited to that current PID,
+respect caller buffer/length and write semantics, and report an untraced
+process. This replaces the current blanket `ENOENT` for a valid query; it does
+not fabricate arbitrary process-list results.
+
+Independently, the memory-fault diagnostic's Objective-C candidate inspection
+must use fallible guest-memory access. It must never turn the original guest
+fault into a second host panic. That change is diagnostic-only: Addicus is
+predicted to return to the picker with a complete terminal context, not to
+become playable.
+
+Blot should not receive another speculative performance change in the same
+batch. Its next useful investigation is bounded, low-frequency measurement
+around the Challenges/Back transition to distinguish callback/thread growth,
+guest CPU saturation and heap/resource accumulation. The existing app-scoped
+ImageMagick thread-limit accommodation remains provisional and did not prevent
+the observed slowdown.
+
+No source patch, commit, push, build or save reset was initiated from this
+device-result report.
+
+## Dev 1.64 current-process sysctl and fault-diagnostic batch
+
+### Implementation boundary
+
+- **`KERN_PROC_PID` (general partial Darwin contract):** four-element
+  `sysctl` queries for the emulator's current PID `1` now return a zero-filled
+  32-bit `kinfo_proc` record of 492 bytes. The implemented stable fields are an
+  untraced `p_flag`, running `p_stat`, and PID `1`; the sizing query reports the
+  historical six-record capacity, an absent PID succeeds with output length
+  zero, and a short caller buffer reports `ENOMEM` with consumed length zero.
+  Unsupported `kern.proc` subtypes retain the prior failure behavior. This is
+  limited to the historical current-process query and does not fabricate a
+  process list or globally suppress assertions.
+- **Fault reporting (diagnostic-only general hardening):** terminal memory-
+  fault inspection now reads a possible Objective-C `isa` and selector string
+  through bounded fallible memory access. Invalid diagnostic candidates are
+  omitted instead of causing a second emulator panic. This is predicted to
+  preserve Addicus's original guest failure context and return control to the
+  picker; it does not repair Addicus's original nil producer.
+- **No per-app branch:** the change contains no B'Blast or Addicus identifier,
+  executable-name check, or app-specific bypass. Any historical app making the
+  same supported current-process query receives the same record.
+- **Blot deliberately unchanged:** its order-sensitive Challenges/Back
+  slowdown still needs bounded scheduling/CPU/resource measurements. Dev 1.64
+  makes no performance claim for it and adds no second workaround.
+- **Verification status:** the sysctl work is a partial contract within the
+  explicit current-PID boundary; the diagnostic work is diagnostic-only. Unit
+  coverage checks successful record contents and short-buffer `ENOMEM`
+  behavior, but neither app outcome is device-verified yet.
+
+### Dev 1.64 build and verification record
+
+- Final repository commit:
+  `759dfcb06c2ca1173dcea0299283b23db6859fa2`
+  (`Implement current-process sysctl and harden fault diagnostics`). It is
+  pushed to `origin/ci/unsigned-ipa-baseline`; the source checkout is clean and
+  matches that remote branch.
+- GitHub unsigned-IPA run `41210179965` completed successfully for that exact
+  commit. The separate iOS archive compile, development identity/package
+  verification, and artifact upload steps passed. Artifact ID `13045309197` is
+  `iDared32bit-dev-unsigned-759dfcb06c2ca1173dcea0299283b23db6859fa2`.
+- Downloaded artifact ZIP SHA-256:
+  `53AFC1EC45BA7411F0CDC4B3BF4A597F6DC29F31C37E8631604ECC972FA91569`,
+  exactly matching GitHub's recorded artifact digest.
+- Final IPA SHA-256:
+  `9842307AAA6ECB7839D9B43B62391B0D71ACC1DC71BC0E9734DDE90B1D277B99`,
+  exactly matching the workflow's package-verification output.
+- Local package inspection found 36 entries and exactly one app bundle,
+  `Payload/iDared 32bit.app`, with no embedded provisioning profile and no
+  `_CodeSignature` entries. Its binary plist contains development identifier
+  `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, and executable
+  `iDared 32bit`; the packaged executable contains commit prefix `759dfcb`,
+  workflow run `41210179965`, and branch `ci/unsigned-ipa-baseline`.
+- GitHub lint/test run `41210180000` completed with green job conclusions.
+  macOS and Windows `cargo test --lib` development-branch steps passed,
+  exercising the new sysctl unit tests. The macOS, Windows and Android lint
+  commands each returned exit code 1 but are allowed to fail on this branch;
+  they are not recorded as passes. Formatting, full host/integration `Test`
+  steps and the macOS native Objective-C sanity check were skipped. The local
+  Windows checkout has no Rust/iPhone guest toolchain, so no additional local
+  compile or guest test is claimed.
+- Direct device-testing IPA:
+  `artifacts/1.64-759dfcb0/iDared-Dev-1.64.ipa`.
+
+### Focused Dev 1.64 device test
+
+Preserve the existing development containers and saves; do not reset or delete
+them.
+
+1. **B'Blast** — launch once. Report whether it gets beyond the prior brief
+   audio/black-screen assertion and how far it reaches. If a menu or gameplay
+   becomes usable, interact briefly. If it still terminates, preserve the exact
+   terminal lines after the `kern.proc` query rather than repeatedly relaunching.
+2. **Addicus** — launch once. Report both the original app result and whether
+   iDared itself remains alive and returns to the picker. If it still faults,
+   preserve the completed register/stack and Objective-C/selector diagnostic;
+   do not interpret a clean return to the picker as Addicus compatibility.
+
+Blot does not need replaying for this narrowly scoped build because its
+performance path was untouched. Spoing, Bounce and the other working titles
+also do not need an unrelated full regression pass. One combined log for the
+two launches is sufficient.
+
+## Dev 1.64 B'Blast and Addicus device result
+
+The returned log embeds expected commit prefix `759dfcb` and workflow run
+`41210179965`. It contains one B'Blast launch and one Addicus launch.
+
+| App | Dev 1.64 device result | Current interpretation / boundary |
+|---|---|---|
+| B'Blast | The visible result is exactly unchanged: the same fraction of opening audio, black screen and in-app termination. | **Still blocked, but the internal first blocker changed.** The former `KERN_PROC_PID` assertion is absent, proving that the bounded current-process record was consumed. Startup proceeds through resources, Localytics/SQLite, locale and URL setup before terminating on the newly reached unimplemented libc function `_if_nametoindex`. This is progress to a later general networking-interface contract, not a visible compatibility improvement. |
+| Addicus | The screen remains black and the game terminates with an error, but iDared itself stays alive and returns to the app picker. | **Still blocked; diagnostic objective achieved.** The original null-page access remains at PC `0x001d7adc`, with caller `-[PHInvocation initWithTarget:selector:arguments:] + 0xa8`. Dev 1.64 now emits the complete context without a nested reporter panic. R0, R1 and R2 are all zero at the failing host-call trampoline, but the current diagnostic cannot yet name that linked host API. |
+
+### Next engineering boundary
+
+Implement the general `if_nametoindex` name-to-index contract against a small,
+stable guest-visible interface table rather than leaking host interface
+indexes. Unknown names must return zero with Darwin `ENXIO`; no network request
+should be fabricated. This is a partial interface-discovery contract and does
+not imply that remote networking is online.
+
+For Addicus, add one bounded terminal diagnostic that decodes the SVC at the
+faulting trampoline and reports the already-linked host function name. This is
+diagnostic-only and should not swallow the null access or guess an object,
+selector or invocation argument. The next device log should identify the exact
+API boundary needed to classify the nil producer.
+
+## Dev 1.65 virtual-interface lookup and host-fault naming batch
+
+### Implementation boundary
+
+- **`if_nametoindex` (general partial Darwin contract):** interface names now
+  resolve through a stable guest-visible table: `lo0` is index `1` and `en0`
+  is index `2`. Unknown names and invalid UTF-8 return zero and set Darwin
+  `ENXIO` (`Device not configured`). The implementation logs the decoded name
+  and result once per call so the next B'Blast launch will establish which
+  historical name it requested. It neither exposes host interface indexes nor
+  treats interface existence as proof of online reachability.
+- **Host-call fault naming (diagnostic-only):** when a terminal memory fault
+  occurs at an A32 linked-host trampoline, the reporter decodes the SVC at
+  `PC - 4`, removes the lazy-return flag and maps it through the already-linked
+  host-function table. Addicus's next terminal report should therefore name
+  the active API at the preserved null fault. Dispatch behavior and the fault
+  itself are unchanged.
+- **No per-app branch:** neither implementation checks B'Blast or Addicus
+  identifiers, executable names or caller addresses. Other apps using the same
+  supported contract or diagnostic path receive the same behavior.
+- **Status:** `if_nametoindex` is a partial contract within the two-interface
+  virtual table; `if_nameindex` and `if_indextoname` are not claimed. The
+  Addicus change is diagnostic-only. Neither app is considered fixed until the
+  focused device result demonstrates usable behavior.
+
+### Dev 1.65 build and verification record
+
+- The initial implementation commit `9198e93b4d49dab1d30932dce34038167a43cce0`
+  failed both iOS and host-test compilation because a borrowed interface-name
+  string remained live while `errno` was mutated. No artifact from that failed
+  run is used. Final commit `c9c3f7652a18de022ab5e4c29ce61f48492ad2e6`
+  owns the decoded name before setting `errno`; the checkout is clean, pushed
+  to `origin/ci/unsigned-ipa-baseline`, and matches that remote-tracking ref.
+- GitHub unsigned-IPA run `41212045030` completed successfully for the final
+  commit. The separate iOS archive compile, development identity/package
+  verification and artifact upload passed. Artifact ID `13046364195` is
+  `iDared32bit-dev-unsigned-c9c3f7652a18de022ab5e4c29ce61f48492ad2e6`.
+- Downloaded artifact ZIP SHA-256:
+  `912213A9B84C0C5A289AED79579372DEA4CF3103A975FF74F7D71DE22B99BD9D`,
+  exactly matching GitHub's artifact digest. Final IPA SHA-256:
+  `7DD2A601EE2B8E63505D68A443634E92757BDEFA524F92AA7BEF41C8D31D7A31`,
+  exactly matching the package-verification step.
+- Local inspection found exactly one app bundle, `Payload/iDared 32bit.app`,
+  with no provisioning profile or `_CodeSignature` entry. `Info.plist` contains
+  identifier `com.bookieart1.idared32bit.dev`, display name `iDared Dev` and
+  executable `iDared 32bit`; the executable contains commit prefix `c9c3f76`,
+  workflow run `41212045030`, branch `ci/unsigned-ipa-baseline` and repository
+  `bookieart1/iDared32bit`.
+- GitHub lint/test run `41212044973` completed successfully. The inspected
+  macOS and Windows development-branch library-test steps passed, including the
+  new interface and host-trampoline unit tests. The macOS, Windows and Android
+  lint commands still return exit code `1` under allowed-to-fail steps and are
+  not recorded as lint passes. Formatting, full host/integration `Test` steps
+  and the macOS native Objective-C sanity check were skipped. No local Rust,
+  guest-ABI or physical-device test is claimed.
+- Direct device-testing IPA:
+  `artifacts/1.65-c9c3f765/iDared-Dev-1.65.ipa`.
+
+### Focused Dev 1.65 device test
+
+Preserve the current development app container and saves; do not reset or
+delete them. One combined log is sufficient.
+
+1. **B'Blast** — launch once. Report whether the visible brief-audio/black-
+   screen result changes and preserve the line
+   `if_nametoindex("...") -> ...` plus the next terminal error. If it reaches a
+   menu or gameplay, interact briefly before exiting normally.
+2. **Addicus** — launch once. Report the visible result and preserve the new
+   `active host function` diagnostic at the null-page fault. Returning to the
+   picker remains diagnostic containment, not app compatibility.
+
+No Blot or working-title regression replay is required for this narrow batch;
+it changes neither Blot's performance path nor normal input/render/audio/save
+behavior.
+
+## Dev 1.65 B'Blast and Addicus device result (corrections paused)
+
+The user tested Dev 1.65 from commit
+`c9c3f7652a18de022ab5e4c29ce61f48492ad2e6`, workflow run
+`41212045030`. Both titles had the same visible result as before. The focused
+instrumentation nevertheless established two new internal boundaries:
+
+| App | Visible result | Decisive Dev 1.65 evidence | Status / boundary |
+|---|---|---|---|
+| B'Blast | Unchanged: a fraction of a second of audio, black screen, then an in-app error/return. | `if_nametoindex("en0") -> 2` proves that the new stable guest interface lookup was consumed successfully. Execution then reached `sysctl()` with a six-integer MIB and stopped at `not implemented: sysctl() for name length 6 is unimplemented!`. The terminal registers show the expected sizing-query shape (`oldp` null and `oldlenp` supplied), but the six MIB integers have not been decoded. | **Blocked.** The interface-name blocker is removed; the first decisive blocker is now the unsupported six-component `sysctl` query. Decode the MIB and its historical contract before designing an implementation. |
+| Addicus | Unchanged: black screen, then an in-app error/return; iDared remains alive. | The preserved null-page access at PC `0x001d7adc` now reports `environment: Host memory-fault active host function: _objc_msgSend`. R0, R1 and R2 are zero at the host trampoline, and the guest caller remains `Addicus!-[PHInvocation initWithTarget:selector:arguments:] + 0xa8`. | **Blocked; diagnostic-only objective achieved.** The crash boundary is Objective-C message dispatch from the PHInvocation path. The log does not yet prove which earlier operation produced the zero target/selector state. Do not globally tolerate invalid pointers or fabricate an invocation. |
+
+No correction, source commit, push or new build was started from this result.
+At the user's request, both investigations are deliberately paused while the
+project changes direction. If resumed, the next discriminating observations
+are the decoded B'Blast MIB and a bounded Addicus target/selector creation and
+lifetime trace immediately preceding the PHInvocation call.
+
+## Development-method audit and Dev 1.66 diagnostic build — October 31, 2026
+
+The user explicitly requested a broad historical/architectural audit, a small
+implemented improvement, and a new IPA. This supersedes the earlier pause only
+for diagnostic infrastructure; B'Blast/Addicus compatibility fixes remain
+paused. Active checkout and remote were verified at `c9c3f765`, clean, branch
+`ci/unsigned-ipa-baseline`. Remote upstream trunk was independently checked at
+`ca1de89c578e79746f33c1332e28efd106c334ba`, also the merge base. Local history is
+shallow, so raw upstream-range commit counts must not be interpreted as a
+complete attribution of inherited work.
+
+The repository record is `dev-docs/compatibility-development-audit.md`. It
+compares six opportunities, identifies existing GDB/linking-info/fault-context
+facilities, records provisional implementations and exception-suppression risk,
+and chooses bounded API/Objective-C history with scheduler progress samples.
+The next larger investment is a repaired strict guest ABI fixture pipeline.
+Earlier audits/CSVs and all existing compatibility evidence remain unchanged.
+
+### Implementation and predictions
+
+- **Classification:** diagnostic-only infrastructure, not a compatibility fix.
+- **Commits:** `766978fd` implementation; `677e505c` corrects a borrowing error in
+  the new Objective-C unit-test setup and wraps three new comment lines. The
+  first CI library compilation caught the error before delivery; superseded
+  queued/build jobs were cancelled. Dev label remains 1.66, not yet delivered.
+- **Files:** new `src/diagnostics.rs`; dispatch hooks in `environment.rs`,
+  `objc/messages.rs`, `objc/methods.rs`; source counts in `ns_run_loop.rs`;
+  options/help/default presets; one CI step prints the synthetic failure proof.
+- **Bounds:** 96 recent call boundaries, 24 candidate nil/resource events,
+  24 progress samples, under 80 KiB recorder storage per enabled app, at most
+  12 live five-second lines, one final report on panic or return to picker.
+  Recording does no per-call allocation/formatting/log I/O/clock read. Routine
+  GL/memory/ownership calls are counted rather than individually retained.
+- **Identity:** capture defaults off; the Dev 1.66 cohort opts in B'Blast,
+  Addicus, Blot and Spoing. These app options affect only recording. No saves,
+  package identity, API responses, memory protections or exception behavior
+  were changed. An options override can disable capture.
+- **Expected new evidence:** B'Blast's actual MIB; preceding Addicus dispatch
+  and host object-return values; Blot rates/source-count trends during the
+  Challenges→Back slowdown; Spoing as a working capture/control session.
+  Spirits is already confirmed working and is not treated as a current crash.
+- **Limits:** candidate nils may be normal; raw registers are not typed returns;
+  host-internal LR can be inherited; no memory-write provenance or host-blocking
+  watchdog; no final-report guarantee after an OS kill; normal nil floods can
+  overwrite candidates. Capture overhead on physical hardware remains to test.
+
+### Validation in progress
+
+Local changed-file Rust formatting and diff whitespace checks passed using an
+isolated workspace Rust toolchain. Native host compilation is unavailable here
+without C++ build prerequisites; library and iOS builds use hosted CI. The first
+Windows test compilation found a test-only borrowing error, fixed in `677e505c`.
+The Android lint job's green badge masked an allowed failure in the comment-line
+check; it did not reach clippy. No Android compile/lint pass is claimed.
+
+Tests added: circular history order/wrapping; invalid diagnostic pointers and
+interleaved thread identities with unchanged registers; real Objective-C nil
+object versus numeric zero; bounded progress/storage/escaped text; a synthetic
+six-word sysctl query through actual dyld SVC dispatch with capture off and on,
+requiring the same original panic and the decoded MIB only when enabled. The
+fixture is the same failing API shape as B'Blast, not a reproduction of its
+unknown exact MIB or an execution of the game binary.
+
+Device results, final hosted test results and verified downloaded IPA identity
+will be appended below. Do not promote this build to device-verified status.
+
+### Dev 1.66 final host verification
+
+Final build source is `288a5e40966d5a322ab660344d01e8c4dacb2531`. Two additional
+test-fixture commits, `c8385215` and `288a5e40`, establish null-page protection
+before dyld allocates its stubs. This preserves the original unprotected fake
+environment for existing tests and gives the invalid-pointer test realistic
+loader setup. The interim second run had 89 passing tests and one fixture
+failure (zero was readable because no binary had established the null segment).
+No guest memory contract or production code was relaxed to make it pass.
+
+- Test workflow `41216006091`: **90/90 library tests passed on macOS and Windows**.
+- Separate macOS reproducer evidence step: **passed**. It printed the original
+  unsupported six-component sysctl panic plus the new entry event:
+  `_sysctl`, `args=[00009150, 00000006, 00000000, 00000000]`, four stack words,
+  `mib=[4, 17, 0, 0, 3, 2]`, thread 0, PC `0x9184`, call sequence 1. These are
+  synthetic fixture addresses/values, not B'Blast's recovered device query.
+- All three lint steps stopped at the pre-existing comment-length gate and
+  were allowed failures. **No clippy, rustdoc or Android compile pass claimed.**
+- Full guest integration, native Objective-C sanity and workflow formatting
+  remain skipped. Changed-source formatting was checked locally.
+- Final test logs: `outputs/dev166-final-macos-job.txt`,
+  `outputs/dev166-final-windows-job.txt`, `outputs/dev166-final-android-job.txt`.
+- Device testing is pending. No new compatibility improvement is claimed.
+
+### Dev 1.66 verified IPA and focused device test
+
+- IPA workflow `41216006158` completed successfully for
+  `288a5e40966d5a322ab660344d01e8c4dacb2531`.
+- Artifact `13048746075`, name
+  `iDared32bit-dev-unsigned-288a5e40966d5a322ab660344d01e8c4dacb2531`.
+- Downloaded IPA: `artifacts/1.66-288a5e40/iDared-Dev-1.66.ipa`;
+  19,867,195 bytes; SHA-256
+  `7b02d9631af24a7e789cdb1001027b2aec35002e168a0a8b6210ce794e7599c1`,
+  matching the workflow's printed checksum. Outer artifact ZIP SHA-256
+  `0aadf7dc07d1094673a4a7ad435badf14df6487a93c83fc67b36ef850854dcc9`
+  matches GitHub's artifact digest.
+- Independent package inspection confirmed ZIP integrity, arm64 executable,
+  embedded commit/run, recorder marker, all four preset flags, separate
+  `com.bookieart1.idared32bit.dev` / `iDared Dev`, no provisioning profile and
+  no Mach-O code signature. Metadata saved beside the IPA as
+  `iDared-Dev-1.66.verification.json`; iOS log is
+  `outputs/dev166-final-ios-job.txt`.
+- A follow-up documentation-only commit records final validation without
+  rebuilding. It does not change the delivered IPA's source identity.
+
+Install over the existing development app, retaining its data. One combined
+log is enough:
+
+1. B'Blast: launch once and allow the existing error to occur.
+2. Addicus: launch once and allow the existing error to occur.
+3. Blot: play Classic about 15 seconds, return to its menu, open Challenges,
+   press Back, wait about 20 seconds after slowdown, then use emulator Home.
+4. Spoing: play briefly/finish a level, use emulator Home, reopen and check
+   existing progress. Report any new slowdown or instability.
+
+On receipt, first verify embedded build identity and recorder activation.
+Extract the actual MIB, the sequence before PHInvocation, and main-loop/
+presentation/source-count deltas around slowdown. Compare Spoing's functioning
+session. Judge whether each narrows a competing hypothesis; do not count extra
+lines alone as success. If Addicus's origin remains outside the retained
+history, select a precise producer/lifecycle probe from the recovered caller
+instead of automatically enlarging the ring. Device overhead remains an open
+question until this test.
+
+### Dev 1.66 device result: flight recorder validated
+
+The combined device log identifies source `288a5e4` and workflow
+`41216006158`, matching the verified Dev 1.66 IPA. Recording was enabled for
+all four intended apps. The user followed the requested order and reported no
+new instability in the working control.
+
+| App | User-visible result | New bounded evidence | Conclusion / next boundary |
+|---|---|---|---|
+| B'Blast | Same short audio fragment, black screen and error. | Immediately after `if_nametoindex("en0") -> 2`, `TFDeviceInfo -macAddressSha1` issues `_sysctl` with the actual MIB `[4, 17, 0, 18, 3, 2]`, `oldp == NULL` and an `oldlenp` sizing pointer. This decodes as `CTL_NET`, `PF_ROUTE`, protocol 0, `AF_LINK`, `NET_RT_IFLIST`, interface index 2. | **Recorder success; app still blocked.** This is a link-layer interface-record request for `en0`, used on the MAC-address hash path. A future correction must implement the historical two-call sizing/data contract and correct 32-bit route/interface structures; returning arbitrary success is not justified. |
+| Addicus | Same black screen and in-app error. | `PHWebView` receives `loadHTMLString:baseURL:` and asks `PHInvocation` to perform that selector on the underlying `UIWebView`. `+[UIWebView instanceMethodSignatureForSelector:loadHTMLString:baseURL:]` returns `nil`; that exact `nil` is immediately passed to `+[NSInvocation invocationWithMethodSignature:]`, followed by the preserved null-page access. | **Recorder success; producer recovered.** The first missing compatibility contract is `UIWebView -loadHTMLString:baseURL:`, which the current class does not export. The later `NSInvocation` nil dereference is also non-ideal failure handling, but globally accepting a nil signature would mask the real missing API. A future implementation must label the no-web-engine behavior boundary and cannot claim functional HTML compatibility merely for passing startup. |
+| Blot | Classic and menu return were smooth. Challenges→Back triggered the severe audiovisual slowdown, which persisted. | Presentation rate rises to roughly 35–57/s during the smooth interval, drops to 27/s over 45–50 s, then remains about 3.2–4.4/s from 50–85 s. Main-loop rate falls with it. From 15 s onward, source counts remain `[2 timers, 0 selectors, 1 audio queue, 0 audio units]`; the process retains one thread slot rather than accumulating threads/sources. | **Useful phase classification, not root cause.** The observed slowdown is real and sustained, but the sampled evidence rejects simple run-loop-source proliferation. It is more consistent with increased work or blocking on the main guest/emulation path than with a deadlock or stopped presentation. The next diagnostic should freeze one bounded boundary/PC snapshot at the first slow-loop/present threshold, not enlarge the general ring or add unbounded frame logging. |
+| Spoing | Level completion, emulator Home, reopen and saved progress all worked normally. | Recorder remained enabled for a roughly 130 s session and a 12 s reopen. It produced bounded reports rather than per-call log flooding despite very high internal boundary counts. No panic occurred. | **Working control passed within this scope.** This does not quantify recorder overhead against an instrument-off baseline, but it shows no visible gameplay or persistence regression in this test. |
+
+This result meets the first-version success rule: it produced causal evidence,
+not merely larger logs. B'Blast and Addicus each advanced from a terminal
+symptom to a specific missing shared contract; Blot eliminated one competing
+hypothesis and established a measurable transition; Spoing remained a passing
+control. Keep v1 bounded and opt-in. If Blot is investigated next, add a
+single-shot slow-transition capture rather than enabling global instruction
+tracing. No code change, push, IPA build or compatibility claim follows from
+this log-analysis entry.
