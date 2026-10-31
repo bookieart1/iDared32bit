@@ -1797,7 +1797,7 @@ impl Environment {
                                         .collect()
                                 })
                                 .unwrap_or_default();
-                            for reference in references {
+                            for &reference in &references {
                                 let context_start = reference.saturating_sub(16);
                                 let context_ptr = mem::ConstVoidPtr::from_bits(context_start);
                                 if let Some(context) =
