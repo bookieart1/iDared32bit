@@ -872,9 +872,7 @@ fn fcntl(
             // TODO: Actually set locks when multiproccess support is added and
             // the file system supports it.
             log_once!(
-                "TODO: fcntl({}, F_SETLK, {:?}) called. Locking unimplemented, ignoring lock.",
-                fd,
-                lock
+                "TODO: fcntl(F_SETLK) called. Locking unimplemented, ignoring lock."
             );
         }
         F_NOCACHE => {
