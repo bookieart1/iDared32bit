@@ -272,6 +272,24 @@ impl Dyld {
         self.thread_exit_routine.unwrap()
     }
 
+    /// Identify a linked host function while execution is paused immediately
+    /// after its A32 SVC instruction. This is used only by bounded terminal
+    /// diagnostics; it does not affect dispatch.
+    pub fn host_function_symbol_at_pc(&self, mem: &Mem, pc: u32) -> Option<&'static str> {
+        let svc_address = pc.checked_sub(4)?;
+        let bytes = mem.get_bytes_fallible(ConstVoidPtr::from_bits(svc_address), 4)?;
+        let instruction = u32::from_le_bytes(bytes.try_into().ok()?);
+        if instruction & 0xff00_0000 != 0xef00_0000 {
+            return None;
+        }
+        let svc = instruction & 0x00ff_ffff;
+        let svc = svc & !Self::SVC_LAZY_LINK_RET_FLAG;
+        let index = svc.checked_sub(Self::SVC_LINKED_FUNCTIONS_BASE)? as usize;
+        self.linked_host_functions
+            .get(index)
+            .map(|&(symbol, _)| symbol)
+    }
+
     /// Do linking-related tasks that need doing right after loading the
     /// binaries.
     pub fn do_initial_linking(
@@ -884,5 +902,34 @@ impl Dyld {
         let symbol = format!("_{name}");
         let address = self.create_proc_address(mem, cpu, &symbol)?;
         Ok(Ptr::from_bits(address.addr_with_thumb_bit()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn diagnostic_test_function(_env: &mut Environment) -> u32 {
+        0
+    }
+
+    #[test]
+    fn identifies_linked_host_function_at_post_svc_pc() {
+        let mut mem = Mem::new();
+        let mut dyld = Dyld::new();
+        let function = dyld.create_guest_function(
+            &mut mem,
+            "_diagnostic_test_function",
+            &(diagnostic_test_function as fn(&mut Environment) -> u32),
+        );
+
+        assert_eq!(
+            dyld.host_function_symbol_at_pc(&mem, function.addr_without_thumb_bit() + 4),
+            Some("_diagnostic_test_function")
+        );
+        assert_eq!(
+            dyld.host_function_symbol_at_pc(&mem, function.addr_without_thumb_bit() + 8),
+            None
+        );
     }
 }

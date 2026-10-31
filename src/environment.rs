@@ -1712,6 +1712,9 @@ impl Environment {
                 "{source} context: pc={pc:#010x}, lr={lr:#010x}, cpsr={cpsr:#010x}, instruction bytes unavailable"
             );
         }
+        if let Some(symbol) = self.dyld.host_function_symbol_at_pc(&self.mem, pc) {
+            log_no_panic!("{source} active host function: {symbol}");
+        }
 
         // A wider, still bounded window makes stripped guest code around a
         // terminal fault disassemblable without enabling per-instruction
