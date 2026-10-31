@@ -169,6 +169,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     let text_label = env.objc.borrow_mut::<UITextFieldHostObject>(this).text_label;
     msg![env; text_label setFont:new_font]
 }
+- (id)font {
+    let text_label = env.objc.borrow::<UITextFieldHostObject>(this).text_label;
+    msg![env; text_label font]
+}
 
 - (())setMinimumFontSize:(CGFloat)size {
     let text_label = env.objc.borrow_mut::<UITextFieldHostObject>(this).text_label;

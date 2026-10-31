@@ -150,22 +150,30 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (NSUInteger)retainCount {
-    env.objc.get_refcount(this).into()
+    if env.objc.has_static_lifetime(this) {
+        NSUInteger::MAX
+    } else {
+        env.objc.get_refcount(this).into()
+    }
 }
 
 - (id)retain {
     log_dbg!("[{:?} retain]", this);
-    env.objc.increment_refcount(this);
+    if !env.objc.has_static_lifetime(this) {
+        env.objc.increment_refcount(this);
+    }
     this
 }
 - (())release {
     log_dbg!("[{:?} release]", this);
-    if env.objc.decrement_refcount(this) {
+    if !env.objc.has_static_lifetime(this) && env.objc.decrement_refcount(this) {
         () = msg![env; this dealloc];
     }
 }
 - (id)autorelease {
-    () = msg_class![env; NSAutoreleasePool addObject:this];
+    if !env.objc.has_static_lifetime(this) {
+        () = msg_class![env; NSAutoreleasePool addObject:this];
+    }
     this
 }
 

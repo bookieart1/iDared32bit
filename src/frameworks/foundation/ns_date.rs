@@ -194,6 +194,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     date
 }
 
+// Modern spelling of addTimeInterval:. Both return a distinct, autoreleased
+// immutable date whose absolute time is offset from the receiver.
+- (id)dateByAddingTimeInterval:(NSTimeInterval)seconds {
+    msg![env; this addTimeInterval:seconds]
+}
+
 - (NSComparisonResult)compare:(id)anotherDate { // NSDate *
     let host_object = env.objc.borrow::<NSDateHostObject>(this);
     let another_date_host_object = env.objc.borrow::<NSDateHostObject>(anotherDate);

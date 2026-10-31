@@ -168,8 +168,26 @@ private struct LegacyAlertInput: Decodable {
 public func idaredNativeTextAlert(
     _ json: UnsafePointer<CChar>
 ) -> UnsafeMutablePointer<CChar>? {
-    precondition(Thread.isMainThread)
-    let data = Data(bytes: json, count: strlen(json))
+    // The emulator normally enters through SDL's main host thread, but a
+    // guest is allowed to show an alert from another thread. UIKit presentation
+    // must always happen on the main thread; an assertion here used to abort
+    // the entire enclosing iDared process in that case.
+    let json = String(cString: json)
+    if !Thread.isMainThread {
+        var result: UnsafeMutablePointer<CChar>?
+        DispatchQueue.main.sync {
+            result = idaredNativeTextAlertOnMainThread(json)
+        }
+        return result
+    }
+    return idaredNativeTextAlertOnMainThread(json)
+}
+
+private func idaredNativeTextAlertOnMainThread(
+    _ json: String
+) -> UnsafeMutablePointer<CChar>? {
+    dispatchPrecondition(condition: .onQueue(.main))
+    let data = Data(json.utf8)
     guard let input = try? JSONDecoder().decode(LegacyAlertInput.self, from: data),
           let scene = activeWindowScene(),
           let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController

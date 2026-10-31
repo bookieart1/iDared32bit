@@ -239,6 +239,16 @@ impl super::ObjC {
         self.objects.get(&object).map(|entry| &*entry.host_object)
     }
 
+    /// Whether an object was registered with process/static lifetime. Retain,
+    /// release and autorelease messages are no-ops for these objects on Apple
+    /// runtimes (for example class objects and constant strings).
+    pub fn has_static_lifetime(&self, object: id) -> bool {
+        let Some(entry) = self.objects.get(&object) else {
+            panic!("No entry found for object {object:?}, it may have already been deallocated");
+        };
+        entry.refcount.is_none()
+    }
+
     /// Get a reference to a host object and downcast it. Panics if there is
     /// no such object, or if downcasting fails.
     pub fn borrow<T: AnyHostObject + 'static>(&self, object: id) -> &T {
