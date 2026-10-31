@@ -6,6 +6,7 @@
 //! `NSAutoreleasePool`.
 
 use crate::objc::{id, msg, objc_classes, release, ClassExports, HostObject, NSZonePtr};
+use crate::cpu::Cpu;
 use crate::{Environment, ThreadId};
 use std::num::NonZeroU32;
 
@@ -117,7 +118,11 @@ pub const CLASSES: ClassExports = objc_classes! {
             // So we manually decrement and dealloc instead.
             // TODO: refactor this
             assert_eq!(env.objc.get_refcount(pool), NonZeroU32::new(1).unwrap());
-            _ = env.objc.decrement_refcount(pool);
+            let regs = env.cpu.regs();
+            let (pc, lr) = (regs[Cpu::PC], regs[Cpu::LR]);
+            _ = env
+                .objc
+                .decrement_refcount(pool, env.current_thread, pc, lr);
         }
         let host_obj: &mut NSAutoreleasePoolHostObject = env.objc.borrow_mut(pool);
         let objects = std::mem::take(&mut host_obj.objects);

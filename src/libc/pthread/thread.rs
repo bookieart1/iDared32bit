@@ -9,6 +9,7 @@ use crate::abi::GuestFunction;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::libc::errno::{EDEADLK, EINVAL, ESRCH};
 use crate::mem::{self, ConstPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr, SafeRead, PAGE_SIZE};
+use crate::objc::{id, ObjC};
 use crate::{Environment, ThreadId};
 use std::collections::HashMap;
 
@@ -226,6 +227,23 @@ pub fn pthread_create(
     };
 
     let thread_id = env.new_thread(start_routine, user_data, attr.stacksize);
+
+    // A few legacy games pass Objective-C objects through pthread's untyped
+    // context pointer. That is legal only if the caller separately guarantees
+    // their lifetime. Record such crossings once at thread creation so a later
+    // use-during-dealloc panic can be attributed without logging every retain.
+    let candidate_object: id = user_data.cast();
+    if env.objc.get_host_object(candidate_object).is_some() {
+        let class = ObjC::read_isa(candidate_object, &env.mem);
+        let class_name = env.objc.get_class_name(class);
+        log!(
+            "pthread_create ownership diagnostic: thread {} starts at {:?} with Objective-C user_data {:?} (class {:?})",
+            thread_id,
+            start_routine,
+            candidate_object,
+            class_name,
+        );
+    }
 
     let opaque = env.mem.alloc_and_write(OpaqueThread {
         magic: MAGIC_THREAD,

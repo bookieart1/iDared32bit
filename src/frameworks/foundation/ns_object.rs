@@ -17,6 +17,7 @@
 use super::ns_string::{from_rust_string, to_rust_string};
 use super::{ns_key_value_observing, NSTimeInterval, NSUInteger};
 use crate::abi::GuestFunction;
+use crate::cpu::Cpu;
 use crate::frameworks::foundation::ns_run_loop::{
     add_perform_request, cancel_perform_requests, run_loop_for_thread,
 };
@@ -160,13 +161,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)retain {
     log_dbg!("[{:?} retain]", this);
     if !env.objc.has_static_lifetime(this) {
-        env.objc.increment_refcount(this, &env.mem);
+        env.objc.increment_refcount(this, &env.mem, env.current_thread);
     }
     this
 }
 - (())release {
     log_dbg!("[{:?} release]", this);
-    if !env.objc.has_static_lifetime(this) && env.objc.decrement_refcount(this) {
+    let regs = env.cpu.regs();
+    let (pc, lr) = (regs[Cpu::PC], regs[Cpu::LR]);
+    if !env.objc.has_static_lifetime(this)
+        && env
+            .objc
+            .decrement_refcount(this, env.current_thread, pc, lr)
+    {
         () = msg![env; this dealloc];
     }
 }

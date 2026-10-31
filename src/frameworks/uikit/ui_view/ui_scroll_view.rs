@@ -22,6 +22,9 @@ pub struct UIScrollViewHostObject {
     superclass: super::UIViewHostObject,
     /// UIScrollViewDelegate, weak reference
     delegate: id,
+    delays_content_touches: bool,
+    can_cancel_content_touches: bool,
+    bounces: bool,
     scroll_enabled: bool,
     dragging: bool,
     content_offset: CGPoint,
@@ -33,6 +36,9 @@ impl Default for UIScrollViewHostObject {
         UIScrollViewHostObject {
             superclass: Default::default(),
             delegate: nil,
+            delays_content_touches: true,
+            can_cancel_content_touches: true,
+            bounces: true,
             scroll_enabled: true,
             dragging: false,
             content_offset: CGPoint { x: 0.0, y: 0.0 },
@@ -62,11 +68,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIScrollViewHostObject>(this).delegate = delegate;
 }
 
-- (())setDelaysContentTouches:(id)_delay_content_touches{
-    // TODO
+- (bool)delaysContentTouches {
+    env.objc.borrow::<UIScrollViewHostObject>(this).delays_content_touches
 }
-- (())setBounces:(id)_bounces {
-    // TODO
+- (())setDelaysContentTouches:(bool)delays_content_touches {
+    env.objc.borrow_mut::<UIScrollViewHostObject>(this).delays_content_touches = delays_content_touches;
+}
+
+- (bool)canCancelContentTouches {
+    env.objc.borrow::<UIScrollViewHostObject>(this).can_cancel_content_touches
+}
+- (())setCanCancelContentTouches:(bool)can_cancel_content_touches {
+    env.objc.borrow_mut::<UIScrollViewHostObject>(this).can_cancel_content_touches = can_cancel_content_touches;
+}
+
+- (bool)bounces {
+    env.objc.borrow::<UIScrollViewHostObject>(this).bounces
+}
+- (())setBounces:(bool)bounces {
+    env.objc.borrow_mut::<UIScrollViewHostObject>(this).bounces = bounces;
 }
 
 - (bool)scrollEnabled {

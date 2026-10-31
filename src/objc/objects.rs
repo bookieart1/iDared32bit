@@ -22,7 +22,7 @@
 
 use super::{Class, ClassHostObject};
 use crate::mem::{guest_size_of, GuestUSize, Mem, MutPtr, Ptr, SafeRead};
-use crate::Environment;
+use crate::{Environment, ThreadId};
 use std::any::Any;
 use std::num::NonZeroU32;
 
@@ -67,6 +67,17 @@ pub(super) struct HostObjectEntry {
     /// after its final release while its `dealloc` chain is running.
     static_lifetime: bool,
     refcount: Option<NonZeroU32>,
+    /// Where a dynamic object entered its deallocation chain. This is retained
+    /// only until `dealloc` removes the object and is used to diagnose invalid
+    /// cross-thread retains without weakening Objective-C lifetime rules.
+    zero_refcount_origin: Option<ZeroRefcountOrigin>,
+}
+
+#[derive(Copy, Clone, Debug)]
+struct ZeroRefcountOrigin {
+    thread: ThreadId,
+    pc: u32,
+    lr: u32,
 }
 
 /// Type for host objects.
@@ -179,6 +190,7 @@ impl super::ObjC {
                 host_object,
                 static_lifetime: refcount.is_none(),
                 refcount,
+                zero_refcount_origin: None,
             },
         );
         ptr
@@ -236,6 +248,7 @@ impl super::ObjC {
                 host_object,
                 static_lifetime: true,
                 refcount: None,
+                zero_refcount_origin: None,
             },
         );
     }
@@ -333,7 +346,7 @@ impl super::ObjC {
     /// Increase the refcount of a reference-counted object. Do not call this
     /// directly unless you're implementing `release` on `NSObject`. That method
     /// may be overridden.
-    pub fn increment_refcount(&mut self, object: id, mem: &Mem) {
+    pub fn increment_refcount(&mut self, object: id, mem: &Mem, current_thread: ThreadId) {
         // Preserve enough identity in this diagnostic to find the real owner
         // of a use-during-dealloc bug from a physical-device log. The pointer
         // alone is not actionable and is routinely reused between launches.
@@ -347,9 +360,16 @@ impl super::ObjC {
             "Attempt to increment refcount on static-lifetime object {object:?}!"
         );
         let Some(refcount) = entry.refcount.as_mut() else {
+            let origin = entry.zero_refcount_origin.expect(
+                "Dynamic zero-refcount object is missing its deallocation origin",
+            );
             panic!(
-                "Attempt to increment refcount on zero-refcount object {object:?} (class {class_name:?}, host type {})!",
-                entry.host_object.type_name()
+                "Attempt to increment refcount on zero-refcount object {object:?} (class {class_name:?}, host type {}): first reached zero on thread {} at guest PC {:#x}, LR {:#x}; retain attempted on thread {}!",
+                entry.host_object.type_name(),
+                origin.thread,
+                origin.pc,
+                origin.lr,
+                current_thread,
             );
         };
         *refcount = refcount.checked_add(1).unwrap();
@@ -362,7 +382,13 @@ impl super::ObjC {
     /// If the return value is `true`, the object needs to be deallocated. Send
     /// it the `dealloc` message.
     #[must_use]
-    pub fn decrement_refcount(&mut self, object: id) -> bool {
+    pub fn decrement_refcount(
+        &mut self,
+        object: id,
+        current_thread: ThreadId,
+        pc: u32,
+        lr: u32,
+    ) -> bool {
         let Some(entry) = self.objects.get_mut(&object) else {
             panic!("No entry found for object {object:?}, it may have already been deallocated");
         };
@@ -375,6 +401,11 @@ impl super::ObjC {
         };
         if refcount.get() == 1 {
             entry.refcount = None;
+            entry.zero_refcount_origin = Some(ZeroRefcountOrigin {
+                thread: current_thread,
+                pc,
+                lr,
+            });
             true
         } else {
             *refcount = NonZeroU32::new(refcount.get() - 1).unwrap();
@@ -389,6 +420,7 @@ impl super::ObjC {
             host_object,
             static_lifetime,
             refcount,
+            zero_refcount_origin: _,
         } = self.objects.remove(&object).unwrap();
 
         assert!(
