@@ -190,7 +190,8 @@ fn SCNetworkReachabilitySetCallback(
             MutVoidPtr::null()
         } else {
             let context: SCNetworkReachabilityContext = env.mem.read(context.cast());
-            assert_eq!(context.version, 0);
+            let version = context.version;
+            assert_eq!(version, 0);
             context.info
         };
         Some((callout, info))
