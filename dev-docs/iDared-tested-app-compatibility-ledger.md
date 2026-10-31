@@ -2,8 +2,8 @@
 
 Last reconciled: October 31, 2026
 Latest device-tested checkpoint: **iDared Dev 1.67** (`9159a0a6`)
-Latest built checkpoint: **iDared Dev 1.67** (`9159a0a6`)
-Current activity: **Dev 1.67 removed the intended B'Blast and Addicus blockers and exposed later shared contracts. Its one-shot Blot capture identified the emulator's pathological first-pivot `qsort` while the slowdown was active. Dev 1.68 is implementing those two APIs and a bounded general `qsort` correction; it is not yet built or device-tested.**
+Latest built checkpoint: **iDared Dev 1.68** (`28368024`)
+Current activity: **Dev 1.68 implements the two shared contracts exposed by B'Blast and Addicus and replaces the pathological `qsort` identified during Blot's slowdown. Hosted library tests and the unsigned iPhone package build pass; physical-device verification is pending.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -2399,7 +2399,7 @@ arguments, and Blot's transition is tied to a specific emulator algorithm.
 No memory fault was suppressed and no app-specific response is justified by
 this result.
 
-## Dev 1.68 shared contracts and `qsort` correction — implementation pending
+## Dev 1.68 shared contracts and `qsort` correction — built, device test pending
 
 This batch is intentionally limited to the three boundaries established by
 the verified Dev 1.67 device log.
@@ -2433,11 +2433,41 @@ Unit coverage checks legacy ARM lookup selection/rejection, PNG signature and
 premultiplied-pixel round-trip, ordinary `qsort` ordering, and fewer than
 50,000 comparisons for Blot-sized sorted, reversed and equal inputs. The prior
 algorithm requires roughly 918,000 comparisons for its sorted worst case.
-Local formatting and whitespace checks pass. Local Rust compilation reaches
-dependency compilation but cannot link build scripts because this workspace
-lacks MSVC `link.exe`; hosted macOS/Windows compilation and tests are required
-before any IPA is produced. Predictions are narrow: B'Blast and Addicus should
+Local whitespace checks pass. The local workspace lacks MSVC `link.exe`, so
+compilation was validated in the hosted development-branch library tests
+instead. Predictions are narrow: B'Blast and Addicus should
 either advance to their next independent boundary or become usable; Blot's
 Challenges→Back collapse should be eliminated or materially reduced if this
 captured sort is causal. A different result must revise the model rather than
 add per-app timing hacks.
+
+### Dev 1.68 source, hosted validation and package verification
+
+- Source commit: `2836802443e634b3ab0f77428648f3fd612a374b`.
+- Lint/test workflow `41221870862` completed successfully. Android lint passed;
+  the macOS and Windows development-branch library-test steps passed. The
+  workflow's release-only full-app test and legacy guest/sanity steps were
+  skipped, as configured for this development branch; formatting was also a
+  configured skip rather than an independently executed pass.
+- Unsigned-iPhone workflow `41221870864` completed successfully, including
+  iOS compilation, separate development identity verification, packaging and
+  artifact upload.
+- Artifact `13049823496`,
+  `iDared32bit-dev-unsigned-2836802443e634b3ab0f77428648f3fd612a374b`, is
+  19,832,427 bytes. Its downloaded ZIP SHA-256 exactly matches GitHub's
+  recorded artifact digest:
+  `72341B3AF005F12FAD901C27E7809726FDF4C3799E0E951CEDECCE158CCE2FAE`.
+- The extracted IPA is 19,880,488 bytes with SHA-256
+  `D6AF7754DD30AB7CB193F454A93C18EF21DFD337386EE599E5B31FC282A6F7E3`.
+  It contains 36 archive entries, identifies as
+  `com.bookieart1.idared32bit.dev` / `iDared Dev`, embeds source prefix
+  `28368024`, and contains neither `_CodeSignature` nor
+  `embedded.mobileprovision`.
+- Local handoff: `outputs/iDared-Dev-1.68.ipa`.
+
+Focused device test: install over the development app without clearing its
+container; launch B'Blast and interact briefly if it advances; launch Addicus
+and interact briefly if it advances; in Blot run Classic for about 15 seconds,
+return to the menu, open Challenges, press Back and wait about 30 seconds; then
+use Spoing as the control by completing one level, exiting with emulator Home,
+reopening and confirming progress. Return the combined log and visible results.
