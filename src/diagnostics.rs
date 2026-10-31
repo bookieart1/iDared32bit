@@ -4,8 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! Opt-in, bounded flight recorder. Recording never calls guest code, formats
-//! text, allocates, writes logs, or changes guest state. This records boundaries,
-//! not instructions, and is not proof that a nil return is an error.
+//! text, allocates, writes logs, or changes guest state. This records
+//! boundaries, not instructions, and is not proof that a nil return is an
+//! error.
 
 use crate::mem::{ConstVoidPtr, Mem};
 use crate::Environment;

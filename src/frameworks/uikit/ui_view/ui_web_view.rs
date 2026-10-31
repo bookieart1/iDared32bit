@@ -63,7 +63,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())loadHTMLString:(id)html baseURL:(id)base_url { // NSString*, NSURL*
     // UIWebView is intentionally still a no-renderer implementation: touchHLE
     // does not embed WebKit, so it cannot build a DOM, run JavaScript, or claim
-    // that a frame finished loading. Exporting the real selector is nevertheless
+    // that a frame finished loading. Exporting the real selector is still
     // important. Framework wrappers commonly obtain its method signature and
     // invoke it through NSInvocation before any rendering is relevant.
     let length: NSUInteger = if html == nil {
