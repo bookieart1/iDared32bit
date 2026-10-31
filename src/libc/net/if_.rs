@@ -26,13 +26,16 @@ fn if_nameindex(_env: &mut Environment) -> ConstPtr<if_nameindex> {
 }
 
 fn if_nametoindex(env: &mut Environment, ifname: ConstPtr<u8>) -> u32 {
-    let Ok(ifname) = env.mem.cstr_at_utf8(ifname) else {
-        set_errno(env, ENXIO);
-        return 0;
+    let ifname = match env.mem.cstr_at_utf8(ifname) {
+        Ok(ifname) => ifname.to_owned(),
+        Err(_) => {
+            set_errno(env, ENXIO);
+            return 0;
+        }
     };
     let index = INTERFACES
         .iter()
-        .find_map(|&(name, index)| (name == ifname).then_some(index))
+        .find_map(|&(name, index)| (name == ifname.as_str()).then_some(index))
         .unwrap_or(0);
     if index == 0 {
         set_errno(env, ENXIO);
