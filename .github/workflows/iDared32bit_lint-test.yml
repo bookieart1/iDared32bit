@@ -6,7 +6,7 @@ name: Lint and test
 
 on:
   push:
-    branches: [ "idared32bit" ]
+    branches: [ "idared32bit", "ci/unsigned-ipa-baseline" ]
   pull_request:
     branches: [ "idared32bit" ]
   workflow_dispatch:
