@@ -119,6 +119,38 @@ impl Image {
         }
     }
 
+    /// Encode this image as a standard PNG byte stream.
+    ///
+    /// touchHLE stores RGBA pixels with premultiplied alpha, while PNG stores
+    /// straight alpha. Convert the color channels before passing them to the
+    /// encoder so translucent pixels retain their intended appearance.
+    pub fn to_png(&self) -> Option<Vec<u8>> {
+        let mut straight_rgba = self.pixels().to_vec();
+        for pixel in straight_rgba.chunks_exact_mut(4) {
+            let alpha = u32::from(pixel[3]);
+            if alpha == 0 {
+                pixel[..3].fill(0);
+            } else if alpha < 255 {
+                for channel in &mut pixel[..3] {
+                    let value = (u32::from(*channel) * 255 + alpha / 2) / alpha;
+                    *channel = value.min(255) as u8;
+                }
+            }
+        }
+
+        let (width, height) = self.dimensions();
+        let mut png = Vec::new();
+        let context: *mut std::ffi::c_void = (&mut png as *mut Vec<u8>).cast();
+        let encoded = write_png(
+            context,
+            width.try_into().ok()?,
+            height.try_into().ok()?,
+            &straight_rgba,
+            (width.checked_mul(4)?).try_into().ok()?,
+        );
+        (encoded != 0).then_some(png)
+    }
+
     fn pixels_mut(&mut self) -> &mut [u8] {
         match self.pixels {
             PixelStore::Vec(ref mut vec) => vec,
@@ -227,6 +259,22 @@ impl Clone for Image {
         // Note: implicitly converts pixel storage from StbImage to Vec
         // (if needed)
         Image::from_pixel_vec(self.pixels().to_vec(), self.dimensions)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Image, PNG_MAGIC_NUMBER};
+
+    #[test]
+    fn png_encoding_round_trips_premultiplied_pixels() {
+        let image = Image::from_pixel_vec(vec![64, 32, 16, 128], (1, 1));
+        let png = image.to_png().unwrap();
+        assert!(png.starts_with(&PNG_MAGIC_NUMBER));
+
+        let decoded = Image::from_bytes(&png).unwrap();
+        assert_eq!(decoded.dimensions(), (1, 1));
+        assert_eq!(decoded.pixels(), [64, 32, 16, 128]);
     }
 }
 

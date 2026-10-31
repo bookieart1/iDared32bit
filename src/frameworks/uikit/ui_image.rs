@@ -261,26 +261,40 @@ fn UIImageWriteToSavedPhotosAlbum(
     }
 }
 
+fn UIImagePNGRepresentation(env: &mut Environment, image: id) -> id {
+    if image == nil {
+        return nil;
+    }
+
+    let cg_image: CGImageRef = msg![env; image CGImage];
+    if cg_image == nil {
+        return nil;
+    }
+    let Some(png) = cg_image::borrow_image(&env.objc, cg_image).to_png() else {
+        log!("Warning: UIImagePNGRepresentation could not encode the image");
+        return nil;
+    };
+
+    let length = png.len().try_into().unwrap();
+    let guest_bytes = env.mem.alloc(length);
+    env.mem
+        .bytes_at_mut(guest_bytes.cast(), length)
+        .copy_from_slice(&png);
+    msg_class![env; NSData dataWithBytesNoCopy:guest_bytes length:length]
+}
+
 /// Helper function to simplify UIImageWriteToSavedPhotosAlbum
 /// Allows several failure points to do an early return
 fn write_to_saved_photos_album_inner(env: &mut Environment, cg_image: CGImageRef) {
-    let (w, h, rgba, stride) = {
+    let (w, h, png_data) = {
         let img = cg_image::borrow_image(&env.objc, cg_image);
         let (w_u32, h_u32) = img.dimensions();
-        let stride = w_u32 as usize * 4;
-        let rgba = img.pixels().to_vec();
-        (w_u32 as i32, h_u32 as i32, rgba, stride as i32)
+        let Some(png_data) = img.to_png() else {
+            log!("Warning: UIImageWriteToSavedPhotosAlbum could not encode PNG");
+            return;
+        };
+        (w_u32, h_u32, png_data)
     };
-
-    let mut png_data: Vec<u8> = Vec::new();
-    let ctx_ptr: *mut std::ffi::c_void = (&mut png_data as *mut Vec<u8>).cast();
-
-    let ok = crate::image::write_png(ctx_ptr, w, h, &rgba, stride);
-
-    if ok == 0 {
-        log!("Warning: UIImageWriteToSavedPhotosAlbum: stb_image_write failed to encode PNG");
-        return;
-    }
     let base = crate::paths::user_data_base_path();
     let album_dir = base.join(crate::paths::PHOTO_ALBUM_DIR);
 
@@ -334,5 +348,7 @@ fn write_to_saved_photos_album_inner(env: &mut Environment, cg_image: CGImageRef
     );
 }
 
-pub const FUNCTIONS: FunctionExports =
-    &[export_c_func!(UIImageWriteToSavedPhotosAlbum(_, _, _, _))];
+pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(UIImagePNGRepresentation(_)),
+    export_c_func!(UIImageWriteToSavedPhotosAlbum(_, _, _, _)),
+];

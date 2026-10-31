@@ -53,36 +53,91 @@ pub fn qsort_generic<T, Compare, Swap>(
     if nitems < 2 {
         return;
     }
-    qsort_rec(user_data, compar, swap, 0, nitems - 1);
+
+    // Use heapsort so already sorted, reverse-sorted, and duplicate-heavy
+    // inputs retain O(n log n) behavior. Guest comparison functions are much
+    // more expensive than native comparisons, so qsort's former first-pivot
+    // quicksort caused severe stalls on common nearly sorted inputs.
+    for root in (0..nitems / 2).rev() {
+        sift_down(user_data, compar, swap, root, nitems);
+    }
+    for end in (1..nitems).rev() {
+        swap(user_data, 0, end);
+        sift_down(user_data, compar, swap, 0, end);
+    }
 }
 
-fn qsort_rec<T, Compare, Swap>(
+fn sift_down<T, Compare, Swap>(
     user_data: &mut T,
     compar: &mut Compare, // int (*compar)(const void *, const void*))
     swap: &mut Swap,
-    low: u32,
-    hi: u32,
+    mut root: u32,
+    end: u32,
 ) where
     Compare: FnMut(&mut T, u32, u32) -> i32,
     Swap: FnMut(&mut T, u32, u32),
 {
-    if low >= hi {
-        return;
-    }
-    // TODO: use median selection
-    let pivot = low;
-    let mut separator = low + 1;
-    for i in low + 1..=hi {
-        if compar(user_data, i, pivot) < 0 {
-            swap(user_data, i, separator);
-            separator += 1;
+    while root < end / 2 {
+        let mut child = root * 2 + 1;
+        if child + 1 < end && compar(user_data, child, child + 1) < 0 {
+            child += 1;
         }
+        if compar(user_data, root, child) >= 0 {
+            return;
+        }
+        swap(user_data, root, child);
+        root = child;
     }
-    swap(user_data, pivot, separator - 1);
-    if separator > 1 {
-        qsort_rec(user_data, compar, swap, low, separator - 2);
-    }
-    qsort_rec(user_data, compar, swap, separator, hi);
 }
 
 pub const FUNCTIONS: FunctionExports = &[export_c_func!(qsort(_, _, _, _))];
+
+#[cfg(test)]
+mod tests {
+    use super::qsort_generic;
+
+    struct SortData {
+        values: Vec<i32>,
+        comparisons: usize,
+    }
+
+    fn sort(values: Vec<i32>) -> SortData {
+        let mut data = SortData {
+            values,
+            comparisons: 0,
+        };
+        let len = data.values.len().try_into().unwrap();
+        qsort_generic(
+            &mut data,
+            len,
+            &mut |data, i, j| {
+                data.comparisons += 1;
+                match data.values[i as usize].cmp(&data.values[j as usize]) {
+                    std::cmp::Ordering::Less => -1,
+                    std::cmp::Ordering::Equal => 0,
+                    std::cmp::Ordering::Greater => 1,
+                }
+            },
+            &mut |data, i, j| data.values.swap(i as usize, j as usize),
+        );
+        data
+    }
+
+    #[test]
+    fn orders_values() {
+        let data = sort(vec![5, -2, 9, 5, 0, 1, -8]);
+        assert_eq!(data.values, [-8, -2, 0, 1, 5, 5, 9]);
+    }
+
+    #[test]
+    fn bounded_comparisons_for_ordered_inputs() {
+        const LEN: i32 = 1356;
+        let sorted = sort((0..LEN).collect());
+        let reversed = sort((0..LEN).rev().collect());
+        let equal = sort(vec![7; LEN as usize]);
+
+        assert!(sorted.comparisons < 50_000, "{}", sorted.comparisons);
+        assert!(reversed.comparisons < 50_000, "{}", reversed.comparisons);
+        assert!(equal.comparisons < 50_000, "{}", equal.comparisons);
+    }
+}

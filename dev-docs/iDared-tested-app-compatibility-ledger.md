@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: October 31, 2026
-Latest device-tested checkpoint: **iDared Dev 1.66** (`288a5e40`)
-Latest built checkpoint: **iDared Dev 1.66** (`288a5e40`)
-Current activity: **Dev 1.66 validated the bounded flight recorder on device. It decoded B'Blast's link-interface query, recovered Addicus's missing `UIWebView` method as the null producer, measured Blot's sustained presentation-rate collapse without run-loop-source growth, and left Spoing gameplay/save/reopen working in the tested scope. No compatibility correction or follow-up build has been started from this result.**
+Latest device-tested checkpoint: **iDared Dev 1.67** (`9159a0a6`)
+Latest built checkpoint: **iDared Dev 1.67** (`9159a0a6`)
+Current activity: **Dev 1.67 removed the intended B'Blast and Addicus blockers and exposed later shared contracts. Its one-shot Blot capture identified the emulator's pathological first-pivot `qsort` while the slowdown was active. Dev 1.68 is implementing those two APIs and a bounded general `qsort` correction; it is not yet built or device-tested.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -2378,3 +2378,66 @@ brief interaction if it advances; Addicus launch and brief interaction if it
 advances; Blot Classic about 15 seconds, menu, Challenges, Back, wait about 20
 seconds after the slowdown and use emulator Home; Spoing brief play, emulator
 Home, reopen and verify progress. Return one combined log and visible results.
+
+### Dev 1.67 device result: all three intended boundaries advanced
+
+The combined device log identifies source `9159a0a6` and workflow
+`41219859529`, matching the independently verified Dev 1.67 IPA. The requested
+B'Blast, Addicus and Blot sequences were run. Spoing was omitted in this pass;
+its earlier Dev 1.66 control result remains historical evidence, not a new
+regression pass.
+
+| App | User-visible result | Decisive evidence | Status / next contract |
+|---|---|---|---|
+| B'Blast | Unchanged brief audio fragment, black screen, then in-app termination. | Both launches consume `if_nametoindex("en0")` and the new route-interface query. They next stop at `_NXGetArchInfoFromCpuType`; terminal arguments are CPU type 12 and subtype 9, the historical ARM/ARMv7 pair. | **Advanced internally, still blocked.** The virtual-link record was accepted. The next missing contract is the shared Mach-O architecture lookup, not another networking guess. |
+| Addicus | A publisher logo appeared very briefly for the first time, then the app terminated. | `UIWebView -loadHTMLString:baseURL:` is accepted and the old nil method-signature path is absent. Startup proceeds through audio setup and stops at `_UIImagePNGRepresentation` with a non-nil `UIImage`. | **Visible and internal advance, still blocked.** The partial UIWebView surface did what was predicted without pretending to render HTML. The next missing contract is general UIKit PNG serialization. |
+| Blot | The requested Classic→menu→Challenges→Back sequence still triggers the severe persistent audiovisual slowdown. | The one-shot capture froze at 56.332 s after a 275 ms first slow presentation gap. It records `qsort` over 1,356 four-byte elements with guest comparator `0xef61`; later five-second progress samples repeatedly sit inside that comparator. Source inspection shows the emulator's current recursive quicksort always selects the first element, giving quadratic guest callbacks on sorted, reverse-sorted or equal-heavy input. | **High-confidence general emulator bottleneck; device correction still unverified.** Replace the pathological algorithm, not Blot timing or rendering. The capture does not prove that no later Blot workload exists. |
+
+The diagnostic infrastructure again improved causal resolution: each old
+terminal point disappeared, the next two missing functions are named with
+arguments, and Blot's transition is tied to a specific emulator algorithm.
+No memory fault was suppressed and no app-specific response is justified by
+this result.
+
+## Dev 1.68 shared contracts and `qsort` correction — implementation pending
+
+This batch is intentionally limited to the three boundaries established by
+the verified Dev 1.67 device log.
+
+- **B'Blast / Mach-O architecture lookup (verified-contract candidate):**
+  implement `NXGetArchInfoFromCpuType` for the legacy 32-bit ARM family and
+  known ARMv4T, ARMv5, ARMv6, XScale, ARMv7, ARMv7F, ARMv7S and ARMv7K
+  subtypes. Returned guest
+  `NXArchInfo` structures and strings have stable process lifetime, include
+  the historical names/descriptions and little-endian value, and are cached.
+  `CPU_SUBTYPE_MULTIPLE` selects the ARM family; unknown CPU types/subtypes
+  still return null as Apple's contract specifies. The implementation is not
+  keyed to B'Blast and does not claim the other `mach-o/arch.h` APIs.
+- **Addicus / PNG representation (verified-contract candidate):** implement
+  `UIImagePNGRepresentation` for the decoded bitmap-backed `UIImage` objects
+  touchHLE already supports. It returns autoreleased `NSData`, returns nil for
+  nil or absent image data, and uses the existing PNG encoder. A shared image
+  helper converts touchHLE's premultiplied RGBA storage to PNG straight alpha;
+  the existing saved-photo path now reuses the same encoding rather than
+  maintaining a second implementation. This does not add unsupported image
+  sources, JPEG encoding or a WebKit renderer.
+- **Blot / standard-library performance and stack safety:** replace the
+  recursive first-pivot quicksort with iterative heapsort. C `qsort` does not
+  promise stability or comparator order, while heapsort preserves the required
+  ordering contract and guarantees O(n log n) comparisons for the ordered and
+  duplicate-heavy inputs that made the former implementation quadratic. The
+  change is general and removes unbounded recursion; it contains no Blot check,
+  frame-rate override or scheduler accommodation.
+
+Unit coverage checks legacy ARM lookup selection/rejection, PNG signature and
+premultiplied-pixel round-trip, ordinary `qsort` ordering, and fewer than
+50,000 comparisons for Blot-sized sorted, reversed and equal inputs. The prior
+algorithm requires roughly 918,000 comparisons for its sorted worst case.
+Local formatting and whitespace checks pass. Local Rust compilation reaches
+dependency compilation but cannot link build scripts because this workspace
+lacks MSVC `link.exe`; hosted macOS/Windows compilation and tests are required
+before any IPA is produced. Predictions are narrow: B'Blast and Addicus should
+either advance to their next independent boundary or become usable; Blot's
+Challenges→Back collapse should be eliminated or materially reduced if this
+captured sort is causal. A different result must revise the model rather than
+add per-app timing hacks.

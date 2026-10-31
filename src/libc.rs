@@ -147,5 +147,6 @@ pub struct State {
     clocale: clocale::State,
     mach_vm: mach::vm_map::State,
     malloc: malloc::State,
+    mach_o: mach_o::State,
     mman: sys::mman::State,
 }
