@@ -424,11 +424,7 @@ fn glViewport(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height:
                     && (requested_width > drawable_width || requested_height > drawable_height)
                 {
                     log_once!(
-                        "Normalizing legacy iPad OpenGL viewport {}x{} to bound drawable {}x{}",
-                        width,
-                        height,
-                        drawable_width,
-                        drawable_height,
+                        "Normalizing a legacy iPad OpenGL viewport to the bound drawable size."
                     );
                     viewport_width = drawable_width;
                     viewport_height = drawable_height;
