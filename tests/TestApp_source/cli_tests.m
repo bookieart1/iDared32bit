@@ -193,6 +193,13 @@ int test_vsnprintf() {
     return -1;
   }
   free(str);
+  // Darwin ignores zero-padding for strings and uses spaces.
+  str = str_format("%05s", "test");
+  if (strcmp(str, " test") != 0) {
+    free(str);
+    return -101;
+  }
+  free(str);
   // Test %s NULL
   str = str_format("%s", NULL);
   if (strcmp(str, "(null)") != 0) {

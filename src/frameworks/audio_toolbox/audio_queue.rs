@@ -92,6 +92,8 @@ struct AudioQueueHostObject {
     /// For AAC and ALAC the app streams itself. [None] if not tried yet,
     /// `Some(None)` if the format couldn't be decoded.
     packet_decoder: Option<Option<PacketStreamDecoder>>,
+    /// Output format requested for pull-style offline rendering.
+    offline_render_format: Option<AudioStreamBasicDescription>,
 }
 
 /// Track whether the audio queue is meant to be running, in order to handle
@@ -229,6 +231,7 @@ pub fn AudioQueueNewOutput(
         packets: HashMap::new(),
         magic_cookie: None,
         packet_decoder: None,
+        offline_render_format: None,
     };
 
     let aq_ref = env.mem.alloc_and_write(OpaqueAudioQueue { _filler: 0 });
@@ -612,13 +615,61 @@ fn AudioQueueSetOfflineRenderFormat(
     }
 
     // Offline rendering changes the format of samples returned by
-    // AudioQueueOfflineRender; it does not change normal queue playback. Keep
-    // accepting the configuration so apps that use it for decoding or as a
-    // capability probe can continue to their next step.
+    // AudioQueueOfflineRender; it does not change normal queue playback.
     let format = env.mem.read(in_format);
+    if format.format_id != kAudioFormatLinearPCM || format.bytes_per_frame == 0 {
+        return kAudioQueueErr_InvalidDevice;
+    }
+    State::get(&mut env.framework_state)
+        .audio_queues
+        .get_mut(&in_aq)
+        .unwrap()
+        .offline_render_format = Some(format);
     log!(
-        "Warning: AudioQueueSetOfflineRenderFormat accepts the requested format, but offline rendering is not implemented yet: {:?}",
+        "AudioQueueSetOfflineRenderFormat accepted output format {:?}",
         format
+    );
+    0
+}
+
+fn AudioQueueOfflineRender(
+    env: &mut Environment,
+    in_aq: AudioQueueRef,
+    _in_timestamp: ConstPtr<AudioTimeStamp>,
+    io_buffer: AudioQueueBufferRef,
+    in_number_frames: u32,
+) -> OSStatus {
+    return_if_null!(in_aq);
+    if io_buffer.is_null() {
+        return kAudioQueueErr_InvalidBuffer;
+    }
+
+    let Some(format) = State::get(&mut env.framework_state)
+        .audio_queues
+        .get(&in_aq)
+        .and_then(|queue| queue.offline_render_format)
+    else {
+        return kAudioQueueErr_InvalidRunState;
+    };
+
+    let mut buffer = env.mem.read(io_buffer);
+    let requested_bytes = in_number_frames.saturating_mul(format.bytes_per_frame);
+    let bytes_to_write = requested_bytes.min(buffer.audio_data_bytes_capacity);
+    env.mem
+        .bytes_at_mut(buffer.audio_data.cast(), bytes_to_write)
+        .fill(0);
+    buffer.audio_data_byte_size = bytes_to_write;
+    env.mem.write(io_buffer, buffer);
+
+    // Decoding compressed Audio Queue input into an offline buffer is not yet
+    // available. Returning correctly-sized silence preserves timing and lets
+    // legacy middleware treat optional/menu audio as successfully rendered.
+    log_dbg!(
+        "AudioQueueOfflineRender({:?}, {:?}, {}) supplied {} bytes of silence",
+        in_aq,
+        io_buffer,
+        in_number_frames,
+        bytes_to_write
     );
     0
 }
@@ -1596,6 +1647,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueGetProperty(_, _, _, _)),
     export_c_func!(AudioQueueSetProperty(_, _, _, _)),
     export_c_func!(AudioQueueSetOfflineRenderFormat(_, _, _)),
+    export_c_func!(AudioQueueOfflineRender(_, _, _, _)),
     export_c_func!(AudioQueuePrime(_, _, _)),
     export_c_func!(AudioQueueStart(_, _)),
     export_c_func!(AudioQueuePause(_)),

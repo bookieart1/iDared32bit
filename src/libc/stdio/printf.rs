@@ -232,7 +232,9 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 } else {
                     assert!(length_modifier.is_none()); // TODO
                     let c_string: ConstPtr<u8> = args.next(env);
-                    assert!(pad_char == ' '); // TODO
+                    // Darwin accepts the otherwise-meaningless `0` flag for
+                    // strings and pads with spaces. Some older games generate
+                    // formats such as "%05s" dynamically.
                     if !c_string.is_null() {
                         if let Some(precision) = precision {
                             let str_len = strlen(env, c_string);

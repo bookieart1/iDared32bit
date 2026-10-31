@@ -5,6 +5,7 @@
  */
 
 use crate::dyld::{ConstantExports, FunctionExports, HostConstant};
+use crate::frameworks::foundation::ns_string;
 use crate::objc::{
     autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
@@ -60,6 +61,29 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)userInfo {
     env.objc.borrow::<NSExceptionHostObject>(this).user_info
+}
+
+- (())raise {
+    // Full Objective-C stack unwinding is not available yet. A number of old
+    // third-party SDKs construct and raise an exception for recoverable setup
+    // failures, then rely on their surrounding Objective-C handler. Let the
+    // guest continue at the call site rather than turning that SDK failure into
+    // an emulator crash.
+    let (name, reason) = {
+        let host_object = env.objc.borrow::<NSExceptionHostObject>(this);
+        (host_object.name, host_object.reason)
+    };
+    let name = if name == nil {
+        "(unnamed)".to_owned()
+    } else {
+        ns_string::to_rust_string(env, name)
+    };
+    let reason = if reason == nil {
+        "(no reason)".to_owned()
+    } else {
+        ns_string::to_rust_string(env, reason)
+    };
+    log!("Warning: ignoring raised NSException {:?}: {:?}", name, reason);
 }
 
 - (())dealloc {
