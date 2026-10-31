@@ -2,8 +2,8 @@
 
 Last reconciled: October 31, 2026
 Latest device-tested checkpoint: **iDared Dev 1.70** (`6ca62e0e`)
-Latest built checkpoint: **iDared Dev 1.70** (`6ca62e0e`)
-Current activity: **Dev 1.71 is a dedicated catalog-survey build in preparation. It enables the existing bounded flight recorder by default for every launched game without changing its limits, filters, crash policy or emulation behavior. No compatibility implementation is included. Hosted validation and package verification are pending.**
+Latest built checkpoint: **iDared Dev 1.71 Survey** (`50ece578`)
+Current activity: **Dev 1.71 Survey is built and independently package-verified. Its existing bounded flight recorder is enabled by default for every launched game; no compatibility implementation is included. The ordinary source default was restored to off in `1b0328f0`, while the verified survey IPA retains the enabled `50ece578` source. Physical-device calibration and the page-by-page catalog survey are pending.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -2769,3 +2769,45 @@ Monsters, plus previously repaired Spirits, Bounce and Blot, should precede the
 full catalog pass. The source switch will be restored to `false` in a separate
 `[skip ci]` commit immediately after the survey artifact is downloaded and
 verified, so later ordinary builds do not inherit universal diagnostics.
+
+### Dev 1.71 hosted validation, package verification and source restoration
+
+- Survey source commit `50ece578ceb83d940cf7fc7da34949fc15d7f41a`
+  triggered unsigned-iPhone workflow `41250258745` (run 116). Its macOS job
+  `124682106527` completed successfully in 4m 28s after iOS compilation,
+  separate development-identity verification, unsigned packaging and artifact
+  upload.
+- Lint/test workflow `41250258575` (run 51) completed successfully. The macOS
+  and Windows development-branch library suites each ran 105 tests and passed
+  105/105 with zero failures. The bounded diagnostic reproducer also passed on
+  macOS. The allowed lint step still stops only at the two pre-existing long
+  comment lines in `src/libc/dlfcn.rs` and
+  `src/frameworks/foundation/ns_dictionary.rs`; clippy, rustdoc and Android
+  compilation therefore are not claimed. The release-only full-app test,
+  legacy sanity test and formatting steps were configured skips.
+- GitHub artifact `13060214082`,
+  `iDared32bit-dev-unsigned-50ece578ceb83d940cf7fc7da34949fc15d7f41a`,
+  downloaded as a 19,835,746-byte ZIP. Its SHA-256
+  `856B6570EF268F115D9D4BB9644565DED374C012C645589BF05F73D401E3EA17`
+  exactly matches GitHub's published digest.
+- The extracted `iDared-Dev-1.71-Survey.ipa` is 19,882,327 bytes with SHA-256
+  `5084F594ADBFE4D2665DB7A0FF44F70CD9CD1E682C09BC854B202499D3EE7D59`.
+  All 36 ZIP entries read successfully. The package identifies as
+  `com.bookieart1.idared32bit.dev` / `iDared Dev`, contains an unsigned arm64
+  executable, embeds source prefix `50ece57`, workflow `41250258745`, the
+  expected branch and repository, and contains neither `_CodeSignature` nor
+  `embedded.mobileprovision`. The executable contains the exact
+  `flight recorder v1 survey build: universal app coverage enabled` marker,
+  independently distinguishing this universal survey package from an ordinary
+  diagnostics-off build.
+- After the artifact was downloaded and independently verified, commit
+  `1b0328f09fde9cc7e646f39c9cc38d20779264b5` restored the ordinary source
+  switch to `false` with `[skip ci]`. That restoration does not alter the
+  already-built survey IPA, whose embedded source remains `50ece578`.
+
+Local handoff: `outputs/iDared-Dev-1.71-Survey.ipa`; complete package evidence
+is in `outputs/iDared-Dev-1.71-Survey.verification.json`. Physical-device
+behavior remains unverified. Calibrate first with Spoing, Paper Monsters,
+Spirits, Bounce and Blot. For the catalog pass, export a separate combined log
+after each app-picker page so the iOS logging buffer cannot erase early apps;
+normal exits should use emulator Home so the recorder emits its bounded dump.
