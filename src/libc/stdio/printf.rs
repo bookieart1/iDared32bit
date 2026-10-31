@@ -689,6 +689,22 @@ fn __sprintf_chk(
     sprintf(env, dest, format, args)
 }
 
+fn __vsnprintf_chk(
+    env: &mut Environment,
+    dest: MutPtr<u8>,
+    n: GuestUSize,
+    _flags: i32,
+    dest_len: GuestUSize,
+    format: ConstPtr<u8>,
+    args: VaList,
+) -> i32 {
+    // Darwin's checked variant guarantees that the caller cannot write beyond
+    // the compiler-known destination size. Preserve that bound even for old
+    // applications whose requested length is larger than the object itself.
+    let bounded_n = n.min(dest_len);
+    vsnprintf(env, dest, bounded_n, format, args)
+}
+
 fn sprintf(env: &mut Environment, dest: MutPtr<u8>, format: ConstPtr<u8>, args: DotDotDot) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -1350,6 +1366,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(vsnprintf_l(_, _, _, _, _)),
     export_c_func!(vsprintf(_, _, _)),
     export_c_func!(__sprintf_chk(_, _, _, _, _)),
+    export_c_func!(__vsnprintf_chk(_, _, _, _, _, _)),
     export_c_func!(sprintf(_, _, _)),
     export_c_func!(swprintf(_, _, _, _)),
     export_c_func!(vswprintf(_, _, _, _)),

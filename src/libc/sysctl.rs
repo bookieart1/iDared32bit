@@ -189,9 +189,7 @@ fn sysctl(
                 env.mem.read(name + 2),
                 env.mem.read(name + 3),
             );
-            if SysCtlNamePath::Length4(name0, name1, name2, name3)
-                == SysCtlNamePath::Length4(CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0)
-            {
+            if name0 == CTL_KERN && name1 == KERN_PROC {
                 // In some Unity games, mono initialization set-ups perf
                 // counters, which set-ups a shared memory area, which gets
                 // a list of all processes via sysctl() if shm_open() fails.
@@ -204,7 +202,9 @@ fn sysctl(
                 // area in the first place? This is left as an exercise for
                 // the reader.
                 set_errno(env, ENOENT);
-                log!("TODO: sysctl() for 'kern.proc.all', returning -1");
+                log!(
+                    "TODO: sysctl() for kern.proc query ({name2}, {name3}), returning -1"
+                );
                 return -1;
             }
             sysctl_generic(

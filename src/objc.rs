@@ -188,20 +188,60 @@ const CONSTANTS: ConstantExports = &[
     // and avoids a linker error for the integration tests.
     ("__objc_empty_vtable", HostConstant::NullPtr),
     ("__objc_empty_cache", HostConstant::NullPtr),
+    // Blocks use these addresses as isa markers. The runtime implementation
+    // does not need Objective-C class metadata for them, but they must be
+    // stable, distinct, non-null addresses so legacy Blocks ABI checks work.
+    (
+        "__NSConcreteStackBlock",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(0u8).cast().cast_const()),
+    ),
+    (
+        "__NSConcreteGlobalBlock",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(0u8).cast().cast_const()),
+    ),
+    (
+        "__NSConcreteMallocBlock",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(0u8).cast().cast_const()),
+    ),
 ];
 
 /// Block support is iOS 4+, but it seems like Block Runtime Helpers
 /// could still be called on even if minimal iOS version is set to 3.x?
 ///
 /// ref. <https://clang.llvm.org/docs/Block-ABI-Apple.html#runtime-helper-functions>
-fn _Block_object_dispose(_env: &mut Environment, object: ConstVoidPtr, flags: i32) {
-    // `BLOCK_FIELD_IS_BYREF` flag defines an on stack structure holding
-    // the __block variable. It is _probably_ safe to ignore.
-    // TODO: properly implement for block support
-    assert!(flags == 8); // BLOCK_FIELD_IS_BYREF
-    log!(
-        "Warning: Ignoring _Block_object_dispose({:?}, BLOCK_FIELD_IS_BYREF)",
-        object
+fn _Block_object_assign(
+    env: &mut Environment,
+    dest: MutPtr<ConstVoidPtr>,
+    object: ConstVoidPtr,
+    flags: i32,
+) {
+    // The low byte describes the captured field. Full block/byref copying is
+    // still TODO, but storing the captured pointer is enough for stack blocks
+    // that do not escape. Objective-C objects need the normal retain balance.
+    const BLOCK_FIELD_IS_OBJECT: i32 = 3;
+    let kind = flags & 0xff;
+    if kind == BLOCK_FIELD_IS_OBJECT && !object.is_null() {
+        retain(env, object.cast_mut().cast());
+    }
+    env.mem.write(dest, object);
+    log_dbg!(
+        "_Block_object_assign({:?}, {:?}, {:#x}) using minimal Blocks ABI support",
+        dest,
+        object,
+        flags
+    );
+}
+
+fn _Block_object_dispose(env: &mut Environment, object: ConstVoidPtr, flags: i32) {
+    const BLOCK_FIELD_IS_OBJECT: i32 = 3;
+    let kind = flags & 0xff;
+    if kind == BLOCK_FIELD_IS_OBJECT && !object.is_null() {
+        release(env, object.cast_mut().cast());
+    }
+    log_dbg!(
+        "_Block_object_dispose({:?}, {:#x}) using minimal Blocks ABI support",
+        object,
+        flags
     );
 }
 
@@ -243,5 +283,6 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(object_getClass(_)),
     export_c_func!(object_getClassName(_)),
     export_c_func!(sel_registerName(_)),
+    export_c_func!(_Block_object_assign(_, _, _)),
     export_c_func!(_Block_object_dispose(_, _)),
 ];

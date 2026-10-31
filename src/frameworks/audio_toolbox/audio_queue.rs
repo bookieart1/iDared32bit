@@ -94,6 +94,8 @@ struct AudioQueueHostObject {
     packet_decoder: Option<Option<PacketStreamDecoder>>,
     /// Output format requested for pull-style offline rendering.
     offline_render_format: Option<AudioStreamBasicDescription>,
+    /// Decoded PCM waiting to be copied into an offline-render buffer.
+    offline_render_data: VecDeque<u8>,
 }
 
 /// Track whether the audio queue is meant to be running, in order to handle
@@ -232,6 +234,7 @@ pub fn AudioQueueNewOutput(
         magic_cookie: None,
         packet_decoder: None,
         offline_render_format: None,
+        offline_render_data: VecDeque::new(),
     };
 
     let aq_ref = env.mem.alloc_and_write(OpaqueAudioQueue { _filler: 0 });
@@ -620,11 +623,12 @@ fn AudioQueueSetOfflineRenderFormat(
     if format.format_id != kAudioFormatLinearPCM || format.bytes_per_frame == 0 {
         return kAudioQueueErr_InvalidDevice;
     }
-    State::get(&mut env.framework_state)
+    let queue = State::get(&mut env.framework_state)
         .audio_queues
         .get_mut(&in_aq)
-        .unwrap()
-        .offline_render_format = Some(format);
+        .unwrap();
+    queue.offline_render_format = Some(format);
+    queue.offline_render_data.clear();
     log!(
         "AudioQueueSetOfflineRenderFormat accepted output format {:?}",
         format
@@ -655,23 +659,85 @@ fn AudioQueueOfflineRender(
     let mut buffer = env.mem.read(io_buffer);
     let requested_bytes = in_number_frames.saturating_mul(format.bytes_per_frame);
     let bytes_to_write = requested_bytes.min(buffer.audio_data_bytes_capacity);
-    env.mem
-        .bytes_at_mut(buffer.audio_data.cast(), bytes_to_write)
-        .fill(0);
-    buffer.audio_data_byte_size = bytes_to_write;
+
+    while State::get(&mut env.framework_state)
+        .audio_queues
+        .get(&in_aq)
+        .is_some_and(|queue| queue.offline_render_data.len() < bytes_to_write as usize)
+    {
+        let decoded = {
+            let queue = State::get(&mut env.framework_state)
+                .audio_queues
+                .get_mut(&in_aq)
+                .unwrap();
+            let Some(buffer_ref) = queue.buffer_queue.pop_front() else {
+                break;
+            };
+            let input = env.mem.read(buffer_ref);
+            let packets = queue.packets.remove(&buffer_ref).unwrap_or_default();
+            let input_bytes = env
+                .mem
+                .bytes_at(input.audio_data.cast(), input.audio_data_byte_size);
+            let mp3 = if queue.format.format_id == kAudioFormatMPEGLayer3 {
+                queue
+                    .mp3_decoder
+                    .get_or_insert_with(Mp3StreamDecoder::new)
+                    .decode(input_bytes)
+                    .map(|(pcm, _, _)| pcm)
+            } else {
+                None
+            };
+            let pcm = mp3.unwrap_or_else(|| {
+                if is_app_compressed(&queue.format, &packets) {
+                    decode_app_packets(queue, input_bytes, &packets).2
+                } else {
+                    decode_buffer(
+                        &env.mem,
+                        &queue.format,
+                        input.audio_data.cast(),
+                        input.audio_data_byte_size,
+                    )
+                    .2
+                }
+            });
+            queue.offline_render_data.extend(pcm);
+            (queue.callback_proc, queue.callback_user_data, buffer_ref)
+        };
+
+        let (callback, user_data, buffer_ref) = decoded;
+        let () = callback.call_from_host(env, (user_data, in_aq, buffer_ref));
+        if !State::get(&mut env.framework_state)
+            .audio_queues
+            .contains_key(&in_aq)
+        {
+            return kAudioQueueErr_InvalidRunState;
+        }
+    }
+
+    let queue = State::get(&mut env.framework_state)
+        .audio_queues
+        .get_mut(&in_aq)
+        .unwrap();
+    let produced = bytes_to_write.min(queue.offline_render_data.len() as u32);
+    let output = env.mem.bytes_at_mut(buffer.audio_data.cast(), produced);
+    for byte in output {
+        *byte = queue.offline_render_data.pop_front().unwrap();
+    }
+    buffer.audio_data_byte_size = produced;
     env.mem.write(io_buffer, buffer);
 
-    // Decoding compressed Audio Queue input into an offline buffer is not yet
-    // available. Returning correctly-sized silence preserves timing and lets
-    // legacy middleware treat optional/menu audio as successfully rendered.
     log_dbg!(
-        "AudioQueueOfflineRender({:?}, {:?}, {}) supplied {} bytes of silence",
+        "AudioQueueOfflineRender({:?}, {:?}, {}) decoded {} bytes",
         in_aq,
         io_buffer,
         in_number_frames,
-        bytes_to_write
+        produced
     );
-    0
+    if produced == 0 {
+        kAudioQueueErr_InvalidRunState
+    } else {
+        0
+    }
 }
 
 pub fn log_if_broken_audio_format(format: &AudioStreamBasicDescription) {
