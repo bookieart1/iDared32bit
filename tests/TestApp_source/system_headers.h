@@ -228,8 +228,14 @@ typedef double NSTimeInterval;
 + (instancetype)currentRunLoop;
 - (void)addPort:(NSPort *)port forMode:(NSString *)mode;
 - (void)removePort:(NSPort *)port forMode:(NSString *)mode;
+- (BOOL)runMode:(NSString *)mode beforeDate:(id)limitDate;
 @end
 extern NSString *const NSDefaultRunLoopMode;
+
+@interface NSDate : NSObject
++ (instancetype)dateWithTimeIntervalSinceNow:(NSTimeInterval)seconds;
+- (NSTimeInterval)timeIntervalSinceNow;
+@end
 
 @interface NSTimer : NSObject
 + (instancetype)timerWithTimeInterval:(NSTimeInterval)interval
@@ -251,6 +257,7 @@ extern NSString *const NSDefaultRunLoopMode;
 @end
 
 NSString *NSHomeDirectory(void);
+NSString *NSTemporaryDirectory(void);
 extern NSString *const NSFileType;
 extern NSString *const NSFileTypeDirectory;
 extern NSString *const NSFileTypeRegular;
@@ -285,6 +292,39 @@ typedef enum {
 
 @interface NSData : NSObject
 + (id)dataWithContentsOfURL:(NSURL *)url;
+- (const void *)bytes;
+- (NSUInteger)length;
+@end
+
+@interface NSMutableData : NSData
++ (instancetype)data;
+- (void)appendData:(NSData *)otherData;
+@end
+
+@interface NSError : NSObject
+@end
+
+@interface NSURLRequest : NSObject
++ (instancetype)requestWithURL:(NSURL *)url;
+- (NSURL *)URL;
+@end
+
+@interface NSURLResponse : NSObject
+- (NSURL *)URL;
+- (long long)expectedContentLength;
+@end
+
+@interface NSURLConnection : NSObject
++ (instancetype)connectionWithRequest:(NSURLRequest *)request
+                              delegate:(id)delegate;
++ (NSData *)sendSynchronousRequest:(NSURLRequest *)request
+                 returningResponse:(NSURLResponse **)response
+                             error:(NSError **)error;
+- (instancetype)initWithRequest:(NSURLRequest *)request
+                        delegate:(id)delegate
+                startImmediately:(BOOL)startImmediately;
+- (void)start;
+- (void)cancel;
 @end
 
 @interface NSCoder : NSObject

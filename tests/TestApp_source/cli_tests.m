@@ -4021,6 +4021,135 @@ int test_NSURL_path_components() {
   return 0;
 }
 
+@interface LocalFileConnectionDelegate : NSObject {
+@public
+  NSMutableData *receivedData;
+  NSURLResponse *receivedResponse;
+  int phase;
+  BOOL done;
+  BOOL failed;
+  BOOL orderError;
+}
+@end
+
+@implementation LocalFileConnectionDelegate
+- (instancetype)init {
+  self = [super init];
+  if (self)
+    receivedData = [[NSMutableData alloc] init];
+  return self;
+}
+- (void)connection:(NSURLConnection *)connection
+    didReceiveResponse:(NSURLResponse *)response {
+  (void)connection;
+  if (phase != 0)
+    orderError = YES;
+  phase = 1;
+  receivedResponse = [response retain];
+}
+- (void)connection:(NSURLConnection *)connection
+    didReceiveData:(NSData *)data {
+  (void)connection;
+  if (phase < 1 || phase > 2)
+    orderError = YES;
+  phase = 2;
+  [receivedData appendData:data];
+}
+- (void)connectionDidFinishLoading:(NSURLConnection *)connection {
+  (void)connection;
+  if (phase != 2)
+    orderError = YES;
+  phase = 3;
+  done = YES;
+}
+- (void)connection:(NSURLConnection *)connection
+    didFailWithError:(NSError *)error {
+  (void)connection;
+  (void)error;
+  failed = YES;
+  done = YES;
+}
+- (void)dealloc {
+  [receivedResponse release];
+  [receivedData release];
+  [super dealloc];
+}
+@end
+
+int test_NSURLConnection_local_file() {
+  static const unsigned char expected[] = {'l', 'o', 'c', 'a', 'l', '\0',
+                                           0xff, '\n'};
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+  NSString *path = [NSString
+      stringWithFormat:@"%@/touchhle-nsurlconnection-test.bin",
+                       NSTemporaryDirectory()];
+  FILE *file = fopen([path UTF8String], "wb");
+  if (!file) {
+    [pool drain];
+    return -1;
+  }
+  size_t written = fwrite(expected, 1, sizeof(expected), file);
+  int closeResult = fclose(file);
+  if (written != sizeof(expected) || closeResult != 0) {
+    remove([path UTF8String]);
+    [pool drain];
+    return -2;
+  }
+
+  NSURL *url = [NSURL fileURLWithPath:path];
+  NSURLRequest *request = [NSURLRequest requestWithURL:url];
+  NSURLResponse *response = nil;
+  NSError *error = nil;
+  NSData *data = [NSURLConnection sendSynchronousRequest:request
+                                       returningResponse:&response
+                                                   error:&error];
+  int result = 0;
+  if (data == nil || response == nil || error != nil)
+    result = -3;
+  else if ([data length] != sizeof(expected) ||
+           memcmp([data bytes], expected, sizeof(expected)) != 0)
+    result = -4;
+  else if (![[[response URL] path] isEqualToString:path] ||
+           [response expectedContentLength] != sizeof(expected))
+    result = -5;
+
+  LocalFileConnectionDelegate *delegate =
+      [[LocalFileConnectionDelegate alloc] init];
+  NSURLConnection *connection =
+      [NSURLConnection connectionWithRequest:request delegate:delegate];
+  if (result == 0 && connection == nil)
+    result = -6;
+
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:1.0];
+  while (result == 0 && !delegate->done && [deadline timeIntervalSinceNow] > 0)
+    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                             beforeDate:deadline];
+
+  if (result == 0 && !delegate->done)
+    result = -7;
+  else if (result == 0 && delegate->failed)
+    result = -8;
+  else if (result == 0 && delegate->orderError)
+    result = -9;
+  else if (result == 0 &&
+           ([delegate->receivedData length] != sizeof(expected) ||
+            memcmp([delegate->receivedData bytes], expected,
+                   sizeof(expected)) != 0))
+    result = -10;
+  else if (result == 0 &&
+           (![[[delegate->receivedResponse URL] path] isEqualToString:path] ||
+            [delegate->receivedResponse expectedContentLength] !=
+                sizeof(expected)))
+    result = -11;
+
+  if (!delegate->done)
+    [connection cancel];
+  [delegate release];
+  remove([path UTF8String]);
+  [pool drain];
+  return result;
+}
+
 int test_CFMutableDictionary_NullCallbacks() {
   CFMutableDictionaryRef dict = CFDictionaryCreateMutable(NULL, 0, NULL, NULL);
   if (dict == NULL) {
@@ -7821,6 +7950,7 @@ struct {
     FUNC_DEF(test_NSThread_exit_pthread_exit),
     FUNC_DEF(test_times_sysconf_clock_ticks),
     FUNC_DEF(test_NSURL_path_components),
+    FUNC_DEF(test_NSURLConnection_local_file),
     FUNC_DEF(test_CFMutableDictionary_NullCallbacks),
     FUNC_DEF(test_CFMutableDictionary_CustomCallbacks_PrimitiveTypes),
     FUNC_DEF(test_CFMutableDictionary_CustomCallbacks_CFTypes),

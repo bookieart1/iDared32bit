@@ -12,6 +12,7 @@ use super::ns_property_list_serialization::{
 use super::ns_string::{from_rust_string, get_static_str, to_rust_string};
 use super::{_nib_archive_decoder, ns_array, ns_keyed_unarchiver, ns_string, ns_url, NSUInteger};
 use crate::abi::{CallFromHost, GuestFunction, VaList};
+use crate::cpu::Cpu;
 use crate::frameworks::core_foundation::{CFHashCode, CFIndex};
 use crate::frameworks::foundation::ns_enumerator::{
     fast_enumeration_helper, NSFastEnumerationState,
@@ -881,7 +882,35 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setObject:(id)object
          forKey:(id)key {
     // TODO: raise NSInvalidArgumentException
-    assert_ne!(object, nil);
+    if object == nil {
+        let regs = env.cpu.regs();
+        let (pc, lr) = (regs[Cpu::PC], regs[Cpu::LR]);
+        let key_details = if key == nil {
+            "nil key".to_string()
+        } else if env.objc.get_host_object(key).is_none() {
+            format!("unregistered key pointer {key:?}")
+        } else {
+            let class = crate::objc::ObjC::read_isa(key, &env.mem);
+            let class_name = env
+                .objc
+                .try_get_class_name(class)
+                .unwrap_or("<unknown>")
+                .to_string();
+            let ns_string_class = env.objc.get_known_class("NSString", &mut env.mem);
+            if env.objc.class_is_subclass_of(class, ns_string_class) {
+                format!(
+                    "key {key:?}, class {class_name:?}, string {:?}",
+                    ns_string::to_rust_string(env, key),
+                )
+            } else {
+                format!("key {key:?}, class {class_name:?}")
+            }
+        };
+        panic!(
+            "NSMutableDictionary {this:?} rejected a nil object for {key_details}; guest thread {}, PC {pc:#010x}, LR {lr:#010x}",
+            env.current_thread,
+        );
+    }
     // TODO: raise NSInvalidArgumentException
     assert_ne!(key, nil);
     let mut host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
