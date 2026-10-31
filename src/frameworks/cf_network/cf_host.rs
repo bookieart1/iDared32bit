@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn named_host_reports_bounded_offline_failure() {
         let mut env = Environment::new_fake_for_test();
-        let name = ns_string::from_rust_string(&mut env, "analytics.example");
+        let name = ns_string::from_rust_string(&mut env, "analytics.example".to_string());
         let host = CFHostCreateWithName(&mut env, kCFAllocatorDefault, name);
 
         assert_ne!(host, nil);
