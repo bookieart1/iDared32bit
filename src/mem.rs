@@ -371,7 +371,8 @@ impl Mem {
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
-    /// panicking on failure. Only for use by [crate::gdb::GdbServer].
+    /// panicking on failure. Intended for debuggers and terminal diagnostics,
+    /// where a bad guest pointer must not obscure the original fault.
     pub fn get_bytes_fallible(&self, addr: ConstVoidPtr, count: GuestUSize) -> Option<&[u8]> {
         if addr.to_bits() < self.null_segment_size {
             return None;
@@ -381,7 +382,7 @@ impl Mem {
             .get(..count as usize)
     }
     /// Special version of [Self::bytes_at_mut] that returns [None] rather than
-    /// panicking on failure. Only for use by [crate::gdb::GdbServer].
+    /// panicking on failure. Intended for debuggers and terminal diagnostics.
     pub fn get_bytes_fallible_mut(
         &mut self,
         addr: ConstVoidPtr,

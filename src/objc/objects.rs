@@ -170,6 +170,18 @@ impl super::ObjC {
         mem.read(object).isa
     }
 
+    /// Read `isa` without panicking if the guest object's storage is invalid.
+    /// This is for terminal diagnostics only; normal Objective-C dispatch must
+    /// continue to reject invalid object pointers.
+    pub fn try_read_isa(object: id, mem: &Mem) -> Option<Class> {
+        let bytes = mem.get_bytes_fallible(
+            object.cast().cast_const(),
+            guest_size_of::<Class>(),
+        )?;
+        let bits = u32::from_le_bytes(bytes.try_into().ok()?);
+        Some(Ptr::from_bits(bits))
+    }
+
     fn alloc_object_inner(
         &mut self,
         isa: Class,

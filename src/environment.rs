@@ -1893,21 +1893,27 @@ impl Environment {
         for register in 0..=3 {
             let bits = self.cpu.regs()[register];
             let candidate: objc::id = mem::MutPtr::from_bits(bits);
-            if self.objc.get_host_object(candidate).is_some() {
-                let class = objc::ObjC::read_isa(candidate, &self.mem);
-                let class_name = self.objc.try_get_class_name(class).unwrap_or("<unknown>");
+            if let Some(host_object) = self.objc.get_host_object(candidate) {
+                let class_name = objc::ObjC::try_read_isa(candidate, &self.mem)
+                    .and_then(|class| self.objc.try_get_class_name(class))
+                    .unwrap_or("<unavailable>");
                 log_no_panic!(
-                    "{source} Objective-C candidate: R{register}={bits:#010x} class={class_name:?}"
+                    "{source} Objective-C candidate: R{register}={bits:#010x} class={class_name:?}, host_type={:?}",
+                    host_object.type_name(),
                 );
             }
         }
         let selector_ptr = mem::ConstPtr::<u8>::from_bits(self.cpu.regs()[1]);
-        if let Ok(selector) = self.mem.cstr_at_utf8(selector_ptr) {
-            log_no_panic!(
-                "{source} selector candidate: R1={:#010x} {:?}",
-                self.cpu.regs()[1],
-                selector
-            );
+        if let Some(bytes) = self.mem.get_bytes_fallible(selector_ptr.cast(), 128) {
+            if let Some(nul) = bytes.iter().position(|&byte| byte == 0) {
+                if let Ok(selector) = std::str::from_utf8(&bytes[..nul]) {
+                    log_no_panic!(
+                        "{source} selector candidate: R1={:#010x} {:?}",
+                        self.cpu.regs()[1],
+                        selector
+                    );
+                }
+            }
         }
     }
 

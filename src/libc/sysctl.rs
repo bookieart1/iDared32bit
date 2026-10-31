@@ -10,7 +10,7 @@ use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::libc::errno::{set_errno, ENOENT};
+use crate::libc::errno::{set_errno, EINVAL, ENOENT, ENOMEM};
 use crate::mem::{
     guest_size_of, ConstPtr, GuestUSize, MutPtr, MutVoidPtr, SafeRead, PAGE_SIZE,
 };
@@ -33,6 +33,17 @@ const KERN_OSVERSION: i32 = 65;
 
 // KERN_PROC
 const KERN_PROC_ALL: i32 = 0;
+const KERN_PROC_PID: i32 = 1;
+
+// 32-bit Darwin's `struct kinfo_proc` is 492 bytes. These offsets are the
+// stable beginning of `struct user32_extern_proc`, which is the first member:
+// `p_flag` at 16, `p_stat` at 20 and `p_pid` at 24.
+const USER32_KINFO_PROC_SIZE: GuestUSize = 492;
+const USER32_KINFO_PROC_FLAG_OFFSET: usize = 16;
+const USER32_KINFO_PROC_STAT_OFFSET: usize = 20;
+const USER32_KINFO_PROC_PID_OFFSET: usize = 24;
+const SRUN: u8 = 2;
+const EMULATED_PID: i32 = 1;
 
 // CTL_HW
 const HW_MACHINE: i32 = 1;
@@ -144,6 +155,68 @@ struct GuestTimeval {
 }
 unsafe impl SafeRead for GuestTimeval {}
 
+fn current_process_kinfo() -> [u8; USER32_KINFO_PROC_SIZE as usize] {
+    // XNU zero-initializes the whole record before filling known fields. In
+    // particular, p_flag remains clear because the emulated process is not
+    // being traced. Keep kernel-only pointers and unsupported accounting data
+    // zero rather than fabricating host process state.
+    let mut record = [0; USER32_KINFO_PROC_SIZE as usize];
+    record[USER32_KINFO_PROC_FLAG_OFFSET..USER32_KINFO_PROC_FLAG_OFFSET + 4]
+        .copy_from_slice(&0i32.to_le_bytes());
+    record[USER32_KINFO_PROC_STAT_OFFSET] = SRUN;
+    record[USER32_KINFO_PROC_PID_OFFSET..USER32_KINFO_PROC_PID_OFFSET + 4]
+        .copy_from_slice(&EMULATED_PID.to_le_bytes());
+    record
+}
+
+fn sysctl_kern_proc_pid(
+    env: &mut Environment,
+    pid: i32,
+    oldp: MutVoidPtr,
+    oldlenp: MutPtr<GuestUSize>,
+    newp: MutVoidPtr,
+    newlen: GuestUSize,
+) -> i32 {
+    if !newp.is_null() || newlen != 0 || oldlenp.is_null() {
+        set_errno(env, EINVAL);
+        return -1;
+    }
+
+    if pid != EMULATED_PID {
+        // A valid KERN_PROC_PID lookup for an absent process succeeds with no
+        // records, matching XNU's process iteration behavior.
+        env.mem.write(oldlenp, 0);
+        return 0;
+    }
+
+    if oldp.is_null() {
+        // XNU adds five records of slop when sizing kern.proc output, even for
+        // a PID-filtered query. The subsequent populated call returns one.
+        env.mem
+            .write(oldlenp, USER32_KINFO_PROC_SIZE.saturating_mul(6));
+        return 0;
+    }
+
+    let oldlen = env.mem.read(oldlenp);
+    if oldlen < USER32_KINFO_PROC_SIZE {
+        // With no complete record copied, XNU reports a consumed length of
+        // zero and ENOMEM when the required output exceeds that length.
+        env.mem.write(oldlenp, 0);
+        set_errno(env, ENOMEM);
+        return -1;
+    }
+
+    let record = current_process_kinfo();
+    env.mem
+        .bytes_at_mut(oldp.cast(), USER32_KINFO_PROC_SIZE)
+        .copy_from_slice(&record);
+    env.mem.write(oldlenp, USER32_KINFO_PROC_SIZE);
+    log_dbg!(
+        "sysctl() returned 32-bit kern.proc.pid record for emulated PID {pid}"
+    );
+    0
+}
+
 fn sysctl(
     env: &mut Environment,
     name: MutPtr<i32>,
@@ -190,6 +263,11 @@ fn sysctl(
                 env.mem.read(name + 3),
             );
             if name0 == CTL_KERN && name1 == KERN_PROC {
+                if name2 == KERN_PROC_PID {
+                    return sysctl_kern_proc_pid(
+                        env, name3, oldp, oldlenp, newp, newlen,
+                    );
+                }
                 // In some Unity games, mono initialization set-ups perf
                 // counters, which set-ups a shared memory area, which gets
                 // a list of all processes via sysctl() if shm_open() fails.
@@ -340,3 +418,86 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sysctl(_, _, _, _, _, _)),
     export_c_func!(sysctlbyname(_, _, _, _, _)),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::libc::errno::get_errno;
+    use crate::mem::Ptr;
+
+    fn kern_proc_pid_name(env: &mut Environment, pid: i32) -> MutPtr<i32> {
+        let name = env.mem.alloc(guest_size_of::<i32>() * 4).cast::<i32>();
+        for (index, value) in [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+            .into_iter()
+            .enumerate()
+        {
+            env.mem.write(name + index as u32, value);
+        }
+        name
+    }
+
+    #[test]
+    fn kern_proc_pid_returns_untraced_current_process() {
+        let mut env = Environment::new_fake_for_test();
+        let name = kern_proc_pid_name(&mut env, EMULATED_PID);
+        let output = env.mem.alloc(USER32_KINFO_PROC_SIZE);
+        let output_len = env.mem.alloc_and_write(USER32_KINFO_PROC_SIZE);
+
+        assert_eq!(
+            sysctl(
+                &mut env,
+                name,
+                4,
+                output,
+                output_len,
+                Ptr::null(),
+                0,
+            ),
+            0
+        );
+        assert_eq!(env.mem.read(output_len), USER32_KINFO_PROC_SIZE);
+        let bytes = env
+            .mem
+            .bytes_at(output.cast::<u8>(), USER32_KINFO_PROC_SIZE);
+        assert_eq!(
+            i32::from_le_bytes(
+                bytes[USER32_KINFO_PROC_FLAG_OFFSET..USER32_KINFO_PROC_FLAG_OFFSET + 4]
+                    .try_into()
+                    .unwrap()
+            ),
+            0
+        );
+        assert_eq!(bytes[USER32_KINFO_PROC_STAT_OFFSET], SRUN);
+        assert_eq!(
+            i32::from_le_bytes(
+                bytes[USER32_KINFO_PROC_PID_OFFSET..USER32_KINFO_PROC_PID_OFFSET + 4]
+                    .try_into()
+                    .unwrap()
+            ),
+            EMULATED_PID
+        );
+    }
+
+    #[test]
+    fn kern_proc_pid_rejects_a_short_buffer() {
+        let mut env = Environment::new_fake_for_test();
+        let name = kern_proc_pid_name(&mut env, EMULATED_PID);
+        let output = env.mem.alloc(USER32_KINFO_PROC_SIZE - 1);
+        let output_len = env.mem.alloc_and_write(USER32_KINFO_PROC_SIZE - 1);
+
+        assert_eq!(
+            sysctl(
+                &mut env,
+                name,
+                4,
+                output,
+                output_len,
+                Ptr::null(),
+                0,
+            ),
+            -1
+        );
+        assert_eq!(env.mem.read(output_len), 0);
+        assert_eq!(get_errno(&mut env), ENOMEM);
+    }
+}
