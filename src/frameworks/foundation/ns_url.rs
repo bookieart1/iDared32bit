@@ -184,6 +184,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+- (id)host {
+    let url = match *env.objc.borrow(this) {
+        NSURLHostObject::FileURL { .. } => return nil,
+        NSURLHostObject::OtherURL { ns_string } => to_rust_string(env, ns_string).into_owned(),
+    };
+    let Some(host) = url_host(&url) else {
+        return nil;
+    };
+    let host = from_rust_string(env, host);
+    autorelease(env, host)
+}
+
 - (id)path {
     match *env.objc.borrow(this) {
         NSURLHostObject::FileURL { ns_string, .. } => ns_string,
@@ -282,6 +294,60 @@ fn file_url_to_path(url: &str) -> Option<String> {
         i += 1;
     }
     Some(String::from_utf8_lossy(&decoded).into_owned())
+}
+
+fn percent_decode_utf8(component: &str) -> Option<String> {
+    let bytes = component.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let high = bytes.get(i + 1).and_then(|byte| (*byte as char).to_digit(16))?;
+            let low = bytes.get(i + 2).and_then(|byte| (*byte as char).to_digit(16))?;
+            decoded.push(((high << 4) | low) as u8);
+            i += 3;
+        } else {
+            decoded.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(decoded).ok()
+}
+
+fn url_host(url: &str) -> Option<String> {
+    let (_, authority, _, _, _) = split_url(url);
+    let authority = authority?;
+    let host_and_port = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host_and_port)| host_and_port);
+    if host_and_port.is_empty() {
+        return None;
+    }
+
+    let encoded_host = if let Some(rest) = host_and_port.strip_prefix('[') {
+        let closing_bracket = rest.find(']')?;
+        let suffix = &rest[closing_bracket + 1..];
+        if !suffix.is_empty()
+            && !suffix
+                .strip_prefix(':')
+                .is_some_and(|port| port.bytes().all(|byte| byte.is_ascii_digit()))
+        {
+            return None;
+        }
+        &host_and_port[..closing_bracket + 2]
+    } else if let Some((host, port)) = host_and_port.rsplit_once(':') {
+        if host.is_empty()
+            || port.is_empty()
+            || host.contains(':')
+            || !port.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            return None;
+        }
+        host
+    } else {
+        host_and_port
+    };
+    percent_decode_utf8(encoded_host)
 }
 
 /// Shortcut for host code, provides a view of a URL as a path.
@@ -397,7 +463,7 @@ fn resolve_url_reference(base: &str, reference: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_url_reference;
+    use super::{resolve_url_reference, url_host};
 
     #[test]
     fn test_resolve_url_reference() {
@@ -451,5 +517,22 @@ mod tests {
                 "{reference}"
             );
         }
+    }
+
+    #[test]
+    fn test_url_host() {
+        assert_eq!(
+            url_host("http://user:password@exa%6Dple.com:8080/index"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            url_host("https://[2001:db8::1]:443/"),
+            Some("[2001:db8::1]".to_string())
+        );
+        assert_eq!(url_host("/relative/path"), None);
+        assert_eq!(url_host("http:///missing-host"), None);
+        assert_eq!(url_host("http://:80/empty-host"), None);
+        assert_eq!(url_host("http://example.com:/empty-port"), None);
+        assert_eq!(url_host("http://bad%xx.example/"), None);
     }
 }

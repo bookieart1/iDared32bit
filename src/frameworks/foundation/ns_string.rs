@@ -60,6 +60,7 @@ pub type NSStringCompareOptions = NSUInteger;
 pub const NSCaseInsensitiveSearch: NSUInteger = 1;
 pub const NSLiteralSearch: NSUInteger = 2;
 pub const NSBackwardsSearch: NSUInteger = 4;
+pub const NSAnchoredSearch: NSUInteger = 8;
 pub const NSNumericSearch: NSUInteger = 64;
 
 /// Encodings that C strings (null-terminated byte strings) can use.
@@ -649,15 +650,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (NSRange)rangeOfCharacterFromSet:(id)set { // NSCharacterSet *
     let length: NSUInteger = msg![env; this length];
-    let mut idx: NSUInteger = 0;
-    while idx < length {
-        let c: u16 = msg![env; this characterAtIndex:idx];
-        if msg![env; set characterIsMember:c] {
-            return NSRange { location: idx, length: 1 };
-        }
-        idx += 1;
-    }
-    NSRange { location: NSNotFound as NSUInteger, length: 0 }
+    range_of_character_from_set(env, this, set, 0, NSRange { location: 0, length })
+}
+
+- (NSRange)rangeOfCharacterFromSet:(id)set // NSCharacterSet *
+                              options:(NSStringCompareOptions)options {
+    let length: NSUInteger = msg![env; this length];
+    range_of_character_from_set(env, this, set, options, NSRange { location: 0, length })
+}
+
+- (NSRange)rangeOfCharacterFromSet:(id)set // NSCharacterSet *
+                              options:(NSStringCompareOptions)options
+                                range:(NSRange)range {
+    range_of_character_from_set(env, this, set, options, range)
 }
 
 - (id)description {
@@ -2074,6 +2079,88 @@ fn is_match_at_position<F: Fn(u16, u16) -> bool>(
             false
         }
     })
+}
+
+fn range_of_character_from_set(
+    env: &mut Environment,
+    string: id,
+    set: id,
+    options: NSStringCompareOptions,
+    range: NSRange,
+) -> NSRange {
+    assert!(set != nil, "rangeOfCharacterFromSet requires a character set");
+    let length: NSUInteger = msg![env; string length];
+    let range_end = range.location.checked_add(range.length).unwrap();
+    assert!(
+        range_end <= length,
+        "rangeOfCharacterFromSet range is out of bounds"
+    );
+
+    let unsupported = options & !(NSBackwardsSearch | NSAnchoredSearch);
+    if unsupported != 0 {
+        log!(
+            "Warning: ignoring unsupported NSString character-search option bits {:#x}",
+            unsupported
+        );
+    }
+    if range.length == 0 {
+        return NSRange {
+            location: NSNotFound as NSUInteger,
+            length: 0,
+        };
+    }
+
+    let backwards = options & NSBackwardsSearch != 0;
+    let anchored = options & NSAnchoredSearch != 0;
+    let matches = |env: &mut Environment, idx| {
+        let c: u16 = msg![env; string characterAtIndex:idx];
+        msg![env; set characterIsMember:c]
+    };
+
+    if anchored {
+        let idx = if backwards {
+            range_end - 1
+        } else {
+            range.location
+        };
+        return if matches(env, idx) {
+            NSRange {
+                location: idx,
+                length: 1,
+            }
+        } else {
+            NSRange {
+                location: NSNotFound as NSUInteger,
+                length: 0,
+            }
+        };
+    }
+
+    if backwards {
+        let mut idx = range_end;
+        while idx > range.location {
+            idx -= 1;
+            if matches(env, idx) {
+                return NSRange {
+                    location: idx,
+                    length: 1,
+                };
+            }
+        }
+    } else {
+        for idx in range.location..range_end {
+            if matches(env, idx) {
+                return NSRange {
+                    location: idx,
+                    length: 1,
+                };
+            }
+        }
+    }
+    NSRange {
+        location: NSNotFound as NSUInteger,
+        length: 0,
+    }
 }
 
 fn range_of_string(

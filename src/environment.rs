@@ -1686,6 +1686,33 @@ impl Environment {
                 "{source} nearby guest code at {code_start:#010x} (96 bytes): {bytes:02x?}"
             );
         }
+        // In ARM state, a null value is often produced by a nearby direct
+        // function call and dereferenced a few instructions later. Record the
+        // closest preceding BL target, still only at the terminal fault, so a
+        // stripped producer can be inspected without instruction tracing.
+        if (cpsr & cpu::Cpu::CPSR_THUMB) == 0 {
+            let fault_instruction = pc.saturating_sub(4);
+            for distance in (4..=32).step_by(4) {
+                let instruction_address = fault_instruction.saturating_sub(distance);
+                let instruction_ptr = mem::ConstVoidPtr::from_bits(instruction_address);
+                let Some(bytes) = self.mem.get_bytes_fallible(instruction_ptr, 4) else {
+                    continue;
+                };
+                let instruction = u32::from_le_bytes(bytes.try_into().unwrap());
+                if instruction & 0x0f00_0000 != 0x0b00_0000 {
+                    continue;
+                }
+                let offset = ((((instruction & 0x00ff_ffff) << 2) as i32) << 6) >> 6;
+                let target = ((instruction_address as i64) + 8 + (offset as i64)) as u32;
+                let target_ptr = mem::ConstVoidPtr::from_bits(target);
+                if let Some(target_bytes) = self.mem.get_bytes_fallible(target_ptr, 64) {
+                    log_no_panic!(
+                        "{source} nearest preceding ARM BL at {instruction_address:#010x} targets {target:#010x} (64 bytes): {target_bytes:02x?}"
+                    );
+                }
+                break;
+            }
+        }
         let sp = self.cpu.regs()[cpu::Cpu::SP];
         let stack_ptr = mem::ConstVoidPtr::from_bits(sp);
         if let Some(bytes) = self.mem.get_bytes_fallible(stack_ptr, 64) {
