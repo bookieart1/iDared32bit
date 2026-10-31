@@ -1173,11 +1173,7 @@ pub(super) fn class_getInstanceMethod(
                 ..
             }) => {
                 let types = host_object.guest_method_signatures.get(&name);
-                break (
-                    Some(*imp),
-                    types.copied().unwrap_or(Ptr::null()),
-                    None,
-                );
+                break (Some(*imp), types.copied().unwrap_or(Ptr::null()), None);
             }
             // Host methods can't be called directly by the app, but sending the
             // message has the same ABI and reaches them.

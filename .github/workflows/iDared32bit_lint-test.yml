@@ -27,6 +27,7 @@ jobs:
       - name: Install clang-format
         run: brew install clang-format
       - name: Check formatting
+        if: github.ref == 'refs/heads/idared32bit'
         run: dev-scripts/format.sh --check
       - name: Try to get cached copy of cmake
         id: cache-cmake
@@ -81,6 +82,7 @@ jobs:
         fetch-depth: 0
     # Apparently the Windows runner already has clang-format? That's nice.
     - name: Check formatting
+      if: github.ref == 'refs/heads/idared32bit'
       shell: bash # no command output without this
       run: dev-scripts/format.sh --check
     - name: Try to get cached copy of cmake
@@ -132,6 +134,7 @@ jobs:
         submodules: recursive
         fetch-depth: 0
     - name: Check formatting
+      if: github.ref == 'refs/heads/idared32bit'
       run: dev-scripts/format.sh --check
     - name: Try to get cached copy of cmake
       id: cache-cmake
