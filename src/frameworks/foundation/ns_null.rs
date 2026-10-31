@@ -5,6 +5,7 @@
  */
 //! `NSNull`.
 
+use crate::frameworks::foundation::ns_string;
 use crate::objc::{id, objc_classes, ClassExports, TrivialHostObject};
 
 #[derive(Default)]
@@ -38,6 +39,31 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())release {}
 - (id)autorelease { this }
 
+- (id)description {
+    // This is the historical Foundation representation of the singleton.
+    // It is also what collection and property-list diagnostics expect when
+    // they encounter an explicit null placeholder.
+    ns_string::get_static_str(env, "<null>")
+}
+
 @end
 
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::objc::{msg, msg_class};
+    use crate::Environment;
+
+    #[test]
+    fn description_uses_foundation_null_representation() {
+        let mut env = Environment::new_fake_for_test();
+        let env = &mut env;
+        let null: id = msg_class![env; NSNull null];
+        let description: id = msg![env; null description];
+
+        assert_eq!(ns_string::to_rust_string(env, description), "<null>");
+        assert_eq!(null, msg_class![env; NSNull null]);
+    }
+}

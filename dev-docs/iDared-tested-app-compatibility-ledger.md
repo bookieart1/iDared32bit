@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: October 31, 2026
-Latest device-tested checkpoint: **iDared Dev 1.68** (`28368024`)
+Latest device-tested checkpoint: **iDared Dev 1.69** (`acf10ae9`)
 Latest built checkpoint: **iDared Dev 1.69** (`acf10ae9`)
-Current activity: **Dev 1.69 adds fixed-GMT time-zone display names and an explicitly offline CFHost surface for the next B'Blast and Addicus blockers. Hosted library tests and the unsigned iPhone package build pass; focused physical-device verification is pending.**
+Current activity: **Dev 1.70 source work implements the three shared contracts recovered from the latest device evidence: `NSNull -description`, explicit offline failure for CFHost socket-stream creation, and the standard `printf` `+` flag for floating conversions. Focused tests are present; hosted validation and IPA packaging are pending.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -2574,3 +2574,95 @@ start a game and return to the menu if it remains open. Repeat Blot's
 Classic→menu→Challenges→Back path once as the regression check. Brief Spoing
 play is sufficient as the working control; a full level is not required in
 this pass. Return the combined log and visible results.
+
+### Additional Dev 1.68 Blot result: smooth long session, death-path formatting crash
+
+This later observation came from the verified Dev 1.68 build (`2836802`,
+workflow `41221870864`), not Dev 1.69. Blot ran smoothly for approximately
+151 seconds. The recorder counted 7,905 main-loop iterations and 7,714 EAGL
+returns and explicitly reported no sustained slow-presentation transition.
+That reinforces the earlier conclusion that the general `qsort` replacement
+removed the captured Challenges→Back performance collapse.
+
+When the player died after the longer session, the emulator panicked at
+`src/libc/stdio/printf.rs:418` on `assertion failed: !prepend_sign`. The last
+recorded boundary is `_vsnprintf_l`, and that assertion is in the floating-point
+`f` conversion path after the parser has accepted the standard `+` flag. This
+is evidence of a general missing `printf` formatting contract, not a Blot-only
+fault or a recurrence of the sorting problem. The visible association with the
+death transition is observed once and is not yet independently reproduced.
+
+Blot is therefore **partial overall**: gameplay and the previously failing menu
+path are smooth, but a sufficiently long run can terminate on death. If this is
+prioritized later, the next implementation candidate is general signed
+floating-point formatting with focused libc tests; no app-specific bypass is
+justified. No source fix or new IPA was made for this note.
+
+### Dev 1.69 device result: intended blockers removed, later blockers repeated
+
+The combined log identifies source `acf10ae` and workflow `41247250422`, which
+matches the independently verified Dev 1.69 package. B'Blast and Addicus were
+each launched three times. Every launch of a given app reached the same later
+boundary, so the results are reproducible within this pass. The user's sense
+that Addicus might have remained visible for a fraction longer is explicitly
+uncertain and is not counted as a visible improvement.
+
+| App | User-visible result | Decisive evidence | Status / next contract |
+|---|---|---|---|
+| B'Blast | Unchanged tiny audio fragment, black screen and termination. | The Dev 1.69 `NSTimeZone -localizedName:locale:` blocker is absent. All three launches instead retrieve an `NSNull` from a dictionary, reject it as both `NSString` and `NSNumber`, and send it `description`. `NSNull` lacks that selector and panics after about 394–435 ms, before any main-loop iteration or EAGL return. | **Advanced internally, still blocked.** `NSNull -description` is a normal shared Foundation contract, not evidence of an invalid object. Its exact historical textual result should be verified before implementation. |
+| Addicus | Still reaches the menu only momentarily and terminates; no reliable visible advance is claimed. | Dev 1.69's `_CFHostCreateWithName` returns a retained host object on all three launches. Google Analytics proceeds to its TCP-socket path and then stops at the unimplemented `_CFStreamCreatePairWithSocketToCFHost`. Two warm launches reach 53–54 main-loop iterations and 52–53 EAGL returns before the same panic; the first launch also reaches the same API after a longer initialization. | **Advanced internally, still blocked.** This is a shared Core Foundation stream API, but it is a more consequential contract than offline host creation. A correction must represent unavailable networking honestly and must not fabricate connected streams. |
+
+These results verify only that the two Dev 1.69 blockers were removed and the
+new implementation paths were exercised. They do not establish functional
+compatibility or a user-visible improvement. Blot was not rerun in this log;
+its verified Dev 1.68 long-session death result remains the separate formatting
+issue above. No source change, new package, or push was made from this status
+report.
+
+## Dev 1.70 three recovered contracts — source prepared, validation pending
+
+This batch follows the three independently decisive boundaries above. It does
+not change the diagnostic recorder, memory-fault policy, rendering, saves or
+game-specific options, and it contains no bundle-identifier checks.
+
+- **B'Blast / `NSNull -description` (general Foundation contract):** the
+  singleton now returns the historical Foundation representation `<null>`.
+  The object remains static-lifetime and singleton-identical. This is the
+  normal behavior required when collections or diagnostic serializers ask an
+  explicit null placeholder for a description; it does not tolerate an
+  invalid pointer or convert `nil` into an object.
+- **Addicus / `CFStreamCreatePairWithSocketToCFHost` (explicitly offline
+  partial contract):** CFNetwork now exports the historical five-argument ABI,
+  validates the allocator and CFHost object, and writes null only to the output
+  pointers the caller supplied. Apple's contract permits null stream outputs
+  when creation fails. Because this emulator still has no socket-backed
+  CFStream implementation, returning that documented creation failure is
+  honest and consistent with its existing
+  `CFStreamCreatePairWithSocketToHost` boundary. It does not resolve the name,
+  open a socket, claim a connection, or fabricate callbacks. Software that
+  requires network streams remains unsupported.
+- **Blot / floating `printf` sign flag (general libc contract):** `%+f`, `%+e`
+  and `%+g` now prefix nonnegative values with `+`, preserve negative signs,
+  and place space or zero padding around the sign correctly. The existing
+  precision, left-justification and general-format selection paths remain in
+  use. This removes the exact assertion reached through `_vsnprintf_l` without
+  swallowing the formatting request or special-casing Blot.
+
+Four focused unit tests cover the NSNull singleton/description, CFHost stream
+failure output pointers (including omitted outputs), and signed fixed and
+exponential formatting with space and zero widths. The changed files pass the
+available Rust formatter and `git diff --check`. A local library-test attempt
+reached dependency compilation but cannot link because this Windows
+environment has no MSVC `link.exe`; no local compiled-test pass is claimed.
+The repository's macOS and Windows hosted suites must compile and run the full
+library tests before packaging is accepted.
+
+Predictions: B'Blast should leave the repeated NSNull selector panic and either
+advance initialization or reveal an independent blocker. Addicus should receive
+a normal offline stream-creation failure and let its optional Google Analytics
+client handle it; a caller that incorrectly assumes non-null streams may expose
+a later fault, which must not be hidden with fake stream objects. Blot should
+survive the recorded death formatting request; a long Classic session ending
+in death is required because the menu-slowdown fix and this formatter fix are
+separate. The relevant regression checks are a brief Spoing session, Blot's
+smooth Classic/menu/Challenges path, and repeated launch/return behavior.

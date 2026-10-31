@@ -415,25 +415,22 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             // Float specifiers
             b'f' => {
-                assert!(!prepend_sign);
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
                 let precision = precision.unwrap_or(6);
 
-                let formatted = f_format(float, pad_width, pad_char, precision);
+                let formatted = f_format(float, pad_width, pad_char, precision, prepend_sign);
                 res.extend_from_slice(formatted.as_bytes());
             }
             b'e' => {
-                assert!(!prepend_sign);
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
                 let precision = precision.unwrap_or(6);
 
-                let formatted = e_format(float, pad_width, pad_char, precision);
+                let formatted = e_format(float, pad_width, pad_char, precision, prepend_sign);
                 res.extend_from_slice(formatted.as_bytes());
             }
             b'g' => {
-                assert!(!prepend_sign);
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
 
@@ -463,7 +460,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 if P > X && X >= -4 {
                     let precision: usize = (P - X - 1).try_into().unwrap();
 
-                    let mut result = f_format(float, pad_width, pad_char, precision);
+                    let mut result = f_format(float, pad_width, pad_char, precision, prepend_sign);
 
                     // The alternative form keeps trailing zeros, and the point.
                     if alternative_form && !result.contains('.') {
@@ -475,21 +472,13 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                         &result
                     };
 
-                    let trimmed_result = if pad_width > 0 && trimmed_result.len() < pad_width {
-                        if pad_char == '0' {
-                            format!("{trimmed_result:0>pad_width$}")
-                        } else {
-                            format!("{trimmed_result:>pad_width$}")
-                        }
-                    } else {
-                        trimmed_result.to_string()
-                    };
+                    let trimmed_result = repad_float(trimmed_result, pad_width, pad_char);
 
                     res.extend_from_slice(trimmed_result.as_bytes());
                 } else {
                     let precision: usize = (P - 1).try_into().unwrap();
 
-                    let formatted = e_format(float, pad_width, pad_char, precision);
+                    let formatted = e_format(float, pad_width, pad_char, precision, prepend_sign);
                     res.extend_from_slice(formatted.as_bytes());
                 }
             }
@@ -511,35 +500,110 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
     res
 }
 
-fn f_format(float: f64, pad_width: usize, pad_char: char, precision: usize) -> String {
-    if pad_char == '0' {
-        format!("{float:0pad_width$.precision$}")
+fn pad_float(
+    magnitude: String,
+    negative: bool,
+    prepend_sign: bool,
+    pad_width: usize,
+    pad_char: char,
+) -> String {
+    let sign = if negative {
+        "-"
+    } else if prepend_sign {
+        "+"
     } else {
-        assert!(pad_char == ' '); // TODO
-        format!("{float:pad_width$.precision$}")
+        ""
+    };
+    let padding = pad_width.saturating_sub(sign.len() + magnitude.len());
+
+    match pad_char {
+        '0' => format!("{sign}{}{magnitude}", "0".repeat(padding)),
+        ' ' => format!("{}{sign}{magnitude}", " ".repeat(padding)),
+        _ => unreachable!("unsupported printf padding character"),
     }
 }
 
-fn e_format(float: f64, pad_width: usize, pad_char: char, precision: usize) -> String {
+fn repad_float(formatted: &str, pad_width: usize, pad_char: char) -> String {
+    let padding = pad_width.saturating_sub(formatted.len());
+    if padding == 0 {
+        return formatted.to_string();
+    }
+
+    match pad_char {
+        '0' if formatted.starts_with('+') || formatted.starts_with('-') => format!(
+            "{}{}{}",
+            &formatted[..1],
+            "0".repeat(padding),
+            &formatted[1..]
+        ),
+        '0' => format!("{}{formatted}", "0".repeat(padding)),
+        ' ' => format!("{}{formatted}", " ".repeat(padding)),
+        _ => unreachable!("unsupported printf padding character"),
+    }
+}
+
+fn f_format(
+    float: f64,
+    pad_width: usize,
+    pad_char: char,
+    precision: usize,
+    prepend_sign: bool,
+) -> String {
+    let magnitude = format!("{:.*}", precision, float.abs());
+    pad_float(
+        magnitude,
+        float.is_sign_negative(),
+        prepend_sign,
+        pad_width,
+        pad_char,
+    )
+}
+
+fn e_format(
+    float: f64,
+    pad_width: usize,
+    pad_char: char,
+    precision: usize,
+    prepend_sign: bool,
+) -> String {
     let exponent = if float == 0.0 {
         0.0
     } else {
         float.abs().log10().floor()
     };
     let mantissa = float.abs() / 10f64.powf(exponent);
-    let sign = if float.is_sign_negative() { "-" } else { "" };
-    if pad_char == '0' {
-        let float_exp_notation = format!("{mantissa:.precision$}e{exponent:+03}");
-        format!(
-            "{0}{1:0>2$}",
-            sign,
-            float_exp_notation,
-            pad_width.saturating_sub(sign.len())
-        )
-    } else {
-        assert!(pad_char == ' '); // TODO
-        let float_exp_notation = format!("{sign}{mantissa:.precision$}e{exponent:+03}");
-        format!("{float_exp_notation:>pad_width$}")
+    let magnitude = format!("{mantissa:.precision$}e{exponent:+03}");
+    pad_float(
+        magnitude,
+        float.is_sign_negative(),
+        prepend_sign,
+        pad_width,
+        pad_char,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{e_format, f_format, repad_float};
+
+    #[test]
+    fn float_plus_flag_preserves_sign_and_width() {
+        assert_eq!(f_format(1.25, 0, ' ', 2, true), "+1.25");
+        assert_eq!(f_format(-1.25, 0, ' ', 2, true), "-1.25");
+        assert_eq!(f_format(1.25, 8, ' ', 2, true), "   +1.25");
+        assert_eq!(f_format(1.25, 8, '0', 2, true), "+0001.25");
+        assert_eq!(f_format(-1.25, 8, '0', 2, true), "-0001.25");
+        assert_eq!(f_format(1.25, 8, '0', 2, false), "00001.25");
+        assert_eq!(repad_float("+1.25", 8, '0'), "+0001.25");
+        assert_eq!(repad_float("-1.25", 8, '0'), "-0001.25");
+    }
+
+    #[test]
+    fn exponential_plus_flag_preserves_sign_and_width() {
+        assert_eq!(e_format(12.5, 0, ' ', 1, true), "+1.2e+01");
+        assert_eq!(e_format(-12.5, 0, ' ', 1, true), "-1.2e+01");
+        assert_eq!(e_format(12.5, 11, ' ', 1, true), "   +1.2e+01");
+        assert_eq!(e_format(12.5, 11, '0', 1, true), "+0001.2e+01");
     }
 }
 

@@ -17,6 +17,8 @@ use crate::Environment;
 
 type CFHostRef = CFTypeRef;
 type CFHostInfoType = i32;
+type CFReadStreamRef = id;
+type CFWriteStreamRef = id;
 type Boolean = u8;
 
 const K_CF_STREAM_ERROR_DOMAIN_POSIX: CFIndex = 1;
@@ -180,6 +182,41 @@ fn CFHostGetReachability(
 
 fn CFHostCancelInfoResolution(_env: &mut Environment, _host: CFHostRef, _info: CFHostInfoType) {}
 
+/// Socket-backed CFStream objects are not implemented. Report a creation
+/// failure through the API's documented NULL outputs, as the existing
+/// CFStreamCreatePairWithSocketToHost implementation does. This preserves the
+/// CFHost object's lifetime and gives optional network clients a normal failure
+/// path without claiming that a socket or resolver is available.
+fn CFStreamCreatePairWithSocketToCFHost(
+    env: &mut Environment,
+    allocator: CFAllocatorRef,
+    host: CFHostRef,
+    port: i32,
+    read_stream: MutPtr<CFReadStreamRef>,
+    write_stream: MutPtr<CFWriteStreamRef>,
+) {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+
+    let host_name = if host == nil {
+        "(null)".to_string()
+    } else {
+        let name = env.objc.borrow::<CFHostHostObject>(host).name;
+        to_rust_string(env, name)
+    };
+    log!(
+        "Warning: CFStreamCreatePairWithSocketToCFHost({}, {}) is unavailable; returning NULL streams",
+        host_name,
+        port
+    );
+
+    if !read_stream.is_null() {
+        env.mem.write(read_stream, nil);
+    }
+    if !write_stream.is_null() {
+        env.mem.write(write_stream, nil);
+    }
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFHostCreateWithName(_, _)),
     export_c_func!(CFHostCreateCopy(_, _)),
@@ -191,6 +228,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFHostGetNames(_, _)),
     export_c_func!(CFHostGetReachability(_, _)),
     export_c_func!(CFHostCancelInfoResolution(_, _)),
+    export_c_func!(CFStreamCreatePairWithSocketToCFHost(_, _, _, _, _)),
 ];
 
 #[cfg(test)]
@@ -223,5 +261,36 @@ mod tests {
         let resolved = env.mem.alloc_and_write(1u8);
         assert_eq!(CFHostGetAddressing(&mut env, host, resolved), nil);
         assert_eq!(env.mem.read(resolved), 0);
+    }
+
+    #[test]
+    fn socket_stream_pair_reports_offline_creation_failure() {
+        let mut env = Environment::new_fake_for_test();
+        let name = ns_string::from_rust_string(&mut env, "analytics.example".to_string());
+        let host = CFHostCreateWithName(&mut env, kCFAllocatorDefault, name);
+        let read_stream = env.mem.alloc_and_write(host);
+        let write_stream = env.mem.alloc_and_write(host);
+
+        CFStreamCreatePairWithSocketToCFHost(
+            &mut env,
+            kCFAllocatorDefault,
+            host,
+            80,
+            read_stream,
+            write_stream,
+        );
+
+        assert_eq!(env.mem.read(read_stream), nil);
+        assert_eq!(env.mem.read(write_stream), nil);
+
+        // Either output pointer may be omitted independently.
+        CFStreamCreatePairWithSocketToCFHost(
+            &mut env,
+            kCFAllocatorDefault,
+            host,
+            80,
+            MutPtr::null(),
+            MutPtr::null(),
+        );
     }
 }
