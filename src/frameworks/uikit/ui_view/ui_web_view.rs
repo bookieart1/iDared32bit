@@ -130,9 +130,9 @@ mod tests {
             .register_host_selector("loadHTMLString:baseURL:".to_string(), &mut env.mem);
 
         assert!(env.objc.class_has_method(class, selector));
-        let signature: id = msg![env; class instanceMethodSignatureForSelector:selector];
-        assert_ne!(signature, nil);
-        let arguments: NSUInteger = msg![env; signature numberOfArguments];
-        assert_eq!(arguments, 4);
+        assert_eq!(
+            env.objc.class_get_method_types(class, selector),
+            Some("v@:@@")
+        );
     }
 }

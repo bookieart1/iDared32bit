@@ -2326,3 +2326,12 @@ workspace because the MSVC linker is absent, so no local compiled-test pass is
 claimed; hosted macOS/Windows tests and the iOS package build remain required.
 Build commit, workflow results, downloaded IPA identity and device evidence
 will be appended after they exist.
+
+The first hosted test run (`41219121194`) compiled the new implementations and
+passed both route-record tests plus the slow-transition test, but exposed two
+test-only assumptions. The retained unsupported-sysctl reproducer still
+expected the obsolete generic panic wording, and the UIWebView test tried to
+construct an autoreleased `NSMethodSignature` in the deliberately threadless
+fake environment. The follow-up keeps the unsupported synthetic MIB strict and
+checks the exported host method's exact `v@:@@` Objective-C encoding directly;
+no production behavior or Dev label changes.

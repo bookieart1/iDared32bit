@@ -2490,8 +2490,9 @@ mod memory_fault_diagnostic_tests {
     #[test]
     fn flight_recorder_preserves_real_sysctl_failure_through_svc() {
         use super::*;
-        // Same unsupported six-component query shape as B'Blast, with explicit
-        // synthetic values: the device's actual MIB is still unknown.
+        // Keep one unsupported six-component query as a strict diagnostic
+        // fixture. B'Blast's recovered AF_LINK query is now implemented, so
+        // this synthetic AF_UNSPEC variant must continue to fail unchanged.
         for enabled in [false, true] {
             let mut env = Environment::new_fake_for_test();
             env.diagnostics = enabled.then(crate::diagnostics::Recorder::new);
@@ -2524,7 +2525,10 @@ mod memory_fault_diagnostic_tests {
                 .map(String::as_str)
                 .or_else(|| error.downcast_ref::<&str>().copied())
                 .unwrap();
-            assert!(message.contains("name length 6"), "{message}");
+            assert!(
+                message.contains("Unknown six-component sysctl parameter"),
+                "{message}"
+            );
             assert_eq!(*env.cpu.regs(), before);
             if let Some(recorder) = &mut env.diagnostics {
                 assert_eq!(
