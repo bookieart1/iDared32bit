@@ -4000,6 +4000,8 @@ int test_NSURL_path_components() {
       URLWithString:@"https://user@example.com:443/a%20path/file?query=/ignored#fragment"];
   if (![[url host] isEqualToString:@"example.com"])
     return -1;
+  if (![[url scheme] isEqualToString:@"https"])
+    return -5;
   if (![[url path] isEqualToString:@"/a path/file"])
     return -2;
 
@@ -4010,6 +4012,12 @@ int test_NSURL_path_components() {
   NSURL *relativePath = [NSURL URLWithString:@"relative%20path"];
   if (![[relativePath path] isEqualToString:@"relative path"])
     return -4;
+  if ([relativePath scheme] != nil)
+    return -6;
+
+  NSURL *fileURL = [NSURL fileURLWithPath:@"/tmp/test"];
+  if (![[fileURL scheme] isEqualToString:@"file"])
+    return -7;
   return 0;
 }
 

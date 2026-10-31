@@ -196,6 +196,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, host)
 }
 
+- (id)scheme {
+    let url = match *env.objc.borrow(this) {
+        NSURLHostObject::FileURL { .. } => return get_static_str(env, "file"),
+        NSURLHostObject::OtherURL { ns_string } => to_rust_string(env, ns_string).into_owned(),
+    };
+    let Some(scheme) = url_scheme(&url) else {
+        return nil;
+    };
+    let scheme = from_rust_string(env, scheme);
+    autorelease(env, scheme)
+}
+
 - (id)path {
     let url = match *env.objc.borrow(this) {
         NSURLHostObject::FileURL { ns_string, .. } => return ns_string,
@@ -349,6 +361,10 @@ fn url_host(url: &str) -> Option<String> {
     percent_decode_utf8(encoded_host)
 }
 
+fn url_scheme(url: &str) -> Option<String> {
+    split_url(url).0.map(str::to_string)
+}
+
 fn url_path(url: &str) -> Option<String> {
     let (_, _, encoded_path, _, _) = split_url(url);
     let encoded_path = encoded_path
@@ -385,7 +401,7 @@ fn split_url(url: &str) -> (Option<&str>, Option<&str>, &str, Option<&str>, Opti
         None => (rest, None),
     };
     let (scheme, rest) = match rest.find(':') {
-        Some(i) if i > 0 && !rest[..i].contains('/') => (Some(&rest[..i]), &rest[i + 1..]),
+        Some(i) if is_valid_url_scheme(&rest[..i]) => (Some(&rest[..i]), &rest[i + 1..]),
         _ => (None, rest),
     };
     let (authority, path) = match rest.strip_prefix("//") {
@@ -396,6 +412,12 @@ fn split_url(url: &str) -> (Option<&str>, Option<&str>, &str, Option<&str>, Opti
         None => (None, rest),
     };
     (scheme, authority, path, query, fragment)
+}
+
+fn is_valid_url_scheme(scheme: &str) -> bool {
+    let mut bytes = scheme.bytes();
+    bytes.next().is_some_and(|byte| byte.is_ascii_alphabetic())
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.'))
 }
 
 /// Removes `.` and `..` segments from a path (RFC 3986 section 5.2.4).
@@ -474,7 +496,7 @@ fn resolve_url_reference(base: &str, reference: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_url_reference, url_host, url_path};
+    use super::{resolve_url_reference, url_host, url_path, url_scheme};
 
     #[test]
     fn test_resolve_url_reference() {
@@ -568,5 +590,17 @@ mod tests {
         );
         assert_eq!(url_path("https://example.com/"), Some("/".to_string()));
         assert_eq!(url_path("https://example.com/bad%xxpath"), None);
+    }
+
+    #[test]
+    fn test_url_scheme() {
+        assert_eq!(url_scheme("https://example.com"), Some("https".to_string()));
+        assert_eq!(
+            url_scheme("custom+app-1.0:value"),
+            Some("custom+app-1.0".to_string())
+        );
+        assert_eq!(url_scheme("relative/path"), None);
+        assert_eq!(url_scheme("1invalid:value"), None);
+        assert_eq!(url_scheme("invalid space:value"), None);
     }
 }

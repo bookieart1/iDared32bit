@@ -98,6 +98,26 @@ fn decode_arm_direct_global_getter(target: u32, bytes: &[u8]) -> Option<u32> {
     Some(u32::from_le_bytes(literal.try_into().ok()?))
 }
 
+fn decode_arm_pc_relative_literal_load(
+    instruction_address: u32,
+    instruction: u32,
+) -> Option<(u8, u32)> {
+    // ARM A32 LDR Rt, [PC, #+/-imm12], with pre-indexing and no writeback.
+    // Ignore the condition field and the add/subtract bit while checking the
+    // fixed opcode fields.
+    if instruction & 0x0f7f_0000 != 0x051f_0000 {
+        return None;
+    }
+    let base = instruction_address.checked_add(8)?;
+    let offset = instruction & 0x0fff;
+    let literal_address = if instruction & 0x0080_0000 != 0 {
+        base.checked_add(offset)?
+    } else {
+        base.checked_sub(offset)?
+    };
+    Some((((instruction >> 12) & 0xf) as u8, literal_address))
+}
+
 impl Thread {
     fn is_blocked(&self) -> bool {
         !matches!(self.blocked_by, ThreadBlock::NotBlocked)
@@ -1759,14 +1779,14 @@ impl Environment {
                             .map(|section| (section.addr, section.size.min(16 * 1024 * 1024)));
                         if let Some((text_start, text_size)) = text_range {
                             let needle = global_slot.to_le_bytes();
-                            let references: Vec<u32> = self
-                                .mem
-                                .get_bytes_fallible(
-                                    mem::ConstVoidPtr::from_bits(text_start),
-                                    text_size,
-                                )
-                                .map(|text| {
-                                    text.chunks_exact(4)
+                            let text = self.mem.get_bytes_fallible(
+                                mem::ConstVoidPtr::from_bits(text_start),
+                                text_size,
+                            );
+                            let references: Vec<u32> = text
+                                .map(|bytes| {
+                                    bytes
+                                        .chunks_exact(4)
                                         .enumerate()
                                         .filter_map(|(index, word)| {
                                             (word == needle.as_slice()).then_some(
@@ -1785,6 +1805,42 @@ impl Environment {
                                 {
                                     log_no_panic!(
                                         "{source} global-slot literal reference at {reference:#010x}, code/data context at {context_start:#010x}: {context:02x?}"
+                                    );
+                                }
+                            }
+                            let literal_loads: Vec<(u32, u8, u32)> = text
+                                .map(|bytes| {
+                                    bytes
+                                        .chunks_exact(4)
+                                        .enumerate()
+                                        .filter_map(|(index, word)| {
+                                            let instruction_address = text_start
+                                                + (index as u32).saturating_mul(4);
+                                            let instruction =
+                                                u32::from_le_bytes(word.try_into().unwrap());
+                                            let (register, literal_address) =
+                                                decode_arm_pc_relative_literal_load(
+                                                    instruction_address,
+                                                    instruction,
+                                                )?;
+                                            references.contains(&literal_address).then_some((
+                                                instruction_address,
+                                                register,
+                                                literal_address,
+                                            ))
+                                        })
+                                        .take(24)
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            for (instruction_address, register, literal_address) in literal_loads {
+                                let context_start = instruction_address.saturating_sub(96);
+                                let context_ptr = mem::ConstVoidPtr::from_bits(context_start);
+                                if let Some(context) =
+                                    self.mem.get_bytes_fallible(context_ptr, 192)
+                                {
+                                    log_no_panic!(
+                                        "{source} global-slot literal loaded by ARM instruction at {instruction_address:#010x} into R{register} from {literal_address:#010x}; code context at {context_start:#010x} (192 bytes): {context:02x?}"
                                     );
                                 }
                             }
@@ -2377,7 +2433,7 @@ impl Drop for Environment {
 
 #[cfg(test)]
 mod memory_fault_diagnostic_tests {
-    use super::decode_arm_direct_global_getter;
+    use super::{decode_arm_direct_global_getter, decode_arm_pc_relative_literal_load};
 
     #[test]
     fn decodes_direct_global_getter() {
@@ -2394,6 +2450,24 @@ mod memory_fault_diagnostic_tests {
         not_a_getter[4] = 0x04;
         assert_eq!(
             decode_arm_direct_global_getter(0x0047_cff4, &not_a_getter),
+            None
+        );
+    }
+
+    #[test]
+    fn decodes_arm_pc_relative_literal_load() {
+        // ldr r0, [pc, #8] at 0x47d16c loads the word at 0x47d17c.
+        assert_eq!(
+            decode_arm_pc_relative_literal_load(0x0047_d16c, 0xe59f_0008),
+            Some((0, 0x0047_d17c))
+        );
+        // ldr r3, [pc, #-16] at 0x1000 loads the word at 0xff8.
+        assert_eq!(
+            decode_arm_pc_relative_literal_load(0x1000, 0xe51f_3010),
+            Some((3, 0x0ff8))
+        );
+        assert_eq!(
+            decode_arm_pc_relative_literal_load(0x1000, 0xe59f_0008 | (1 << 21)),
             None
         );
     }
