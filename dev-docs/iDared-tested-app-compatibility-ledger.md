@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: November 1, 2026
-Latest device-tested checkpoint: **iDared Dev 1.78** (`1af64fa`; focused seven-app test; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.79** (`4de150e`; verified package; physical-device results pending)
-Current activity: **Dev 1.79 targets the five newly exposed shared contracts: Objective-C ivar type metadata, keyed boolean archives, descriptor permission changes, navigation-bar visibility state and the UIKit launch-options URL constant. Blot and Spoing remain regression controls. Hosted compilation/tests and package verification pass; physical-device results are pending, so this is not yet a compatibility claim.**
+Latest device-tested checkpoint: **iDared Dev 1.79** (`4de150e`; focused eight-app test; Dev 1.71 remains the latest full-catalog survey)
+Latest built checkpoint: **iDared Dev 1.80** (`764d60e`; verified package; physical-device results pending)
+Current activity: **Dev 1.80 targets the four shared contracts exposed by Dev 1.79: Objective-C ivar offsets, polling Core Motion accelerometer data, `UIViewController.navigationItem` state, and historical URL-error constants/metadata. Dirt is working in the tested scope; Blot and Spoing remain regression controls. Hosted compilation/tests and package verification pass. Physical-device results are pending, so the four blocker removals are predictions rather than compatibility claims.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3527,7 +3527,7 @@ behavior remains pending.
 Verification: `outputs/iDared-Dev-1.79.verification.json`. **Physical-device
 testing is pending; compilation does not establish compatibility.**
 
-## Dev 1.79 device result and Dev 1.80 fourth-stage contracts (candidate)
+## Dev 1.79 device result and Dev 1.80 fourth-stage contracts
 
 The complete Dev 1.79 device log is preserved as
 `outputs/device-logs/iDared-Dev-1.79-device-results.txt`: 781,817 bytes,
@@ -3558,5 +3558,41 @@ and physical-device results must therefore remain separate.
 Predicted focused retest: Blot, Dark Nebula 2, Dirt, Glowfish, Glowfish HD,
 Hamlet, Parachute Ninja and Spoing, alphabetically and without deleting saves.
 Engineering detail:
-`dev-docs/compatibility-1.80-fourth-stage-contracts.md`. **Build and physical
-device verification are pending.**
+`dev-docs/compatibility-1.80-fourth-stage-contracts.md`.
+
+### Dev 1.80 verified delivery
+
+- Final implementation/source commit:
+  `764d60e65428e466c2480d95aecf3d54006ee65b` (`00fb3dda` contains the
+  functional implementation; the later commits only wrap a comment and remove
+  an unused import).
+- [Tests 41292778139](https://github.com/bookieart1/iDared32bit/actions/runs/41292778139):
+  **129/129 library tests passed on macOS x86_64 and 129/129 on Windows**.
+  Each of the two focused diagnostic reproducers also passed its single test.
+  The workflow's lint step remains allowed to fail and reported only two
+  pre-existing overlong comments (`ns_dictionary.rs:531` and `dlfcn.rs:61`).
+  The development workflow still skips the guest executable integration and
+  native macOS guest-test sanity steps, so the added guest source coverage was
+  compiled into the iOS build but not executed by this workflow. The Android
+  job is green at the job level, but lint failed before a reliable Android
+  cross-compilation claim could be made.
+- [IPA build 41292778118](https://github.com/bookieart1/iDared32bit/actions/runs/41292778118):
+  arm64 iOS compilation, separate development identity verification, unsigned
+  packaging and artifact upload passed. Artifact `13078650513`, named
+  `iDared32bit-dev-unsigned-764d60e65428e466c2480d95aecf3d54006ee65b`;
+  downloaded ZIP SHA-256
+  `0d87819aeb53a2e145f347ffa9a365ab8d8d1665ea94b1496afab296fb43a953`
+  matches GitHub's published digest.
+- Local `outputs/iDared-Dev-1.80.ipa`, 19,916,373 bytes, SHA-256
+  `991cbc5458e414fc7d4393b93c97b1d53492a6c1ba08f5d7b4174787d40aa32e`,
+  passed archive extraction, arm64 Mach-O, development identity and unsigned
+  package checks. It embeds source `764d60e`, workflow `41292778118`, the
+  universal recorder marker, and all four new contract markers.
+- No application-specific branch, diagnostic redesign, save mutation/deletion,
+  fabricated network success or weakened memory check is included. Core Motion
+  handler delivery and navigation-bar rendering/animation remain explicitly
+  out of scope.
+
+Verification: `outputs/iDared-Dev-1.80.verification.json`. **Physical-device
+testing is pending; package and hosted tests do not establish functional game
+compatibility.**

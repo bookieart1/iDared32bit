@@ -32,7 +32,7 @@ Blot completed the requested smooth play/death path and clean Home return after
 returned through Home after 46.129 seconds (1,392 loops, 642 EAGL returns).
 They remain focused regression controls.
 
-## Validation plan and predictions
+## Validation and predictions
 
 Focused guest coverage now exercises valid/null ivar offsets, Core Motion
 polling start/data/stop plus the three-double return ABI, navigation-item
@@ -40,6 +40,26 @@ identity/title propagation/retained state, and URL-error constants and failed
 URL metadata. The development-branch hosted workflow runs library tests but
 still skips the guest executable, so successful hosted compilation and
 physical-device behavior must be reported separately.
+
+The final implementation is `764d60e65428e466c2480d95aecf3d54006ee65b`.
+[Tests 41292778139](https://github.com/bookieart1/iDared32bit/actions/runs/41292778139)
+passed 129/129 library tests on macOS x86_64 and 129/129 on Windows, plus both
+single-test diagnostic reproducers. Lint is an allowed-to-fail workflow step
+and reported only two pre-existing long comments; guest executable integration
+and its native macOS sanity step remain skipped. The green Android job does not
+establish Android cross-compilation because lint failed before that could be
+reliably observed.
+
+[IPA build 41292778118](https://github.com/bookieart1/iDared32bit/actions/runs/41292778118)
+passed iOS compilation, development-identity checking, unsigned packaging and
+artifact upload. Artifact `13078650513` has published/downloaded ZIP SHA-256
+`0d87819aeb53a2e145f347ffa9a365ab8d8d1665ea94b1496afab296fb43a953`.
+The local 19,916,373-byte IPA has SHA-256
+`991cbc5458e414fc7d4393b93c97b1d53492a6c1ba08f5d7b4174787d40aa32e`;
+archive extraction, arm64 Mach-O, unsigned status,
+`com.bookieart1.idared32bit.dev` / `iDared Dev`, embedded source/workflow,
+universal recorder and all four new contract markers were verified. Physical
+device behavior remains untested.
 
 Predictions for Dev 1.80:
 
