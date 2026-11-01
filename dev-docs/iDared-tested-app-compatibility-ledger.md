@@ -3046,3 +3046,47 @@ compatibility. Retain all older survey findings as dated evidence.
 - HookWorld still needs producer evidence. Separate coder UID-zero/ownership
   concerns found during inspection are **unproven causes** and left unchanged.
 - Details: `dev-docs/compatibility-1.73-followup.md`.
+
+
+### Dev 1.73 build verification — October 31, 2026 (local time)
+
+Delivered source **`452a8571f86846713672f2c803f99d5d913d0635`**. Implementation
+commit `a0cece8b`; follow-up `452a8571` gives the new WAV/NSData test a guest
+stack and wraps a documentation comment. Initial tests were 115/116 on both
+hosts: the fixture's SP=0 underflowed on a five-argument initializer. This was
+a test-harness error, corrected without changing emulation. Superseded IPA
+run 41260323710 was cancelled, not delivered. Initial logs remain preserved.
+
+- [iOS build 41260610289](https://github.com/bookieart1/iDared32bit/actions/runs/41260610289): archive/package succeeded.
+- [Tests 41260610296](https://github.com/bookieart1/iDared32bit/actions/runs/41260610296): **116 library tests passed on macOS and 116 on Windows**, including all seven added tests. Native Foundation singleton/defaults/set-copy fixture passed. Both the existing sysctl SVC reproducer and new missing-selector reproducer passed on macOS.
+- The new diagnostic test emitted one 112-byte synthetic caller window despite
+  repeated dump requests. Its recovered bytes contain mov r3,r6 before BL and
+  bx lr after it; registers/CPSR/guest memory and the original panic remained
+  unchanged. This is verified synthetic evidence, not a HookWorld root cause.
+  Applying the eight-caller selection to HookWorld's actual history includes
+  both `0x972dc` (score caller) and `0x709c0` (failed playerChar caller).
+- Lint's allowed failure remains the old dlfcn.rs:61 and ns_dictionary.rs:531
+  long comments. Clippy/rustdoc and Android compilation are not reached.
+  Full guest integration/global formatting are configured skips. The new
+  comment-length issue in the initial revision was corrected before delivery.
+- Artifact **13065650145**; artifact ZIP SHA256
+  `30e2fafee38748d917124d48b6af01f85e3a54e85366dcc64b067774dd75092a`
+  matches GitHub. Local `outputs/iDared-Dev-1.73.ipa`, **19,893,866 bytes**,
+  SHA256 `9d03ead7fc1c7225cfb0fd168eb669c64fc3162474ba0d4148b898bc23fa2f11`
+  matches the package job. CRC, arm64 Mach-O, embedded source/run, unsigned
+  package and `com.bookieart1.idared32bit.dev` / `iDared Dev` verified.
+- Packaged help still says default flight for every app; compiled default/
+  override tests pass. New crash-caller marker exists in the binary. Universal
+  recording remains enabled. No save deletion or app identity change.
+- **Physical-device validation of 1.73 remains pending.** MageGauntlet and
+  Sharpshooter have contract repairs for the observed blockers. HookWorld has
+  diagnostic-only work and an unresolved death/score fault. Infinight's 1.72
+  success remains confirmed within the user's reported scope.
+
+Focused retest: MageGauntlet start/play; Sharpshooter start/play/menu; HookWorld
+death/retry; Infinight old saved progress and relaunch. If HookWorld still fails,
+decode the captured score-caller instructions before considering serialization,
+lifetime, dispatch/ABI or service-related changes. No blanket runtime workaround.
+
+Verification: `outputs/iDared-Dev-1.73.verification.json`. Job logs, initial
+failure logs and machine-checked diagnostic evidence are in `work/verify-1.73/`.

@@ -91,3 +91,15 @@ HookWorld play until death/retry; brief Infinight old-progress/relaunch control.
 Install over the existing Dev app and preserve all saves. Universal recording
 remains the permanent default. A subsequent blocker is progress, not yet proof
 that a game is fixed. Infinight's existing successful result must not be lost.
+
+
+## Completed build validation
+
+Source `452a8571`, IPA workflow 41260610289, test workflow 41260610296.
+116/116 library tests pass on each host; native Foundation and both diagnostic
+reproducers pass. An initial test-only missing guest stack was corrected before
+delivery. Actual synthetic output contains the expected A32 caller bytes once.
+The eight-caller selection includes the desired HookWorld callers in the
+provided history. iOS archive and local package identity/checksums verified.
+Existing lint limitations and exact package hashes are recorded in the ledger.
+Game behavior on this build is still awaiting the next physical-device test.
