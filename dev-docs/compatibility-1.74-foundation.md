@@ -74,6 +74,8 @@ test because the saved-state path is part of the evidence.
   regression control and should receive a brief old-progress/relaunch check.
 
 Local Rust execution is unavailable in this workspace because no Rust toolchain
-is installed. Changed-file whitespace review is clean. Hosted library tests,
-native fixture execution, iOS compilation and package verification must be
-recorded separately after the workflows finish.
+is installed. Changed-file whitespace review is clean. The first hosted run
+showed that the new keyed-archive unit fixture needed synthetic guest stack
+space for nested Objective-C ABI calls; that test-harness setup was corrected
+without changing shipped behavior. Hosted library reruns, iOS compilation and
+package verification must be recorded separately after the workflows finish.

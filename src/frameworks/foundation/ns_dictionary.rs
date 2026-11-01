@@ -1223,6 +1223,10 @@ mod tests {
     fn mutable_singleton_factory_and_keyed_archive_preserve_mutability() {
         let mut env = Environment::new_fake_for_test_with_thread();
         let env = &mut env;
+        // Keyed archiving forwards Objective-C arguments through the guest ABI,
+        // so the synthetic thread needs stack space for those nested calls.
+        let stack = env.mem.alloc(0x1000);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = stack.to_bits() + 0x1000;
         let pool: id = msg_class![env; NSAutoreleasePool new];
         let first_key = get_static_str(env, "first");
         let second_key = get_static_str(env, "second");
@@ -1253,5 +1257,7 @@ mod tests {
         let immutable_is_mutable: bool = msg![env; immutable isKindOfClass:mutable_class];
         assert!(!immutable_is_mutable);
         release(env, pool);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
+        env.mem.free(stack);
     }
 }
