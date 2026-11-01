@@ -83,6 +83,19 @@ int main(void) {
     }
     assert(rejected);
 
+    NSMutableDictionary *kvcTarget =
+        [NSMutableDictionary dictionaryWithObject:@"kept" forKey:@"value"];
+    [kvcTarget setValuesForKeysWithDictionary:nil];
+    assert([[kvcTarget objectForKey:@"value"] isEqual:@"kept"]);
+
+    NSScanner *floatScanner = [NSScanner scannerWithString:@"  -1.25e+2tail"];
+    float scannedFloat = 0.0f;
+    assert([floatScanner scanFloat:&scannedFloat]);
+    assert(scannedFloat == -125.0f && floatScanner.scanLocation == 10);
+    scannedFloat = 77.0f;
+    assert(![floatScanner scanFloat:&scannedFloat]);
+    assert(scannedFloat == 77.0f && floatScanner.scanLocation == 10);
+
     NSObject *arrayElement = [NSObject new];
     NSMutableArray *mutableArray = [NSMutableArray arrayWithObject:arrayElement];
     NSArray *immutableArray = [NSArray arrayWithObject:arrayElement];

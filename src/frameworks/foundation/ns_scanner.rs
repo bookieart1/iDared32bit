@@ -256,6 +256,54 @@ pub const CLASSES: ClassExports = objc_classes! {
     true
 }
 
+- (bool)scanFloat:(MutPtr<f32>)result {
+    skip_characters(env, this);
+
+    let NSScannerHostObject { string, len, pos, .. } =
+        env.objc.borrow::<NSScannerHostObject>(this).clone();
+    if pos >= len {
+        return false;
+    }
+    let left: id = msg![env; string substringFromIndex:pos];
+    let text = to_rust_string(env, left).into_owned();
+    let Some(cutoff) = floating_point_prefix_len(&text) else {
+        return false;
+    };
+    let Ok(value) = text[..cutoff].parse::<f32>() else {
+        return false;
+    };
+
+    if !result.is_null() {
+        env.mem.write(result, value);
+    }
+    env.objc.borrow_mut::<NSScannerHostObject>(this).pos = pos + cutoff as NSUInteger;
+    true
+}
+
+- (bool)scanDouble:(MutPtr<f64>)result {
+    skip_characters(env, this);
+
+    let NSScannerHostObject { string, len, pos, .. } =
+        env.objc.borrow::<NSScannerHostObject>(this).clone();
+    if pos >= len {
+        return false;
+    }
+    let left: id = msg![env; string substringFromIndex:pos];
+    let text = to_rust_string(env, left).into_owned();
+    let Some(cutoff) = floating_point_prefix_len(&text) else {
+        return false;
+    };
+    let Ok(value) = text[..cutoff].parse::<f64>() else {
+        return false;
+    };
+
+    if !result.is_null() {
+        env.mem.write(result, value);
+    }
+    env.objc.borrow_mut::<NSScannerHostObject>(this).pos = pos + cutoff as NSUInteger;
+    true
+}
+
 @end
 
 };
@@ -280,4 +328,95 @@ fn skip_characters(env: &mut Environment, scanner: id) {
         }
     }
     env.objc.borrow_mut::<NSScannerHostObject>(scanner).pos = pos;
+}
+
+/// Return the byte length of the decimal floating-point prefix accepted by
+/// the historical, non-localized scanner path. The recognized grammar is an
+/// optional sign, digits with an optional decimal point, and an optional
+/// exponent containing at least one digit. Every recognized byte is ASCII,
+/// so its byte length is also its UTF-16 length for `scanLocation`.
+fn floating_point_prefix_len(text: &str) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    if bytes
+        .first()
+        .is_some_and(|byte| matches!(*byte, b'+' | b'-'))
+    {
+        index += 1;
+    }
+
+    let mut digits = 0;
+    while index < bytes.len() && bytes[index].is_ascii_digit() {
+        index += 1;
+        digits += 1;
+    }
+    if index < bytes.len() && bytes[index] == b'.' {
+        index += 1;
+        while index < bytes.len() && bytes[index].is_ascii_digit() {
+            index += 1;
+            digits += 1;
+        }
+    }
+    if digits == 0 {
+        return None;
+    }
+
+    if index < bytes.len() && matches!(bytes[index], b'e' | b'E') {
+        let exponent_start = index;
+        index += 1;
+        if index < bytes.len() && matches!(bytes[index], b'+' | b'-') {
+            index += 1;
+        }
+        let exponent_digits = index;
+        while index < bytes.len() && bytes[index].is_ascii_digit() {
+            index += 1;
+        }
+        if index == exponent_digits {
+            index = exponent_start;
+        }
+    }
+
+    Some(index)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frameworks::foundation::ns_string::from_rust_string;
+    use crate::objc::{msg, msg_class, release};
+
+    #[test]
+    fn floating_point_scans_update_location_and_preserve_output_on_failure() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let input = from_rust_string(&mut env, "  -1.25e+2tail".to_owned());
+        let scanner: id = msg_class![&mut env; NSScanner alloc];
+        let scanner: id = msg![&mut env; scanner initWithString:input];
+        let output = env.mem.alloc(std::mem::size_of::<f32>() as u32).cast();
+        env.mem.write(output, 99.0f32);
+
+        let did_scan: bool = msg![&mut env; scanner scanFloat:output];
+        assert!(did_scan);
+        assert_eq!(env.mem.read(output), -125.0f32);
+        let location: NSUInteger = msg![&mut env; scanner scanLocation];
+        assert_eq!(location, 10);
+
+        env.mem.write(output, 77.0f32);
+        let did_scan: bool = msg![&mut env; scanner scanFloat:output];
+        assert!(!did_scan);
+        assert_eq!(env.mem.read(output), 77.0f32);
+        let unchanged_location: NSUInteger = msg![&mut env; scanner scanLocation];
+        assert_eq!(unchanged_location, location);
+
+        env.mem.free(output.cast());
+        release(&mut env, scanner);
+        release(&mut env, input);
+    }
+
+    #[test]
+    fn floating_point_prefix_requires_digits_and_complete_exponent() {
+        assert_eq!(floating_point_prefix_len(".5rest"), Some(2));
+        assert_eq!(floating_point_prefix_len("1.e2!"), Some(4));
+        assert_eq!(floating_point_prefix_len("1e+tail"), Some(1));
+        assert_eq!(floating_point_prefix_len("+tail"), None);
+    }
 }

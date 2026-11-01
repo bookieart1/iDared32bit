@@ -52,7 +52,7 @@ fn CGFontCreateWithDataProvider(env: &mut Environment, provider: CGDataProviderR
     env.objc.alloc_object(class, host_obj, &mut env.mem)
 }
 
-fn CGFontCreateWithFontName(env: &mut Environment, name: CFStringRef) -> CGFontRef {
+pub(super) fn CGFontCreateWithFontName(env: &mut Environment, name: CFStringRef) -> CGFontRef {
     if name.is_null() {
         return name;
     }

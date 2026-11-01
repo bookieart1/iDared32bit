@@ -400,7 +400,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setValuesForKeysWithDictionary:(id)keyed_values { // NSDictionary*
-    assert_ne!(keyed_values, nil);
+    // Objective-C messages sent to nil return zero/nil, so the equivalent
+    // allKeys/count sequence is an intentional no-op for a nil argument.
+    if keyed_values == nil {
+        return;
+    }
     // allKeys is a snapshot, so this remains well-defined even if the source
     // and receiver are the same mutable dictionary.
     let keys: id = msg![env; keyed_values allKeys];
@@ -790,6 +794,11 @@ mod tests {
         () = msg![env; target setValuesForKeysWithDictionary:source];
         let copied: id = msg![env; target objectForKey:key];
         assert_eq!(copied, value);
+
+        // A nil source has no keys and must leave the receiver unchanged.
+        () = msg![env; target setValuesForKeysWithDictionary:nil];
+        let still_copied: id = msg![env; target objectForKey:key];
+        assert_eq!(still_copied, value);
 
         release(env, value);
         release(env, key);

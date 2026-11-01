@@ -473,6 +473,34 @@ pub(super) fn objc_msgSendSuper2(
     )
 }
 
+/// Struct-returning variant of [`objc_msgSendSuper2`].
+///
+/// On 32-bit ARM the hidden result pointer occupies r0, so the `objc_super *`
+/// and selector arrive in r1 and r2. The eventual method implementation must
+/// instead see the receiver in r1 while the hidden pointer remains untouched.
+#[allow(non_snake_case)]
+pub(super) fn objc_msgSendSuper2_stret(
+    env: &mut Environment,
+    _stret: MutVoidPtr,
+    super_ptr: ConstPtr<objc_super>,
+    selector: SEL,
+) {
+    let objc_super { receiver, class } = env.mem.read(super_ptr);
+
+    // Preserve the hidden result pointer in r0 and replace only the normal
+    // receiver argument (r1 for a struct-returning call).
+    crate::abi::write_next_arg(&mut 1, env.cpu.regs_mut(), &mut env.mem, receiver);
+
+    objc_msgSend_inner(
+        env,
+        receiver,
+        selector,
+        /* super2: */ Some(class),
+        /* tolerate_type_mismatch: */ false,
+        /* skip_initialize: */ false,
+    )
+}
+
 /// Trait that assists with type-checking of [msg_send]'s arguments.
 ///
 /// - Statically constrains the types of [msg_send]'s arguments so that the
@@ -567,7 +595,9 @@ where
     // Provide type info for dynamic type checking.
     env.objc.message_type_info = Some(<(R, P) as MsgSendSuperSignature>::WithoutSuper::type_info());
     if R::SIZE_IN_MEM.is_some() {
-        todo!() // no stret yet
+        (objc_msgSendSuper2_stret
+            as fn(&mut Environment, MutVoidPtr, ConstPtr<objc_super>, SEL))
+            .call_from_host(env, args)
     } else {
         (objc_msgSendSuper2 as fn(&mut Environment, ConstPtr<objc_super>, SEL))
             .call_from_host(env, args)
@@ -717,4 +747,48 @@ pub fn autorelease(env: &mut Environment, object: id) -> id {
         return nil;
     }
     msg![env; object autorelease]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
+    use crate::mem::guest_size_of;
+    use crate::objc::{msg, msg_class, release};
+
+    #[test]
+    fn super2_struct_return_preserves_hidden_pointer_and_rewrites_receiver() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let frame = CGRect {
+            origin: CGPoint { x: 3.0, y: 4.0 },
+            size: CGSize {
+                width: 50.0,
+                height: 60.0,
+            },
+        };
+        let label: id = msg_class![&mut env; UILabel alloc];
+        let label: id = msg![&mut env; label initWithFrame:frame];
+
+        let class = env.objc.get_known_class("UILabel", &mut env.mem);
+        let selector = env.objc.lookup_selector("bounds").unwrap();
+        let super_ptr = env.mem.alloc(guest_size_of::<objc_super>()).cast();
+        env.mem.write(
+            super_ptr,
+            objc_super {
+                receiver: label,
+                class,
+            },
+        );
+
+        let bounds: CGRect =
+            msg_send_super2(&mut env, (super_ptr.cast_const(), selector));
+        let bounds_origin = bounds.origin;
+        let bounds_size = bounds.size;
+        let expected_size = frame.size;
+        assert_eq!(bounds_origin, CGPoint { x: 0.0, y: 0.0 });
+        assert_eq!(bounds_size, expected_size);
+
+        env.mem.free(super_ptr.cast());
+        release(&mut env, label);
+    }
 }

@@ -13,7 +13,9 @@ use super::cg_color::CGColorRef;
 use super::cg_color_space::{
     kCGColorSpaceModelMonochrome, kCGColorSpaceModelRGB, CGColorSpaceGetModel, CGColorSpaceRef,
 };
-use super::cg_font::{CGFontHostObject, CGFontRef, CGFontRelease, CGFontRetain, CGGlyph};
+use super::cg_font::{
+    CGFontCreateWithFontName, CGFontHostObject, CGFontRef, CGFontRelease, CGFontRetain, CGGlyph,
+};
 use super::cg_image::CGImageRef;
 use super::cg_path::{
     kCGLineCapButt, kCGLineCapRound, kCGLineCapSquare, kCGPathElementAddLineToPoint,
@@ -23,10 +25,12 @@ use super::cg_path::{
 use super::{cg_bitmap_context, cg_color, CGFloat, CGPoint, CGRect, CGSize};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
+use crate::frameworks::foundation::ns_string::from_rust_string;
 use crate::frameworks::uikit;
 use crate::mem::{ConstPtr, ConstVoidPtr, GuestUSize};
-use crate::objc::{objc_classes, ClassExports, HostObject};
+use crate::objc::{objc_classes, release, ClassExports, HostObject};
 use crate::Environment;
+use encoding_rs::Encoding;
 
 type CGInterpolationQuality = i32;
 
@@ -39,6 +43,10 @@ const kCGTextFillClip: CGTextDrawingMode = 4;
 const kCGTextStrokeClip: CGTextDrawingMode = 5;
 const kCGTextFillStrokeClip: CGTextDrawingMode = 6;
 const kCGTextClip: CGTextDrawingMode = 7;
+
+type CGTextEncoding = i32;
+const kCGEncodingFontSpecific: CGTextEncoding = 0;
+const kCGEncodingMacRoman: CGTextEncoding = 1;
 
 pub type CGBlendMode = i32;
 pub const kCGBlendModeNormal: CGBlendMode = 0;
@@ -251,6 +259,7 @@ type ContextState = (
     (CGFloat, CGFloat, CGFloat, CGFloat), // RGB stroke color
     Vec<ClipPath>,                        // clipping path intersections
     CGTextDrawingMode,                    // text drawing mode
+    CGTextEncoding,                       // legacy byte-to-glyph encoding
 );
 
 pub(super) struct CGContextHostObject {
@@ -264,6 +273,7 @@ pub(super) struct CGContextHostObject {
     /// Text transform.
     pub(super) text_transform: Option<CGAffineTransform>,
     pub(super) text_drawing_mode: CGTextDrawingMode,
+    pub(super) text_encoding: CGTextEncoding,
     /// Line/Path data
     pub(super) line_cap: CGLineCap,
     pub(super) line_width: CGFloat,
@@ -298,19 +308,38 @@ pub fn CGContextRetain(env: &mut Environment, c: CGContextRef) -> CGContextRef {
 }
 
 pub fn CGContextSelectFont(
-    _env: &mut Environment,
+    env: &mut Environment,
     ctx: CGContextRef,
     name_ptr: ConstVoidPtr, // const char * (guest)
     size: CGFloat,
     encoding: i32, // CGTextEncoding
 ) {
-    log!(
-        "TODO: CGContextSelectFont(ctx={:?}, name_ptr={:?}, size={}, encoding={})",
-        ctx,
-        name_ptr,
-        size,
-        encoding
-    );
+    assert!(matches!(
+        encoding,
+        kCGEncodingFontSpecific | kCGEncodingMacRoman
+    ));
+    if name_ptr.is_null() {
+        return;
+    }
+    let name = env
+        .mem
+        .cstr_at_utf8(name_ptr.cast())
+        .expect("CGContextSelectFont font name is not UTF-8")
+        .to_owned();
+    let name_string = from_rust_string(env, name.clone());
+    let font = CGFontCreateWithFontName(env, name_string);
+    release(env, name_string);
+    if font.is_null() {
+        log!("CGContextSelectFont: no font named {name:?}");
+        return;
+    }
+
+    CGContextSetFont(env, ctx, font);
+    CGContextSetFontSize(env, ctx, size);
+    CGFontRelease(env, font);
+    env.objc
+        .borrow_mut::<CGContextHostObject>(ctx)
+        .text_encoding = encoding;
 }
 
 fn CGContextSetBlendMode(env: &mut Environment, context: CGContextRef, blend_mode: CGBlendMode) {
@@ -560,6 +589,7 @@ pub fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
         host_obj.rgb_stroke_color,
         host_obj.clip_paths.clone(),
         host_obj.text_drawing_mode,
+        host_obj.text_encoding,
     ));
     CGFontRetain(env, env.objc.borrow::<CGContextHostObject>(context).font);
 }
@@ -582,6 +612,7 @@ pub fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
     host_obj.rgb_stroke_color = state.6;
     host_obj.clip_paths = state.7;
     host_obj.text_drawing_mode = state.8;
+    host_obj.text_encoding = state.9;
 }
 
 fn CGContextSetInterpolationQuality(
@@ -675,6 +706,14 @@ mod text_drawing_mode_tests {
         assert!(text_mode_draws_fill(kCGTextFillStrokeClip));
         assert!(!text_mode_draws_fill(kCGTextClip));
     }
+
+    #[test]
+    fn mac_roman_decoder_preserves_ascii_text() {
+        assert_eq!(
+            decode_mac_roman(b"Cube"),
+            vec![b'C' as u16, b'u' as u16, b'b' as u16, b'e' as u16]
+        );
+    }
 }
 
 fn CGContextShowGlyphsAtPoint(
@@ -684,6 +723,69 @@ fn CGContextShowGlyphsAtPoint(
     y: CGFloat,
     glyphs: ConstPtr<CGGlyph>,
     count: GuestUSize,
+) {
+    let mut glyph_ids = Vec::new();
+    for i in 0..count {
+        let glyph_id = env.mem.read(glyphs + i);
+        glyph_ids.push(rusttype::GlyphId(glyph_id));
+    }
+    CGContextShowGlyphIdsAtPoint(env, context, x, y, glyph_ids)
+}
+
+fn CGContextShowTextAtPoint(
+    env: &mut Environment,
+    context: CGContextRef,
+    x: CGFloat,
+    y: CGFloat,
+    text: ConstPtr<u8>,
+    length: GuestUSize,
+) {
+    let text_drawing_mode = env
+        .objc
+        .borrow::<CGContextHostObject>(context)
+        .text_drawing_mode;
+    if matches!(text_drawing_mode, kCGTextInvisible | kCGTextClip) {
+        return;
+    }
+
+    let encoding = env
+        .objc
+        .borrow::<CGContextHostObject>(context)
+        .text_encoding;
+    let bytes = env.mem.bytes_at(text.cast(), length).to_vec();
+    let font_ref = env.objc.borrow::<CGContextHostObject>(context).font;
+    if font_ref.is_null() {
+        log!("CGContextShowTextAtPoint called without a selected font");
+        return;
+    }
+    let font = &env.objc.borrow::<CGFontHostObject>(font_ref).font;
+    let glyph_ids = match encoding {
+        // Font-specific text treats each byte as the font's glyph index.
+        kCGEncodingFontSpecific => bytes
+            .into_iter()
+            .map(|byte| rusttype::GlyphId(byte.into()))
+            .collect(),
+        kCGEncodingMacRoman => decode_mac_roman(&bytes)
+            .into_iter()
+            .map(|unit| font.glyph_id_for_char(unit))
+            .collect(),
+        _ => unreachable!(),
+    };
+    CGContextShowGlyphIdsAtPoint(env, context, x, y, glyph_ids)
+}
+
+fn decode_mac_roman(bytes: &[u8]) -> Vec<u16> {
+    let encoding = Encoding::for_label(b"macintosh").expect("encoding_rs has Macintosh");
+    let (decoded, _, _) = encoding.decode(bytes);
+    decoded.encode_utf16().collect()
+}
+
+fn CGContextShowGlyphIdsAtPoint(
+    env: &mut Environment,
+    context: CGContextRef,
+    x: CGFloat,
+    y: CGFloat,
+    glyph_ids: Vec<rusttype::GlyphId>,
 ) {
     let text_drawing_mode = env
         .objc
@@ -704,12 +806,6 @@ fn CGContextShowGlyphsAtPoint(
         kCGTextFillClip | kCGTextFillStrokeClip
     ) {
         log!("TODO: Core Graphics text clipping");
-    }
-
-    let mut glyph_ids = Vec::new();
-    for i in 0..count {
-        let glyph_id = env.mem.read(glyphs + i);
-        glyph_ids.push(rusttype::GlyphId(glyph_id));
     }
 
     let font = env.objc.borrow::<CGContextHostObject>(context).font;
@@ -1058,6 +1154,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextSetTextMatrix(_, _)),
     export_c_func!(CGContextShowGlyphsAtPoint(_, _, _, _, _)),
     export_c_func!(CGContextShowGlyphsAtPositions(_, _, _, _)),
+    export_c_func!(CGContextShowTextAtPoint(_, _, _, _, _)),
     export_c_func!(CGContextSetLineCap(_, _)),
     export_c_func!(CGContextSetLineWidth(_, _)),
     export_c_func!(CGContextMoveToPoint(_, _, _)),
