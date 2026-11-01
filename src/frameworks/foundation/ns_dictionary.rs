@@ -1367,10 +1367,14 @@ mod tests {
             .register_host_selector("compare:".to_string(), &mut env.mem);
 
         let sorted: id = msg![env; dictionary keysSortedByValueUsingSelector:compare];
-        assert_eq!(msg![env; sorted count], 3u32);
-        assert_eq!(msg![env; sorted objectAtIndex:0u32], low_key);
-        assert_eq!(msg![env; sorted objectAtIndex:1u32], middle_key);
-        assert_eq!(msg![env; sorted objectAtIndex:2u32], high_key);
+        let count: NSUInteger = msg![env; sorted count];
+        let first: id = msg![env; sorted objectAtIndex:0u32];
+        let second: id = msg![env; sorted objectAtIndex:1u32];
+        let third: id = msg![env; sorted objectAtIndex:2u32];
+        assert_eq!(count, 3);
+        assert_eq!(first, low_key);
+        assert_eq!(second, middle_key);
+        assert_eq!(third, high_key);
 
         release(env, dictionary);
         release(env, pool);

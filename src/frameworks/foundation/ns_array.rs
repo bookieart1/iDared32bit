@@ -1123,9 +1123,12 @@ mod tests {
         () = msg![env; array removeObjectsAtIndexes:indexes];
         let count: NSUInteger = msg![env; array count];
         assert_eq!(count, 3);
-        assert_eq!(msg![env; array objectAtIndex:0u32], objects[0]);
-        assert_eq!(msg![env; array objectAtIndex:1u32], objects[2]);
-        assert_eq!(msg![env; array objectAtIndex:2u32], objects[5]);
+        let first: id = msg![env; array objectAtIndex:0u32];
+        let second: id = msg![env; array objectAtIndex:1u32];
+        let third: id = msg![env; array objectAtIndex:2u32];
+        assert_eq!(first, objects[0]);
+        assert_eq!(second, objects[2]);
+        assert_eq!(third, objects[5]);
         for (index, &object) in objects.iter().enumerate() {
             let expected = if [1, 3, 4].contains(&index) { 1 } else { 2 };
             assert_eq!(env.objc.get_refcount(object).get(), expected);
