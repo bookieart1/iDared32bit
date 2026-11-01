@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: November 1, 2026
-Latest device-tested checkpoint: **iDared Dev 1.81** (`178cc51`; focused device result; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.82** (`99580ce`; package verified; physical-device validation pending)
-Current activity: **Dev 1.81 device testing verifies the new picker paging/page continuity and Dirt's physical gravity; Blot remains healthy. Dark Nebula 2 now reaches a missing mutable index-set factory, and Glowfish reaches the named-pasteboard contract. Glowfish HD advances through intro and level selection but reports a missing bundled level file before a genuine abort. Hamlet works after a verified incorrect first host orientation; Parachute Ninja remains at its invalid callback-argument origin. Spoing produced one early null-page crash followed by two working launches, so it remains a regression watch rather than a patch target. Dev 1.82 implements general Foundation index sets, bounded named pasteboards, explicit host-scene orientation, safer direct-touch capture at letterbox bars, and guest-only background termination so screenshot review cannot close the entire host. The universal recorder is unchanged. The arm64 unsigned IPA and separate development identity are verified; macOS and Windows each passed 135/135 library tests, the native Foundation reference passed, and both diagnostic reproducers passed. Physical validation is pending.**
+Latest device-tested checkpoint: **iDared Dev 1.82** (`99580ce`; focused device result; Dev 1.71 remains the latest full-catalog survey)
+Latest built checkpoint: **iDared Dev 1.83** (`7d6a55e`; hosted tests and package verified; physical-device testing pending)
+Current activity: **Dev 1.82 device testing keeps Blot, Dirt and two normal Spoing launches healthy. Dark Nebula 2 now reaches missing `removeObjectsAtIndexes:` and Glowfish reaches missing `keysSortedByValueUsingSelector:`. Glowfish HD still reports an absent bundled level file before its genuine abort; Parachute Ninja remains at the invalid UIApplication-as-error callback argument. Every launch proves the Dev 1.82 host-orientation bridge was unavailable, explaining why the Glowfish HD keyboard and Hamlet's first presentation did not change. Screenshot review preserved iDared but deliberately ended the guest under the Dev 1.82 fallback. Dev 1.83 implements the two general Foundation contracts, replaces the failed dynamic orientation lookup with direct callback registration, and pauses/resumes the same guest across transient host interruptions. The universal recorder remains unchanged. Hosted validation and the downloaded package are verified; physical results are not yet claimed.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3737,3 +3737,61 @@ compatibility patch is included.
 Verification: `outputs/iDared-Dev-1.82.verification.json`. The focused device
 procedure is recorded in the Dev 1.82 engineering note; no save deletion is
 requested. **Physical-device compatibility remains pending.**
+
+## Dev 1.82 device result and Dev 1.83 seventh-stage contracts
+
+The complete Dev 1.82 log is preserved as
+`outputs/device-logs/iDared-Dev-1.82-device-results.txt`: 1,093,375 bytes,
+SHA-256
+`5cdfb404ed870e53430d0594d523c11a81bb898e5ed6eeea733a0a428cc4777c`.
+It embeds source `99580ce5`, workflow `41298463255`, and the unchanged
+universal bounded recorder.
+
+| App / surface | Dev 1.82 result | Current classification / Dev 1.83 action |
+|---|---|---|
+| Blot | Smooth play and clean Home return after 52.418 s / 1,839 loops / 1,792 EAGL returns. | **Regression pass in stated scope.** |
+| Dark Nebula 2 | Level loading reaches missing `removeObjectsAtIndexes:` after 18.271 s / 1,000 loops / 505 returns. | **Partial; later shared blocker.** Implement validated descending indexed removal on mutable arrays. |
+| Dirt | Gravity/traversal/input remain functional; clean Home return after 63.999 s / 3,984 loops / 3,801 returns. | **Working checkpoint in expanded tested scope.** No new compatibility change. |
+| Glowfish | Startup reaches missing `keysSortedByValueUsingSelector:` after 1.288 s. | **Startup-blocked.** Implement dictionary key sorting through the supplied value comparator. |
+| Glowfish HD | Name/menu/intro/level selection remain reachable; opening missing bundled `Level_01.gfl` fails and the guest deliberately aborts after 27.970 s / 1,315 loops / 1,183 returns. Keyboard remains portrait. | **Partial.** Preserve the real resource failure. Correct the separate host-orientation connection. |
+| Hamlet | Runs and exits cleanly, but the initial presentation remains rotated/cropped. | **Working checkpoint with orientation defect.** Same host correction as Glowfish HD. |
+| Parachute Ninja | Guest again sends `domain` to a supplied `UIApplication`. | **Blocked at unchanged invalid callback-argument origin.** No invalid-object accommodation. |
+| Spoing | Two normal launches work and exit cleanly. Screenshot review on a third launch ends only the guest and returns to the picker without an emulator panic. | **Regression pass twice; lifecycle fallback only partly successful.** Replace deliberate guest termination with bounded suspend/resume. |
+
+The log records `Host orientation bridge is unavailable` for every launch.
+Dev 1.82 therefore never executed its intended Swift scene request. Dev 1.83
+registers that function directly from the final executable instead of relying
+on a cross-image lookup. This is a corrected integration path, not a new
+orientation heuristic.
+
+Dev 1.83 also adds general `NSMutableArray removeObjectsAtIndexes:` and
+`NSDictionary keysSortedByValueUsingSelector:` contracts with focused
+ownership/order coverage. Transient host inactivity now sends the historical
+resign-active lifecycle, pauses every guest thread, waits in SDL, and sends
+did-become-active before resuming the same guest. It does not claim background
+task execution. Real termination and guest lifecycle exceptions remain
+strict.
+
+Final implementation commit: `7d6a55ebba55488762bc890452d0768b0740ad0b`.
+Engineering detail and the focused no-save-reset procedure are in
+`dev-docs/compatibility-1.83-seventh-stage-contracts-and-suspend-recovery.md`.
+
+### Dev 1.83 verified delivery
+
+- [Hosted tests 41300999515](https://github.com/bookieart1/iDared32bit/actions/runs/41300999515):
+  **137/137 development-library tests passed on macOS and 137/137 on
+  Windows**. The native Foundation reference, two bounded diagnostic
+  reproducers and Android compile/lint job passed. Branch-gated full
+  guest-executable steps were skipped.
+- [IPA build 41300999509](https://github.com/bookieart1/iDared32bit/actions/runs/41300999509):
+  arm64 iOS compilation, separate development identity verification, unsigned
+  packaging and artifact upload passed. Artifact ID `13081776006`, ZIP
+  SHA-256 `ea4aaa25c738cec94481f2b06c7668ac3dc0998097dd0011d5d496abbcb6f933`,
+  matching GitHub's published digest.
+- Local `outputs/iDared-Dev-1.83.ipa`, 19,959,152 bytes, SHA-256
+  `38f0f199075e5b1157e6047551d1e700f49297c7271c657d20988b677fff0c75`,
+  passed embedded commit/workflow, arm64, separate bundle identity, universal
+  recorder and unsigned/no-provisioning checks.
+
+Verification: `outputs/iDared-Dev-1.83.verification.json`. Device results
+remain pending and separate from these build and host-test checkpoints.
