@@ -815,11 +815,12 @@ mod tests {
     #[test]
     fn class_objects_inherit_copy_with_zone_and_return_themselves() {
         let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
         let class = env
             .objc
             .get_known_class("NSMutableDictionary", &mut env.mem);
 
-        let copied: id = msg![&mut env; class copyWithZone:(MutVoidPtr::null())];
+        let copied: id = msg![env; class copyWithZone:(MutVoidPtr::null())];
         assert_eq!(copied, class);
     }
 }

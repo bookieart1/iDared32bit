@@ -329,11 +329,12 @@ mod tests {
     #[test]
     fn successful_serialization_and_parsing_clear_error_description() {
         let mut env = Environment::new_fake_for_test_with_thread();
-        let dictionary: id = msg_class![&mut env; NSMutableDictionary new];
+        let env = &mut env;
+        let dictionary: id = msg_class![env; NSMutableDictionary new];
         let error_string: MutPtr<id> = env.mem.alloc(guest_size_of::<id>()).cast();
         env.mem.write(error_string, dictionary);
 
-        let data: id = msg_class![&mut env; NSPropertyListSerialization
+        let data: id = msg_class![env; NSPropertyListSerialization
             dataFromPropertyList:dictionary
             format:NSPropertyListBinaryFormat_v1_0
             errorDescription:error_string];
@@ -341,7 +342,7 @@ mod tests {
         assert_eq!(env.mem.read(error_string), nil);
 
         env.mem.write(error_string, dictionary);
-        let decoded: id = msg_class![&mut env; NSPropertyListSerialization
+        let decoded: id = msg_class![env; NSPropertyListSerialization
             propertyListFromData:data
             mutabilityOption:NSPropertyListImmutable
             format:(MutPtr::<NSPropertyListFormat>::null())
@@ -350,6 +351,6 @@ mod tests {
         assert_eq!(env.mem.read(error_string), nil);
 
         env.mem.free(error_string.cast());
-        release(&mut env, dictionary);
+        release(env, dictionary);
     }
 }
