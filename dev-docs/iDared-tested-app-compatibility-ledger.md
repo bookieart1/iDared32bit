@@ -3409,3 +3409,50 @@ compatibility must be reported separately.
 
 Verification: `outputs/iDared-Dev-1.77.verification.json`. Engineering detail:
 `dev-docs/compatibility-1.77-priority-batch-contracts.md`.
+
+### Dev 1.77 physical-device result
+
+The supplied 530,642-byte log embeds source `7640156` and workflow
+`41284825031`; its SHA-256 is
+`b608c4f5d259f50ace6cbb26f1b360a4d5aa4388637a20f69ed6802994fc0dde`.
+The unmodified file is preserved as
+`outputs/device-logs/iDared-Dev-1.77-device-results.txt`. The universal bounded
+recorder is active for every relevant launch.
+
+| App | Dev 1.77 device result | Status and next first blocker |
+|---|---|---|
+| Dark Nebula 2 | Smooth menu/interface followed by a crash after selecting gameplay. The log records 13.895 s, 777 main loops and 391 EAGL returns before `_object_getInstanceVariable`. | **Verified major stage advance; partial compatibility.** `_feraiseexcept` is no longer the blocker. Gameplay remains unobserved. |
+| Dirt | The NSData URL/options reader succeeds and returns 1,474 bytes. XML initialization maps NSString encoding 4 to CF UTF-8, then calls `_CFStringConvertEncodingToIANACharSetName`. | **Blocker removed; still startup-blocked.** The new URL reader is validated on this file path, not synchronous network URLs. |
+| Glowfish / Glowfish HD | The VM-tagged mapping succeeds; both enter bundled runtime/thread initialization and reach `_pthread_setcancelstate`. | **Blocker removed; corroborated shared startup blocker.** No visible compatibility claim. |
+| Hamlet | UIImage `description` and NSLog complete; the next call sends missing `drawAsPatternInRect:` to the valid UIImage. | **Blocker removed; still startup-blocked.** No frame or main-loop iteration. |
+| Parachute Ninja | `_sel_getUid`, two method lookups and both IMP reads complete; UIApplication swizzling then calls `_method_setImplementation`. | **Blocker removed; still startup-blocked.** Saved-old-IMP behavior must avoid redispatch recursion. |
+| Blot | Smooth through the requested death path and exits through emulator Home after 40.083 s, 1,271 loops and 1,259 EAGL returns. | **Regression pass in stated scope.** |
+| Spoing | Smooth and exits through emulator Home after 41.215 s, 1,075 loops and 504 EAGL returns. | **Regression pass in stated scope.** |
+
+## Dev 1.78 verified delivery — second-stage shared contracts
+
+Dev 1.78 implements shared Objective-C runtime, Core Foundation, pthread and
+UIKit/Core Graphics contracts for the newly exposed blockers. It does not add
+game identifiers, permissive memory behavior, swallowed failures or expanded
+diagnostics. Cancellation delivery remains outside the partial pthread contract.
+
+- Source commit: `1af64fa2aeb4b6f5aacfb0ab591a56329c13b8a8`.
+- [Tests 41287654522](https://github.com/bookieart1/iDared32bit/actions/runs/41287654522):
+  **129/129 library tests passed on macOS and 129/129 on Windows**. Native
+  Foundation reference and bounded diagnostic reproducers passed. Android lint
+  retains its configured allowed failure; guest executable integration remains
+  skipped.
+- [IPA build 41287654525](https://github.com/bookieart1/iDared32bit/actions/runs/41287654525):
+  iOS compilation, separate identity verification, unsigned packaging and
+  artifact upload passed. Artifact `13075932358`, 19,855,683 bytes, SHA-256
+  `1007502c2df69aa946c1f12f130d084da534ec489eb6455eef4af42b9c930dda`.
+- Local `outputs/iDared-Dev-1.78.ipa`, 19,901,982 bytes, SHA-256
+  `8169715424956bf86895877f949898236637b2ea704757407b3119249496108f`,
+  passed archive/CRC, arm64, identity and unsigned-package checks. The executable
+  embeds source `1af64fa`, workflow `41287654525`, the universal recorder default
+  and all new contract symbols.
+
+Verification: `outputs/iDared-Dev-1.78.verification.json`. Engineering detail:
+`dev-docs/compatibility-1.78-second-stage-contracts.md`. **Physical-device
+testing is pending; removed blocker, visible stage advance and functional
+compatibility remain separate claims.**

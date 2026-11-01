@@ -63,3 +63,27 @@ Focused device order after a verified package:
 Each removed blocker predicts only that execution advances beyond that exact
 boundary. Menu, gameplay, audio, saving and functional compatibility remain
 separate physical-device observations.
+
+## Verified delivery
+
+- Implementation/source commit:
+  `1af64fa2aeb4b6f5aacfb0ab591a56329c13b8a8`.
+- [Hosted validation 41287654522](https://github.com/bookieart1/iDared32bit/actions/runs/41287654522):
+  129/129 library tests passed on both macOS and Windows. The native Foundation
+  reference and bounded diagnostic reproducers passed. Android lint retained
+  its configured allowed failure; guest executable integration remains skipped.
+- [Unsigned IPA build 41287654525](https://github.com/bookieart1/iDared32bit/actions/runs/41287654525):
+  iOS compilation, development identity verification, unsigned packaging and
+  artifact upload passed. Artifact `13075932358` is 19,855,683 bytes and its
+  SHA-256 is
+  `1007502c2df69aa946c1f12f130d084da534ec489eb6455eef4af42b9c930dda`.
+- Local `outputs/iDared-Dev-1.78.ipa` is 19,901,982 bytes with SHA-256
+  `8169715424956bf86895877f949898236637b2ea704757407b3119249496108f`.
+  All archive entries read successfully. The bundle is arm64, unsigned, has no
+  provisioning profile or code-signature load command, and uses
+  `com.bookieart1.idared32bit.dev` / `iDared Dev`. The executable embeds source
+  `1af64fa`, workflow `41287654525`, the permanent universal-flight default and
+  all five new contract symbols.
+
+Physical-device behavior remains unverified. This package proves compilation,
+package identity and hosted tests, not compatibility in the target games.
