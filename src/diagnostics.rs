@@ -373,7 +373,7 @@ impl Recorder {
     }
 
     /// Reuse the existing history only at failure time. These are observed
-    /// call sites, not a reconstructed stack or proof of the bad value's origin.
+    /// call sites, not a reconstructed stack or proof of a bad value's origin.
     fn crash_callers(&self, thread: usize) -> [u32; CRASH_CALLERS] {
         let mut callers = [0; CRASH_CALLERS];
         let mut count = 0;

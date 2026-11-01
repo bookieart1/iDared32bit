@@ -485,6 +485,10 @@ mod tests {
     fn data_backed_audio_player_has_no_url() {
         let mut env = Environment::new_fake_for_test_with_thread();
         let env = &mut env;
+        // NSData's initializer forwards five ABI arguments, so this fixture
+        // needs guest stack space in addition to its synthetic thread.
+        let stack = env.mem.alloc(0x1000);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = stack.to_bits() + 0x1000;
         let pool: id = msg_class![env; NSAutoreleasePool new];
         let mut wav = std::io::Cursor::new(Vec::new());
         let mut writer = hound::WavWriter::new(
@@ -519,6 +523,8 @@ mod tests {
         release(env, player);
         release(env, pool);
         env.mem.free(error.cast());
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
+        env.mem.free(stack);
     }
 
     #[test]
