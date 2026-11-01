@@ -20,7 +20,7 @@ const SIGNALS: usize = 24;
 const PROGRESS: usize = 24;
 const CRASH_CALLERS: usize = 8;
 const PROVENANCE: usize = 128;
-const BOUNDARY_DETAILS: usize = 32;
+const BOUNDARY_DETAILS: usize = 8;
 const HEALTHY_PRESENT_INTERVAL: Duration = Duration::from_millis(100);
 const SLOW_PRESENT_INTERVAL: Duration = Duration::from_millis(180);
 const HEALTHY_PRESENT_STREAK: u16 = 30;
@@ -90,6 +90,77 @@ impl std::fmt::Display for Text {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct ShortText {
+    bytes: [u8; 48],
+    len: u8,
+}
+impl Default for ShortText {
+    fn default() -> Self {
+        Self {
+            bytes: [0; 48],
+            len: 0,
+        }
+    }
+}
+impl ShortText {
+    fn from_text(text: Text) -> Self {
+        let mut short = Self::default();
+        let len = text.len.min(short.bytes.len());
+        short.bytes[..len].copy_from_slice(&text.bytes[..len]);
+        short.len = len as u8;
+        short
+    }
+    fn bytes(&self) -> &[u8] {
+        &self.bytes[..usize::from(self.len)]
+    }
+}
+impl std::fmt::Display for ShortText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for &b in self.bytes() {
+            if (32..127).contains(&b) {
+                write!(f, "{}", b as char)?;
+            } else {
+                write!(f, "\\x{b:02x}")?;
+            }
+        }
+        if usize::from(self.len) == self.bytes.len() {
+            write!(f, "[truncated]")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum DefaultsDomain {
+    #[default]
+    None,
+    Application,
+    Global,
+    Registration,
+    Missing,
+}
+impl DefaultsDomain {
+    fn from_name(name: &str) -> Self {
+        match name {
+            "application" => Self::Application,
+            "global" => Self::Global,
+            "registration" => Self::Registration,
+            "missing" => Self::Missing,
+            _ => Self::None,
+        }
+    }
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "",
+            Self::Application => "application",
+            Self::Global => "global",
+            Self::Registration => "registration",
+            Self::Missing => "missing",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Call {
     sequence: u64,
@@ -121,14 +192,14 @@ struct Event {
 struct Provenance {
     object: u32,
     event: Event,
-    context: &'static str,
-    source_argument: Text,
+    context: DefaultsDomain,
+    source_argument: ShortText,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 struct BoundaryDetail {
     call_sequence: u64,
-    context: &'static str,
+    context: DefaultsDomain,
     arguments: [Text; 2],
 }
 
@@ -137,7 +208,7 @@ struct DefaultsLookup {
     receiver: u32,
     key: u32,
     result: u32,
-    domain: &'static str,
+    domain: DefaultsDomain,
 }
 
 struct Ring<T: Copy + Default, const N: usize> {
@@ -337,7 +408,7 @@ impl Recorder {
             object,
             event,
             context: detail.context,
-            source_argument: detail.arguments[0],
+            source_argument: ShortText::from_text(detail.arguments[0]),
         };
         if let Some(slot) = self
             .provenance
@@ -363,7 +434,7 @@ impl Recorder {
             .rev()
             .find(|detail| detail.call_sequence == call_sequence)
     }
-    fn set_boundary_context(&mut self, call_sequence: u64, context: &'static str) {
+    fn set_boundary_context(&mut self, call_sequence: u64, context: DefaultsDomain) {
         if let Some(detail) = self
             .boundary_details
             .items
@@ -481,7 +552,7 @@ impl Recorder {
             echo_no_panic!(
                 "flight #{} decoded context=\"{}\" arguments=[\"{}\", \"{}\"]",
                 e.sequence,
-                detail.context,
+                detail.context.as_str(),
                 detail.arguments[0],
                 detail.arguments[1]
             );
@@ -533,7 +604,7 @@ impl Recorder {
                 self.print_event(&origin.event);
                 echo_no_panic!(
                     "flight receiver provenance decoded: context=\"{}\" source-argument=\"{}\"",
-                    origin.context,
+                    origin.context.as_str(),
                     origin.source_argument
                 );
             } else {
@@ -747,7 +818,7 @@ impl Environment {
                 receiver,
                 key,
                 result,
-                domain,
+                domain: DefaultsDomain::from_name(domain),
             };
         }
     }
@@ -1059,7 +1130,7 @@ mod tests {
             .unwrap()
             .provenance_for(result.to_bits())
             .unwrap();
-        assert_eq!(provenance.context, "application");
+        assert_eq!(provenance.context, DefaultsDomain::Application);
         assert!(provenance
             .source_argument
             .bytes()

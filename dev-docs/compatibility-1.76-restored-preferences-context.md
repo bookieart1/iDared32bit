@@ -22,7 +22,7 @@ a broader persistence defect before any compatibility behavior changes.
 
 ## Implementation boundary
 
-The universal flight recorder now retains a separate ring of at most 32
+The universal flight recorder now retains a separate ring of at most eight
 decoded boundary details. It records only:
 
 - the string key for `NSUserDefaults objectForKey:` and `dictionaryForKey:`;
@@ -38,6 +38,9 @@ value, or follows an invalid pointer. Control characters remain escaped by the
 existing recorder printer. The decoded key/domain are carried into the
 existing 128-entry dictionary provenance table, so they survive ordinary
 96-event history wrap and appear beside the terminal receiver's producer.
+The retained producer key uses a compact 48-byte representation. This keeps
+the complete recorder under its existing 128 KiB ceiling rather than expanding
+the recorder to accommodate this diagnostic.
 
 No preference value, collection mutability, ownership rule, persistence file,
 memory check, graphics/audio behavior, title-specific path, or save is changed.

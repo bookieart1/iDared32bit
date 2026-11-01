@@ -3267,13 +3267,16 @@ the restored-state behavior is correct.
 
 ## Dev 1.76 engineering checkpoint — restored-preferences context
 
-Dev 1.76 is diagnostic-only. The universal recorder retains at most 32 decoded
+Dev 1.76 is diagnostic-only. The universal recorder retains at most eight decoded
 details for `NSUserDefaults objectForKey:`/`dictionaryForKey:` and immutable
 dictionary `setObject:forKey:` boundaries. A bounded, allocation-free NSString
 reader records the defaults key, selected domain, mutation key and value class
 without guest calls, ownership changes or return-value changes. The producer's
 key/domain also travels with the existing bounded dictionary provenance entry,
 so ordinary event-ring wrap does not erase it.
+
+The immediate decoded-detail ring and copied producer key are deliberately
+compact so the recorder remains inside its pre-existing 128 KiB ceiling.
 
 This deliberately does **not** make defaults values mutable, alter preference
 serialization, tolerate an invalid mutation, migrate/delete saves or branch on
