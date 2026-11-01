@@ -125,7 +125,7 @@ pub fn app_picker(
                 .join(paths::apps_dir())
                 .to_string_lossy()
         ),
-        state.as_ref().map_or(0, |state| state.page),
+        state.as_ref().map_or("null".to_owned(), |state| state.page.to_string()),
         state.as_ref().map_or("null".to_owned(), |state| {
             let values: Vec<String> = state
                 .quick_option_values

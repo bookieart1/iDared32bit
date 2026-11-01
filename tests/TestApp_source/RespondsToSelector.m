@@ -118,9 +118,36 @@ int test_object_getInstanceVariable(void) {
   if (ivar_getOffset(ivar) != expected_offset || ivar_getOffset(0) != 0) {
     return -5;
   }
+  TestClass *replacement = [TestClass new];
+  if (object_setInstanceVariable(instance, "instanceVariable", replacement) !=
+          ivar ||
+      object_getInstanceVariable(instance, "instanceVariable", &value) != ivar ||
+      value != replacement) {
+    return -6;
+  }
+  if (object_setInstanceVariable(instance, "missing", replacement) != 0 ||
+      object_setInstanceVariable(0, "instanceVariable", replacement) != 0 ||
+      object_setInstanceVariable(instance, 0, replacement) != 0) {
+    return -7;
+  }
+  [replacement release];
   [instance release];
   return 0;
 }
+
+#ifndef DEFINE_ME_WHEN_BUILDING_ON_MACOS
+int test_dispatch_once(void) {
+  static dispatch_once_t predicate;
+  static int calls;
+  dispatch_once(&predicate, ^{
+    calls++;
+  });
+  dispatch_once(&predicate, ^{
+    calls++;
+  });
+  return calls == 1 ? 0 : -1;
+}
+#endif
 
 int test_method_setImplementation(void) {
   TestClass *instance = [TestClass new];

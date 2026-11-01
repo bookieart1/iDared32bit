@@ -260,6 +260,7 @@ fn test_app() -> Result<(), Box<dyn Error>> {
         stubs_lib_search_arg.as_str(),
         stubs_frameworks_search_arg.as_str(),
         "-ObjC",
+        "-fblocks",
         "-fno-objc-exceptions",
         // ARC is not available until IOS 5, so it can't be used.
         "-fno-objc-arc",

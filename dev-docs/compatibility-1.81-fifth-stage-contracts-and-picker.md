@@ -1,0 +1,86 @@
+# Dev 1.81: fifth-stage contracts and app-picker continuity
+
+## Evidence and scope
+
+Three unmodified Dev 1.80 logs are preserved outside the repository:
+
+- `outputs/device-logs/iDared-Dev-1.80-device-results-part-1.txt` — 518,004
+  bytes, SHA-256
+  `fe71d40fe990738bd292d5a6caf4ecdf73af87bbabe266354b5e025ca1c742aa`.
+- `outputs/device-logs/iDared-Dev-1.80-device-results-part-2.txt` — 233,125
+  bytes, SHA-256
+  `2837b1f5df297486bfd0448713a168b03f8f61dbffc5448fca3ceab841594b4f`.
+- `outputs/device-logs/iDared-Dev-1.80-glowfish-hd-profile-crash.txt` —
+  452,462 bytes, SHA-256
+  `f726145e41b511cc0eda5540ca4550d83e109c786efa8eca3b997f2ba790e36f`.
+
+All embed source `764d60e`, workflow `41292778118`, and the universal bounded
+flight recorder. This iteration does not alter that recorder, reset saves,
+weaken pointer/object checks, or add application-identifier branches.
+
+| App | Dev 1.80 decisive evidence | Dev 1.81 action and boundary |
+|---|---|---|
+| Dark Nebula 2 | Menu and loading run for 6.319 seconds, 251 main loops and 127 EAGL returns before missing `_object_setInstanceVariable`. | Implement the historical raw runtime ivar store over the same stable metadata as the getter. It returns the `Ivar`, does no ownership operation, and handles null/missing inputs. |
+| Glowfish | Core Motion initialization and resource loading pass; startup reaches missing `_dispatch_once` after 1.465 seconds. | Implement the 32-bit zero-initialized once predicate and synchronous block execution, including a bounded cooperative wait while another guest thread owns initialization. Full GCD queue scheduling remains out of scope. |
+| Glowfish HD | Core Motion passes and the menu/profile-name UI runs. The reproducible post-name transition presents 892 frames over 19.966 seconds, then calls missing `+[NSDictionary dictionaryWithObjects:forKeys:count:]`. | Implement the standard pointer-array constructor for immutable and mutable concrete dictionaries with copied keys, retained values, empty-count handling and existing strict nil checks. |
+| Hamlet | The app runs for 33.823 seconds, 4,072 main loops and 1,943 EAGL returns, then exits cleanly through Home. The user observed a transient wrong initial layout before landscape corrected itself. | Working checkpoint in the observed interaction. Record the orientation defect; do not mix an unproven rotation change into this runtime batch. |
+| Parachute Ninja | Three genuine offline request failures return. A later main-thread selector callback passes `UIApplication` where guest code treats its argument as an error and sends `domain`; the strict missing-selector panic follows after 140 ms. | No compatibility change. Adding `domain` to `UIApplication` would conceal an invalid-object origin. A future bounded callback/selector-origin investigation must identify why that object occupies the error argument. |
+| Blot / Dirt / Spoing | The first two return normally through Home and Spoing remains a clean working control. User observations confirm normal Blot, working Dirt and unchanged Spoing. | Regression checkpoints only. |
+
+Glowfish HD's native keyboard appeared portrait-oriented inside the landscape
+game but accepted text. That is a separate UIKit/host-input orientation defect;
+the terminal crash is the missing Foundation constructor above.
+
+## App-picker continuity
+
+The native picker previously rendered only the selected page and changed its
+page index after a completed swipe, producing a hard cut. Dev 1.81 keeps the
+current and adjacent pages mounted, follows the horizontal drag, eases into the
+destination, and applies restrained resistance at the first/last page.
+
+The picker now stores its page in the development app's `UserDefaults`. Rust's
+reload page is nullable, so an explicit in-session reload still wins while a
+fresh picker invocation restores the saved page. The page is clamped to the
+current app count. This preserves page position after normal guest Home return,
+an emulator-caught panic, or a complete iDared process restart without touching
+guest saves or the separate App Store installation.
+
+## Validation boundary and prediction
+
+Focused guest coverage exercises raw ivar assignment, once-only block
+execution, and the pointer-array dictionary constructor. The picker itself must
+be compiled by the iOS workflow and checked on a device. Hosted library tests,
+guest executable tests, iOS compilation, package verification and physical
+device behavior remain separate claims.
+
+Predictions:
+
+- Dark Nebula 2, Glowfish and Glowfish HD pass their exact recorded blockers
+  and expose either later contracts or a usable next stage.
+- Hamlet remains usable in the tested scope; its transient orientation and
+  Glowfish HD's sideways keyboard may remain.
+- Parachute Ninja fails at the same strict invalid-object boundary because it
+  is intentionally not masked.
+- Picker pages move visibly during a swipe and reopen on the last-used page.
+- Blot, Dirt and Spoing retain their stated behavior.
+
+## Focused device procedure
+
+Without deleting saves:
+
+1. Blot: play briefly and use emulator Home.
+2. Dark Nebula 2: select a level.
+3. Dirt: move, pause/resume, use Home, reopen and confirm the position.
+4. Glowfish: launch and try to enter gameplay.
+5. Glowfish HD: press Play, enter a name if asked, and continue.
+6. Hamlet: launch and navigate briefly; note whether the opening orientation
+   corrects itself.
+7. Parachute Ninja: launch once and allow the first error.
+8. Spoing: play briefly, use Home and reopen.
+9. From a later picker page, swipe one page slowly enough to watch the icons
+   follow the finger. Launch any game there, then exit or let a known failure
+   occur and confirm the picker returns to that same page. Force-close and
+   reopen iDared once and confirm the page is still retained.
+
+Stop each failing title after its first reproducible crash and preserve the
+complete combined log.

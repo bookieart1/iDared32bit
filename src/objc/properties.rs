@@ -200,6 +200,31 @@ pub(super) fn object_getInstanceVariable(
     ivar_handle
 }
 
+/// Sets a pointer-sized instance variable by name and returns the runtime
+/// metadata describing it. Like Apple's Objective-C runtime function, this is
+/// a raw ivar store: it does not retain, release, copy, or otherwise interpret
+/// the value.
+pub(super) fn object_setInstanceVariable(
+    env: &mut Environment,
+    obj: id,
+    name: ConstPtr<u8>,
+    value: MutVoidPtr,
+) -> ConstPtr<ivar_t> {
+    if obj == nil || name.is_null() {
+        return Ptr::null();
+    }
+
+    let name = env.mem.cstr_at_utf8(name).unwrap().to_owned();
+    let Some((ivar_ptr, ivar_handle)) =
+        env.objc.object_lookup_ivar_metadata(&env.mem, obj, &name)
+    else {
+        return Ptr::null();
+    };
+
+    env.mem.write(ivar_ptr, value.to_bits());
+    ivar_handle
+}
+
 /// Returns the compiler-provided Objective-C type encoding for an ivar runtime
 /// handle. Ivar handles exposed by this runtime are stable pointers to the
 /// guest binary's `ivar_t` metadata, so the returned string has the same

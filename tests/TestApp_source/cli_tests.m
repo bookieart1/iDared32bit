@@ -64,6 +64,7 @@ int test_Initialize(void);              // Initialize.m
 
 #ifndef DEFINE_ME_WHEN_BUILDING_ON_MACOS
 int test_cpp_virtual_inheritance(void); // CppVirtualInheritance.cpp
+int test_dispatch_once(void);           // RespondsToSelector.m
 #endif
 
 // === Main code ===
@@ -7933,6 +7934,19 @@ int test_NSDictionary_keyEnumerator() {
   return 0;
 }
 
+int test_NSDictionary_pointer_constructor() {
+  id objects[] = {@1, @2};
+  id keys[] = {@"one", @"two"};
+  NSDictionary *dict =
+      [NSDictionary dictionaryWithObjects:objects forKeys:keys count:2];
+  if ([dict count] != 2 || ![[dict objectForKey:@"one"] isEqual:@1] ||
+      ![[dict objectForKey:@"two"] isEqual:@2])
+    return -1;
+  NSDictionary *empty =
+      [NSDictionary dictionaryWithObjects:NULL forKeys:NULL count:0];
+  return [empty count] == 0 ? 0 : -2;
+}
+
 int test_NSCharacterSet_alphanumericCharacterSet() {
   NSCharacterSet *set = [NSCharacterSet alphanumericCharacterSet];
   if (![set characterIsMember:'A'] || ![set characterIsMember:'z'] ||
@@ -8294,6 +8308,9 @@ struct {
     FUNC_DEF(test_class_getInstanceMethod),
     FUNC_DEF(test_object_getInstanceVariable),
     FUNC_DEF(test_method_setImplementation),
+#ifndef DEFINE_ME_WHEN_BUILDING_ON_MACOS
+    FUNC_DEF(test_dispatch_once),
+#endif
     FUNC_DEF(test_CFStringConvertEncodingToIANACharSetName),
     FUNC_DEF(test_pthread_cancel_configuration),
     FUNC_DEF(test_UIImage_drawAsPatternInRect),
@@ -8328,6 +8345,7 @@ struct {
     FUNC_DEF(test_NSDictionary_subclass_allKeys),
     FUNC_DEF(test_NSDictionary_allValues),
     FUNC_DEF(test_NSDictionary_keyEnumerator),
+    FUNC_DEF(test_NSDictionary_pointer_constructor),
     FUNC_DEF(test_NSCharacterSet_alphanumericCharacterSet),
     FUNC_DEF(test_malloc_zone_basic),
     FUNC_DEF(test_malloc_zone_struct_dispatch),

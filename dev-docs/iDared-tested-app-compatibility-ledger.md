@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: November 1, 2026
-Latest device-tested checkpoint: **iDared Dev 1.79** (`4de150e`; focused eight-app test; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.80** (`764d60e`; verified package; physical-device results pending)
-Current activity: **Dev 1.80 targets the four shared contracts exposed by Dev 1.79: Objective-C ivar offsets, polling Core Motion accelerometer data, `UIViewController.navigationItem` state, and historical URL-error constants/metadata. Dirt is working in the tested scope; Blot and Spoing remain regression controls. Hosted compilation/tests and package verification pass. Physical-device results are pending, so the four blocker removals are predictions rather than compatibility claims.**
+Latest device-tested checkpoint: **iDared Dev 1.80** (`764d60e`; focused multi-log result; Dev 1.71 remains the latest full-catalog survey)
+Latest built checkpoint: **iDared Dev 1.80** (`764d60e`; verified package and now device-tested)
+Current activity: **Dev 1.81 implements the next three shared contracts exposed by Dev 1.80—raw Objective-C ivar assignment, `dispatch_once`, and the pointer-array `NSDictionary` constructor—and improves native picker paging/last-page continuity. Hamlet is working in the observed scope; Dirt, Blot and Spoing remain healthy checkpoints. Parachute Ninja is deliberately unchanged because its `UIApplication`-as-error callback argument is an origin problem, not a missing `domain` API. Compilation, package verification and physical-device behavior are pending.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3596,3 +3596,30 @@ Engineering detail:
 Verification: `outputs/iDared-Dev-1.80.verification.json`. **Physical-device
 testing is pending; package and hosted tests do not establish functional game
 compatibility.**
+
+## Dev 1.80 device result and Dev 1.81 fifth-stage contracts
+
+The three complete Dev 1.80 logs and hashes are recorded in
+`dev-docs/compatibility-1.81-fifth-stage-contracts-and-picker.md`. All embed
+source `764d60e`, workflow `41292778118`, and the universal bounded recorder.
+
+| App | Dev 1.80 result | Current classification / Dev 1.81 action |
+|---|---|---|
+| Blot | Normal smooth play and clean Home return. | **Regression pass in stated scope.** |
+| Dark Nebula 2 | Menu remains functional; level loading reaches missing `_object_setInstanceVariable` after 6.319 s, 251 loops and 127 EAGL returns. | **Partial.** Implement the standard raw ivar assignment contract; ownership remains deliberately untouched. |
+| Dirt | Continues to run normally in the user's tested traversal. | **Working checkpoint in observed scope.** |
+| Glowfish | Core Motion now passes; startup reaches missing `_dispatch_once` after 1.465 s. | **Startup-blocked.** Implement zero-initialized once semantics with synchronous block completion and cooperative contention waiting. |
+| Glowfish HD | Reaches menu and name entry. After accepting a name it presents 892 frames over 19.966 s, then calls missing `+[NSDictionary dictionaryWithObjects:forKeys:count:]`. | **Major stage advance; partial.** Implement the standard pointer-array constructor. The portrait keyboard in landscape is a separate unresolved orientation defect. |
+| Hamlet | Runs and responds for 33.823 s / 4,072 loops / 1,943 EAGL returns, then exits cleanly through Home. A transient initial orientation/layout error self-corrects. | **Working checkpoint in observed scope, with an orientation defect.** No speculative rotation change in this batch. |
+| Parachute Ninja | Real offline failures return, then a main-thread selector callback supplies `UIApplication` where guest code sends `domain` as though it were an error. Strict panic occurs after 140 ms. | **Startup-blocked, cause narrowed but unresolved.** Do not add `domain` to UIApplication; investigate callback argument origin later. |
+| Spoing | Continues to work and returns cleanly through Home. | **Regression pass in stated scope.** |
+
+Dev 1.81 also changes the native picker from end-of-gesture page cuts to
+bounded interactive adjacent-page movement and persists the last page across
+normal returns, emulator panics and process restarts. Rust's in-session reload
+page remains authoritative; no guest save/container behavior changes.
+
+Implementation status is **candidate** until CI and package verification pass.
+The focused retest is Blot, Dark Nebula 2, Dirt, Glowfish, Glowfish HD, Hamlet,
+Parachute Ninja and Spoing, followed by one slow picker swipe and page-return /
+process-restart continuity check. No save reset is requested.

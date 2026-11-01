@@ -39,7 +39,7 @@ struct PickerInput: Decodable {
     /// The Games folder, watched for games added while the picker is open.
     let appsFolder: String
     /// Kept from before the picker was shown again.
-    let initialPage: Int
+    let initialPage: Int?
     let initialQuickOptionValues: [Int]?
     let branding: String
     let shortVersionText: String
@@ -325,7 +325,11 @@ final class PickerModel: ObservableObject {
     @Published var wallpaper: UIImage?
 
     @Published var safeInsets = UIEdgeInsets.zero
-    @Published var page = 0
+    @Published var page = 0 {
+        didSet {
+            UserDefaults.standard.set(page, forKey: appPickerPageKey)
+        }
+    }
     @Published var pressedApp: Int?
     @Published var showingSettings = false
     @Published var showingCopyright = false
@@ -386,6 +390,8 @@ final class PickerModel: ObservableObject {
             quickOptionValues = values
         }
         page = input.initialPage
+            ?? (UserDefaults.standard.object(forKey: appPickerPageKey) as? Int)
+            ?? 0
         gamesFolderContents = Self.contents(of: input.appsFolder)
         looseGames = Self.looseGames(beside: input.appsFolder)
     }
@@ -670,6 +676,7 @@ let headerBlue = Color(red: 0, green: 77 / 255, blue: 215 / 255)
 let logoYellow = Color(red: 253 / 255, green: 224 / 255, blue: 22 / 255)
 
 private let headerColorKey = "AppPickerHeaderColor"
+private let appPickerPageKey = "AppPickerPage"
 private let hideHeaderLogoKey = "AppPickerHideHeaderLogo"
 private let hideIconLabelsKey = "AppPickerHideIconLabels"
 private let footerBackgroundKey = "AppPickerFooterBackground"
@@ -1209,19 +1216,36 @@ struct IconGrid: View {
     @ObservedObject var model: PickerModel
     let layout: PickerLayout
     @State private var dragStart: CGPoint?
+    @State private var dragOffset: CGFloat = 0
 
     private var pageCount: Int {
         (model.input.apps.count + layout.appsPerPage - 1) / layout.appsPerPage
     }
 
-    private var pageRange: Range<Int> {
-        let page = min(model.page, pageCount - 1)
+    private var currentPage: Int {
+        guard pageCount > 0 else {
+            return 0
+        }
+        return min(max(model.page, 0), pageCount - 1)
+    }
+
+    private func pageRange(for page: Int) -> Range<Int> {
         let start = page * layout.appsPerPage
         return start..<min(start + layout.appsPerPage, model.input.apps.count)
     }
 
-    var body: some View {
-        let range = pageRange
+    private var visiblePages: [Int] {
+        guard pageCount > 0 else {
+            return []
+        }
+        let first = max(currentPage - 1, 0)
+        let last = min(currentPage + 1, pageCount - 1)
+        return Array(first...last)
+    }
+
+    @ViewBuilder
+    private func pageContents(_ page: Int) -> some View {
+        let range = pageRange(for: page)
         let font = UIFont.systemFont(ofSize: labelFontSize, weight: .medium)
         // Empty slots still count as neighbours, with no name.
         let names = (0..<layout.appsPerPage).map { slot in
@@ -1230,7 +1254,6 @@ struct IconGrid: View {
         let labels = layOutLabels(names: names, layout: layout, font: font)
 
         ZStack(alignment: .topLeading) {
-            Color.clear
             ForEach(Array(range.enumerated()), id: \.element) { slot, app in
                 let iconFrame = layout.iconFrame(slot: slot)
                 Image(uiImage: model.icons[app])
@@ -1253,16 +1276,33 @@ struct IconGrid: View {
                         ))
                 }
             }
+        }
+        .frame(width: layout.size.width, height: layout.size.height)
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+            ForEach(visiblePages, id: \.self) { page in
+                pageContents(page)
+                    .offset(
+                        x: CGFloat(page - currentPage) * layout.size.width + dragOffset
+                    )
+            }
             PageControl(model: model, pageCount: pageCount)
                 .place(layout.pageControlFrame)
         }
         .frame(width: layout.size.width, height: layout.size.height)
+        .clipped()
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 0).onChanged(touchMoved).onEnded(touchEnded))
+        .onAppear {
+            model.page = currentPage
+        }
     }
 
     private func app(at point: CGPoint) -> Int? {
-        let range = pageRange
+        let range = pageRange(for: currentPage)
         for (slot, app) in range.enumerated() where layout.iconFrame(slot: slot).contains(point) {
             return app
         }
@@ -1283,6 +1323,10 @@ struct IconGrid: View {
         if abs(value.location.x - value.startLocation.x) > 50 {
             model.pressedApp = nil
         }
+        let dx = value.location.x - value.startLocation.x
+        let pullingPastFirst = currentPage == 0 && dx > 0
+        let pullingPastLast = currentPage == pageCount - 1 && dx < 0
+        dragOffset = (pullingPastFirst || pullingPastLast) ? dx / 4 : dx
     }
 
     private func touchEnded(_ value: DragGesture.Value) {
@@ -1294,17 +1338,24 @@ struct IconGrid: View {
         }
         let dx = value.location.x - value.startLocation.x
         let pressed = model.pressedApp
+        var destination = currentPage
         if dx > 50 {
             model.pressedApp = nil
-            model.page = max(model.page - 1, 0)
+            destination = max(currentPage - 1, 0)
         } else if dx < -50 {
             model.pressedApp = nil
-            model.page = min(model.page + 1, pageCount - 1)
+            destination = min(currentPage + 1, pageCount - 1)
         } else if let pressed, app(at: value.location) == pressed {
             // Stays highlighted while the app starts.
+            dragOffset = 0
             model.pick(pressed)
+            return
         } else {
             model.pressedApp = nil
+        }
+        withAnimation(.easeOut(duration: 0.22)) {
+            model.page = destination
+            dragOffset = 0
         }
     }
 }
@@ -1347,11 +1398,17 @@ struct PageControl: View {
         let nearest = ((x - startX) / dotSpacing).rounded()
         if nearest >= 0 && Int(nearest) < pageCount
             && abs(x - (startX + nearest * dotSpacing)) <= dotSpacing / 2 {
-            model.page = Int(nearest)
+            withAnimation(.easeOut(duration: 0.22)) {
+                model.page = Int(nearest)
+            }
         } else if x < startX + CGFloat(model.page) * dotSpacing {
-            model.page = max(model.page - 1, 0)
+            withAnimation(.easeOut(duration: 0.22)) {
+                model.page = max(model.page - 1, 0)
+            }
         } else {
-            model.page = min(model.page + 1, pageCount - 1)
+            withAnimation(.easeOut(duration: 0.22)) {
+                model.page = min(model.page + 1, pageCount - 1)
+            }
         }
     }
 }

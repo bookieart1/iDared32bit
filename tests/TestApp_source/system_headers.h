@@ -64,10 +64,16 @@ Method class_getInstanceMethod(Class cls, SEL name);
 void (*method_getImplementation(Method m))(void);
 void (*method_setImplementation(Method m, void (*imp)(void)))(void);
 Ivar object_getInstanceVariable(id obj, const char *name, void **outValue);
+Ivar object_setInstanceVariable(id obj, const char *name, void *value);
 const char *ivar_getTypeEncoding(Ivar v);
 ptrdiff_t ivar_getOffset(Ivar v);
 #ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
 SEL method_getName(Method m);
+#endif
+
+#ifndef DEFINE_ME_WHEN_BUILDING_ON_MACOS
+typedef long dispatch_once_t;
+void dispatch_once(dispatch_once_t *predicate, void (^block)(void));
 #endif
 
 // Foundation

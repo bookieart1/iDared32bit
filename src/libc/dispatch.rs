@@ -7,6 +7,7 @@
 
 use crate::abi::{CallFromHost, GuestFunction};
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
+use crate::environment::ThreadBlock;
 use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr, SafeRead};
 use crate::Environment;
 
@@ -80,6 +81,39 @@ fn dispatch_group_async(
     invoke_block_synchronously(env, block);
 }
 
+fn dispatch_once(
+    env: &mut Environment,
+    predicate: MutPtr<i32>,
+    block: MutPtr<BlockLiteral>,
+) {
+    // dispatch_once_t is a signed long on 32-bit iOS. Its representation after
+    // first use is private, but zero is the public initializer. Keep an
+    // explicit in-progress state so a second guest thread cannot observe the
+    // predicate as complete before initialization finishes.
+    const IN_PROGRESS: i32 = 1;
+    const COMPLETE: i32 = -1;
+
+    assert!(!predicate.is_null());
+    loop {
+        match env.mem.read(predicate) {
+            0 => {
+                env.mem.write(predicate, IN_PROGRESS);
+                invoke_block_synchronously(env, block);
+                env.mem.write(predicate, COMPLETE);
+                return;
+            }
+            IN_PROGRESS => {
+                // Guest threads are cooperative. Yield until the thread that
+                // owns initialization marks the predicate complete. Recursive
+                // use of the same predicate deadlocks, matching dispatch_once.
+                env.yield_thread(ThreadBlock::NotBlocked);
+            }
+            COMPLETE => return,
+            state => panic!("Invalid dispatch_once predicate state {state:#x}"),
+        }
+    }
+}
+
 pub const CONSTANTS: ConstantExports = &[(
     "__dispatch_main_q",
     HostConstant::Custom(|env| new_queue_object(env).cast_const()),
@@ -90,4 +124,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(dispatch_group_create()),
     export_c_func!(dispatch_async(_, _)),
     export_c_func!(dispatch_group_async(_, _, _)),
+    export_c_func!(dispatch_once(_, _)),
 ];
