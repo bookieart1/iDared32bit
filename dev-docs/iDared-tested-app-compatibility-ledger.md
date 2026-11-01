@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: October 31, 2026
-Latest device-tested checkpoint: **iDared Dev 1.71 Survey** (`50ece578`; full catalog audit, functional scope qualified below)
-Latest built checkpoint: **iDared Dev 1.72** (`05732a45`; device tests pending)
-Current activity: **Dev 1.72 built, downloaded and verified: shared Foundation fixes for MageGauntlet, Infinight and Sharpshooter, with permanent universal bounded recording. 109 library tests pass on each host platform; native reference passes. Await focused device tests; 1.71 remains the latest physical checkpoint.**
+Latest device-tested checkpoint: **iDared Dev 1.73** (`452a8571`; focused test; Dev 1.71 remains the latest full-catalog survey)
+Latest built checkpoint: **iDared Dev 1.74** (`27825333`; device tests pending)
+Current activity: **Dev 1.74 is built, downloaded and verified. It adds Sharpshooter's standard mutable-set bulk insertion and corrects mutable singleton dictionary construction, a plausible but not yet proven cause of the Mage Gauntlet/HookWorld saved-state failures. 118 library tests pass on each host; the native reference passes. Universal bounded recording remains the default.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3090,3 +3090,72 @@ lifetime, dispatch/ABI or service-related changes. No blanket runtime workaround
 
 Verification: `outputs/iDared-Dev-1.73.verification.json`. Job logs, initial
 failure logs and machine-checked diagnostic evidence are in `work/verify-1.73/`.
+
+
+## Dev 1.73 device result and Dev 1.74 Foundation follow-up — October 31, 2026
+
+The supplied log embeds source `452a8571` and workflow `41260610289`; SHA-256
+`9076db46ad3291f05a4753b9cd45fe322ccdfd2e404f9d323948272aa7746ba`.
+The unmodified file is preserved as
+`outputs/device-logs/iDared-Dev-1.73-device-results.txt`. All five CPU launches
+have universal recorder coverage and terminal dumps.
+
+| App | Dev 1.73 device result | Interpretation and next work |
+|---|---|---|
+| Mage Gauntlet 1.30 | Two launches fail at 174/126 ms before a main loop: immutable `_touchHLE_NSDictionary` receives `setObject:forKey:` at guest caller `0x1504d`. | **Blocked on restored settings/player state.** Receiver identity is proven; older construction is outside the bounded history. Mutable singleton factory is a credible, unproven origin. |
+| Sharpshooter 1.8.1 | User reaches initial gameplay. At 18.138 s, 1,746 loops and 968 EAGL returns, `_touchHLE_NSMutableSet` receives missing `addObjectsFromArray:`. | **Partial; decisive standard API blocker.** Implement the method with existing set ownership/uniqueness semantics. |
+| HookWorld 1.10 | Two launches fail near 140 ms after one EAGL return while Settings adds an item to an immutable dictionary. | **Blocked on this saved-state path.** Dev 1.72 was playable until death before saving, so the changed stage is consistent with reload-dependent behavior, not proof of a general 1.73 regression. Preserve the save. |
+
+Infinight was not repeated in this test and retains its Dev 1.72
+working-in-stated-scope result, including completed-level persistence. The log
+does not justify making immutable dictionaries mutable, deep-mutating property
+list children, deleting saves, or treating all three failures as one cause.
+
+### Dev 1.74 implementation and build verification
+
+- `-[NSMutableSet addObjectsFromArray:]` is implemented by enumerating the
+  supplied array through existing `addObject:` behavior. This is the exact
+  Sharpshooter blocker and a general Foundation correction.
+- `+[NSMutableDictionary dictionaryWithObject:forKey:]` now constructs the
+  requested mutable concrete class. The inherited implementation incorrectly
+  always returned an immutable dictionary. NSDictionary remains immutable and
+  nil input remains rejected. This is a real contract repair, but device
+  confirmation is still needed to establish that either Rocketcat dictionary
+  originated through this factory.
+- Added emulator tests cover mutable factory identity, mutation, keyed archive
+  round-trip mutability, bulk set insertion, duplicates and membership. The
+  independent macOS Foundation fixture checks the same reference contracts.
+- Implementation commit `c3639a95751488ba58d3902f15e99b7861f72dff`;
+  delivered source `27825333da0232607623fb116902913925f5d3c6`. An initial
+  Windows run passed 117/118: the new archive fixture lacked synthetic guest
+  stack space for nested ABI calls. The fixture was corrected without changing
+  shipped behavior, and the full final matrix was rerun.
+- [Tests 41261997512](https://github.com/bookieart1/iDared32bit/actions/runs/41261997512):
+  **118/118 library tests passed on macOS and 118/118 on Windows**. Native
+  Foundation reference and both bounded-diagnostic reproducers passed. Lint's
+  allowed failure remains the two pre-existing long comments; subsequent
+  clippy/rustdoc and Android compilation are not reached. Guest integration is
+  a configured skip.
+- [IPA build 41261997478](https://github.com/bookieart1/iDared32bit/actions/runs/41261997478):
+  arm64 archive/package succeeded. Artifact `13065223507`; artifact ZIP SHA-256
+  `1db3d2148842c9c8510976ff458c17b1a5302d35a3b01c6ec76c831973992de8`
+  matches GitHub.
+- Local `outputs/iDared-Dev-1.74.ipa`, **19,895,490 bytes**, SHA-256
+  `14ac52044f2539c10b29d34e753ca18c9a22917f3a4c809e3d516582578e2863`
+  matches the package job. ZIP CRC, arm64 Mach-O, embedded source/workflow,
+  `com.bookieart1.idared32bit.dev` / `iDared Dev`, no signature/profile and
+  permanent default-flight help were verified.
+- No game-specific branch, save migration, audio/graphics change, memory-fault
+  suppression or diagnostic expansion is included. **Physical device testing
+  is pending.**
+
+Focused Dev 1.74 order: Mage Gauntlet launch/start; Sharpshooter reach gameplay
+and repeat the crashing interaction; HookWorld launch, play to death if it
+opens, then relaunch with the existing save; brief Infinight old-progress/
+relaunch control. A still-immutable Rocketcat receiver falsifies the narrow
+factory-origin hypothesis and calls for targeted archive/property-list origin
+tracing, not broader mutation tolerance.
+
+Verification: `outputs/iDared-Dev-1.74.verification.json`; exact job logs are
+retained in `work/verify-1.74/`. Engineering detail:
+`dev-docs/compatibility-1.74-foundation.md`.

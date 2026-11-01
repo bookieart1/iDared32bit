@@ -79,3 +79,19 @@ showed that the new keyed-archive unit fixture needed synthetic guest stack
 space for nested Objective-C ABI calls; that test-harness setup was corrected
 without changing shipped behavior. Hosted library reruns, iOS compilation and
 package verification must be recorded separately after the workflows finish.
+
+## Completed build validation
+
+Delivered source `27825333da0232607623fb116902913925f5d3c6` (implementation
+`c3639a95`; follow-up supplies only the unit fixture's guest stack). The final
+test workflow 41261997512 passes 118/118 library tests on both macOS and
+Windows, the native Foundation reference, and both existing diagnostic
+reproducers. Lint retains only its two pre-existing allowed long-comment
+failures; later clippy/rustdoc and Android compilation remain unexecuted.
+
+IPA workflow 41261997478 produced artifact 13065223507. The artifact archive
+digest matches GitHub. The downloaded IPA is 19,895,490 bytes with SHA-256
+`14ac52044f2539c10b29d34e753ca18c9a22917f3a4c809e3d516582578e2863`.
+ZIP integrity, arm64 Mach-O, embedded source/workflow, separate development
+identity, unsigned state, no provisioning profile, and permanent default-flight
+help are verified. Device behavior on 1.74 remains pending.
