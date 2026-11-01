@@ -471,6 +471,11 @@ mod tests {
     fn options_url_reader_reports_a_missing_file() {
         let mut env = Environment::new_fake_for_test_with_thread();
         let env = &mut env;
+        // Both the API under test and the NSError factory use a fifth ARM
+        // argument, so host-to-guest dispatch needs synthetic stack space.
+        let stack = env.mem.alloc(0x1000);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = stack.to_bits() + 0x1000;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
         // Dirt reaches this API with +URLWithString: after prefixing its
         // bundle path with file:// and percent-escaping it, rather than with
         // +fileURLWithPath:. Exercise that complete shared contract here.
@@ -495,5 +500,8 @@ mod tests {
         env.mem.free(out_error.cast());
         release(env, url);
         release(env, url_string);
+        release(env, pool);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
+        env.mem.free(stack);
     }
 }
