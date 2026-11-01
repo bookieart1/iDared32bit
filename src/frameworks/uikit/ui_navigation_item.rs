@@ -9,7 +9,7 @@
 //! navigation-bar animations remain the responsibility of a future bar model.
 
 use crate::objc::{
-    id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, msg, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 
 #[derive(Default)]
