@@ -144,6 +144,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setDelegate:(id)delegate {
     todo_objc_setter!(this, delegate);
 }
+- (id)url {
+    // Retained by URL initialization and preserved by stop. Data-backed
+    // players have no URL; reading the property does not transfer ownership.
+    env.objc.borrow::<AVAudioPlayerHostObject>(this).audio_file_url
+}
 - (())setMeteringEnabled:(bool)enabled {
     todo_objc_setter!(this, enabled);
 }
@@ -469,5 +474,78 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
                 .current_packet = 0;
             _touchHLE_AVAudioPlayerOutputBufferHelper(env, in_user_data, in_aq, in_buf);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn data_backed_audio_player_has_no_url() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let mut wav = std::io::Cursor::new(Vec::new());
+        let mut writer = hound::WavWriter::new(
+            &mut wav,
+            hound::WavSpec {
+                channels: 1,
+                sample_rate: 22050,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )
+        .unwrap();
+        writer.write_sample(0i16).unwrap();
+        writer.finalize().unwrap();
+        let wav = wav.into_inner();
+        let length = wav.len() as u32;
+        let bytes = env.mem.alloc(length);
+        env.mem
+            .bytes_at_mut(bytes.cast(), length)
+            .copy_from_slice(&wav);
+        let data: id = msg_class![env; NSData dataWithBytesNoCopy:bytes length:length];
+        let player: id = msg_class![env; AVAudioPlayer alloc];
+        let error: MutPtr<id> = env.mem.alloc(4).cast();
+        env.mem.write(error, nil);
+        let player: id = msg![env; player initWithData:data error:error];
+        assert_ne!(player, nil);
+        let url: id = msg![env; player url];
+        assert_eq!(url, nil);
+        () = msg![env; player stop];
+        let url: id = msg![env; player url];
+        assert_eq!(url, nil);
+        release(env, player);
+        release(env, pool);
+        env.mem.free(error.cast());
+    }
+
+    #[test]
+    fn url_getter_borrows_stored_url_and_survives_stop() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let path = ns_string::get_static_str(env, "/fixture.wav");
+        let url: id = msg_class![env; NSURL fileURLWithPath:path];
+        let player: id = msg_class![env; AVAudioPlayer alloc];
+        let absent: id = msg![env; player url];
+        assert_eq!(absent, nil);
+        // Seed the same retained state as URL initialization, without opening
+        // a host audio device or claiming to exercise filesystem decoding.
+        retain(env, url);
+        env.objc
+            .borrow_mut::<AVAudioPlayerHostObject>(player)
+            .audio_file_url = url;
+        let count = env.objc.get_refcount(url);
+        for _ in 0..3 {
+            let actual: id = msg![env; player url];
+            assert_eq!(actual, url);
+            assert_eq!(env.objc.get_refcount(url), count);
+            () = msg![env; player stop];
+        }
+        release(env, player);
+        assert_eq!(env.objc.get_refcount(url).get(), count.get() - 1);
+        release(env, pool);
     }
 }

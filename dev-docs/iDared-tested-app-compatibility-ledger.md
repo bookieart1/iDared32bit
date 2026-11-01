@@ -3006,3 +3006,43 @@ initial CI runs were cancelled; the delivered source is the fully tested revisio
 
 Package verification record: `outputs/iDared-Dev-1.72.verification.json`.
 Detailed job logs are retained under `work/verify-1.72/`.
+
+
+## Dev 1.72 device result and Dev 1.73 follow-up — October 31, 2026
+
+The new log embeds `05732a4`, workflow `41258098358`; SHA256
+`12f537252f911e82c4a2f6cc281c4f38a8868acd6a72199d96d9377a246bc0ec`.
+Unmodified local copy: `outputs/device-logs/iDared-Dev-1.72-device-results.txt`.
+All five CPU launches have enabled recording and complete terminal dumps.
+
+| App | Device result / evidence | Revised status and next work |
+|---|---|---|
+| Infinight 1.05 | User completed a level, returned to menu, exited/reopened and saw saved completion. Two Home exits; 4,238 and 577 EAGL returns. | **Working in the stated test scope**, including progress persistence. The mutable-set blocker was removed. Do not infer all levels/audio paths tested. |
+| MageGauntlet 1.30 | Two presentations; GDataXML children sends NSMutableArray arrayWithObject, receives _touchHLE_NSArray, then addObject panics. | Prior defaults blocker removed; **wrong factory mutability confirmed**. Implement a mutable singleton factory using existing constructors/mutation ownership. |
+| Sharpshooter 1.8.1 | 1,103 presentations; reaches just before gameplay. Existing AVAudioPlayer receives url after stop during track selection. | Prior set-copy blocker removed; **missing getter confirmed**. Expose retained source URL; no playback/callback changes. |
+| HookWorld 1.10 | 4,307 presentations; avalanche death, score 552, local-best decoding, then FeintScore gets the _touchHLE_NSString class as PlayerEquipment and sends playerChar. | Defaults startup blocker removed; **playable until death, wrong argument origin unresolved**. No fabricated playerChar response or score bypass. Capture recent guest caller code at panic to distinguish a field/global load from earlier return corruption. |
+
+No new Spoing or Spirits regression test was supplied. QuickHook was not played.
+The changed failure stages are progress, not established regressions or complete
+compatibility. Retain all older survey findings as dated evidence.
+
+## Dev 1.73 — singleton-array and audio URL corrections
+
+- Scope: general NSMutableArray singleton factory with strict nil rejection;
+  AVAudioPlayer url getter backed by existing owned state. No app-specific hacks.
+- HookWorld: diagnostic-only this build. At panic, inspect at most eight distinct
+  observed caller LR locations from the existing ring on the failing thread,
+  up to 112 bytes each. Loaded-image bounds and fallible reads; no larger ring,
+  extra normal-gameplay events, guest calls/writes, or repeated dump output.
+- Fresh upstream remains `ca1de89c`, with the same two missing contracts.
+- Seven new host tests cover array mutability/ownership/nil rejection, audio URL
+  lifetime and data initialization, and bounded caller evidence/failure
+  preservation. Native Foundation singleton reference checks added. Compile,
+  test and physical-device results are **pending**, not inferred.
+- Changed-file formatting/whitespace checks pass locally. Hosted compilation is
+  used because local SDL/native build dependencies remain incomplete.
+- Risk: shared Foundation factory behavior and audio URL consumers; retain
+  Infinight as current save/relaunch control, with Spoing in the wider backlog.
+- HookWorld still needs producer evidence. Separate coder UID-zero/ownership
+  concerns found during inspection are **unproven causes** and left unchanged.
+- Details: `dev-docs/compatibility-1.73-followup.md`.

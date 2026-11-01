@@ -16,6 +16,7 @@ const RECENT: usize = 96;
 const SLOW_RECENT: usize = 32;
 const SIGNALS: usize = 24;
 const PROGRESS: usize = 24;
+const CRASH_CALLERS: usize = 8;
 const HEALTHY_PRESENT_INTERVAL: Duration = Duration::from_millis(100);
 const SLOW_PRESENT_INTERVAL: Duration = Duration::from_millis(180);
 const HEALTHY_PRESENT_STREAK: u16 = 30;
@@ -123,7 +124,7 @@ impl<T: Copy + Default, const N: usize> Ring<T, N> {
         self.items[self.written as usize % N] = item;
         self.written += 1;
     }
-    fn iter(&self) -> impl Iterator<Item = &T> {
+    fn iter(&self) -> impl DoubleEndedIterator<Item = &T> {
         let count = self.written.min(N as u64);
         (self.written - count..self.written).map(|i| &self.items[i as usize % N])
     }
@@ -370,6 +371,25 @@ impl Recorder {
         }
         echo_no_panic!("flight recorder end");
     }
+
+    /// Reuse the existing history only at failure time. These are observed
+    /// call sites, not a reconstructed stack or proof of the bad value's origin.
+    fn crash_callers(&self, thread: usize) -> [u32; CRASH_CALLERS] {
+        let mut callers = [0; CRASH_CALLERS];
+        let mut count = 0;
+        for event in self.recent.iter().rev() {
+            let call = event.call;
+            if call.thread != thread || call.lr == 0 || callers.contains(&call.lr) {
+                continue;
+            }
+            callers[count] = call.lr;
+            count += 1;
+            if count == CRASH_CALLERS {
+                break;
+            }
+        }
+        callers
+    }
     #[cfg(test)]
     pub fn last_entry(&self) -> Option<(&[u8], &[u32])> {
         self.recent
@@ -494,6 +514,32 @@ impl Environment {
     }
     pub fn diagnostic_dump(&mut self, reason: &str) {
         if let Some(recorder) = &mut self.diagnostics {
+            if !recorder.dumped && matches!(reason, "panic" | "scheduler-panic") {
+                let callers = recorder.crash_callers(self.current_thread);
+                echo_no_panic!("flight crash caller code: up to {CRASH_CALLERS} distinct recent LR values on the failing thread; raw bytes, not a call stack; Thumb mode comes from LR bit 0");
+                for lr in callers.into_iter().filter(|&lr| lr != 0) {
+                    let address = lr & !1;
+                    let Some(binary) = self.bins.iter().find(|binary| {
+                        binary.text_segment_base.is_some_and(|base| {
+                            base <= address && address < binary.last_segment_end
+                        })
+                    }) else {
+                        continue;
+                    };
+                    // Bounded to the loaded image; never follow guest pointers
+                    // or call guest methods to obtain this diagnostic data.
+                    let start = address
+                        .saturating_sub(96)
+                        .max(binary.text_segment_base.unwrap());
+                    let end = address.saturating_add(16).min(binary.last_segment_end);
+                    let ptr = ConstVoidPtr::from_bits(start);
+                    if let Some(bytes) = self.mem.get_bytes_fallible(ptr, end - start) {
+                        echo_no_panic!("flight caller LR={lr:#010x} image={} bytes at {start:#010x}: {bytes:02x?}", binary.name);
+                    } else {
+                        echo_no_panic!("flight caller LR={lr:#010x}: code unavailable");
+                    }
+                }
+            }
             recorder.dump(reason);
         }
     }
@@ -502,6 +548,100 @@ impl Environment {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn diagnostic_missing_selector_preserves_failure_and_captures_caller() {
+        use crate::mach_o::MachO;
+        use crate::objc::{id, msg_class, msg_send, release};
+        for enabled in [false, true] {
+            let mut env = Environment::new_fake_for_test();
+            let env = &mut env;
+            let object: id = msg_class![env; NSObject new];
+            let selector = env
+                .objc
+                .register_host_selector("diagnosticMissingSelector".to_owned(), &mut env.mem);
+            let code = env.mem.alloc(128);
+            // Synthetic A32 caller: mov r3,r6; bl; bx lr. The diagnostic
+            // captures bytes; it does not execute or decode this fixture.
+            let bytes = env.mem.bytes_at_mut(code.cast(), 128);
+            bytes.fill(0);
+            bytes[88..100].copy_from_slice(&[
+                0x06, 0x30, 0xa0, 0xe1, 0x00, 0x00, 0x00, 0xeb, 0x1e, 0xff, 0x2f, 0xe1,
+            ]);
+            env.bins.push(MachO {
+                name: "synthetic-caller".into(),
+                dynamic_libraries: vec![],
+                sections: vec![],
+                exported_symbols: Default::default(),
+                external_relocations: vec![],
+                entry_point_pc: None,
+                text_segment_base: Some(code.to_bits()),
+                last_segment_end: code.to_bits() + 128,
+            });
+            env.cpu.regs_mut()[crate::cpu::Cpu::LR] = code.to_bits() + 96;
+            env.diagnostics = enabled.then(Recorder::new);
+            let error = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _: id = msg_send(env, (object, selector));
+            }))
+            .expect_err("missing selector must still panic");
+            let message = error
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .or_else(|| error.downcast_ref::<&str>().copied())
+                .unwrap();
+            assert!(message.contains("does not respond to selector \"diagnosticMissingSelector\""));
+            let regs = *env.cpu.regs();
+            let cpsr = env.cpu.cpsr();
+            let before = env.mem.bytes_at(code.cast(), 128).to_vec();
+            if let Some(recorder) = &env.diagnostics {
+                assert_eq!(
+                    recorder.crash_callers(env.current_thread)[0],
+                    code.to_bits() + 96
+                );
+            }
+            env.diagnostic_dump("panic");
+            env.diagnostic_dump("panic"); // Repeated catch must not duplicate output.
+            assert_eq!(*env.cpu.regs(), regs);
+            assert_eq!(env.cpu.cpsr(), cpsr);
+            assert_eq!(env.mem.bytes_at(code.cast(), 128), before);
+            release(env, object);
+        }
+    }
+
+    #[test]
+    fn crash_callers_are_bounded_distinct_and_thread_local_after_wrap() {
+        let mut recorder = Recorder::new();
+        for i in 1..200 {
+            for thread in [0, 1] {
+                let call = Call {
+                    thread,
+                    lr: i * 4 + 1,
+                    ..Call::default()
+                };
+                // Entry/return and nested host calls may repeat an LR.
+                recorder.recent.push(Event {
+                    call,
+                    ..Event::default()
+                });
+                recorder.recent.push(Event {
+                    call,
+                    ..Event::default()
+                });
+            }
+        }
+        recorder.recent.push(Event {
+            call: Call {
+                thread: 1,
+                lr: 0x1234,
+                ..Call::default()
+            },
+            ..Event::default()
+        });
+        let expected = [797, 793, 789, 785, 781, 777, 773, 769];
+        assert_eq!(recorder.crash_callers(0), expected);
+        assert_eq!(recorder.crash_callers(2), [0; CRASH_CALLERS]);
+        assert_eq!(recorder.crash_callers(0), expected); // Read-only snapshot.
+    }
+
     #[test]
     fn ring_retains_order_after_wrap() {
         let mut ring = Ring::<u32, 3>::default();

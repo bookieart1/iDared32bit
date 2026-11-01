@@ -95,6 +95,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)arrayWithObject:(id)object {
+    assert_ne!(object, nil, "arrayWithObject: requires a non-nil object");
     retain(env, object);
     let objects = vec![object];
     let array = from_vec(env, objects);
@@ -329,6 +330,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithCapacity:capacity];
     autorelease(env, new)
+}
+
++ (id)arrayWithObject:(id)object {
+    assert_ne!(object, nil, "arrayWithObject: requires a non-nil object");
+    let array: id = msg![env; this arrayWithCapacity:1u32];
+    () = msg![env; array addObject:object];
+    array
 }
 
 + (id)arrayWithArray:(id)array {
@@ -1029,4 +1037,62 @@ fn init_with_objects_inner(env: &mut Environment, arr: id, first_obj: id, args: 
         objects.push(next_arg);
     }
     env.objc.borrow_mut::<ArrayHostObject>(arr).array = objects;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn singleton_factories_preserve_mutability_and_element_ownership() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let first: id = msg_class![env; NSObject new];
+        let second: id = msg_class![env; NSObject new];
+        let mutable: id = msg_class![env; NSMutableArray arrayWithObject:first];
+        let immutable: id = msg_class![env; NSArray arrayWithObject:first];
+        let mutable_class: Class = msg_class![env; NSMutableArray class];
+        let is_mutable: bool = msg![env; mutable isKindOfClass:mutable_class];
+        let is_immutable_mutable: bool = msg![env; immutable isKindOfClass:mutable_class];
+        assert!(is_mutable);
+        assert!(!is_immutable_mutable);
+        // The GDataXML children path appends a second node to a singleton.
+        () = msg![env; mutable addObject:second];
+        let count: NSUInteger = msg![env; mutable count];
+        assert_eq!(count, 2);
+        let count: NSUInteger = msg![env; immutable count];
+        assert_eq!(count, 1);
+        let actual: id = msg![env; mutable objectAtIndex:0u32];
+        assert_eq!(actual, first);
+        let actual: id = msg![env; mutable objectAtIndex:1u32];
+        assert_eq!(actual, second);
+        assert_eq!(env.objc.get_refcount(first).get(), 3);
+        assert_eq!(env.objc.get_refcount(second).get(), 2);
+        retain(env, mutable);
+        release(env, pool);
+        assert_eq!(env.objc.get_refcount(first).get(), 2);
+        () = msg![env; mutable removeAllObjects];
+        assert_eq!(env.objc.get_refcount(first).get(), 1);
+        assert_eq!(env.objc.get_refcount(second).get(), 1);
+        release(env, mutable);
+        release(env, first);
+        release(env, second);
+    }
+
+    #[test]
+    #[should_panic(expected = "arrayWithObject: requires a non-nil object")]
+    fn immutable_singleton_rejects_nil() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let _: id = msg_class![env; NSArray arrayWithObject:nil];
+    }
+
+    #[test]
+    #[should_panic(expected = "arrayWithObject: requires a non-nil object")]
+    fn mutable_singleton_rejects_nil() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let _: id = msg_class![env; NSMutableArray arrayWithObject:nil];
+    }
 }

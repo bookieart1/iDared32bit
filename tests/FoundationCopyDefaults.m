@@ -67,6 +67,25 @@ int main(void) {
     }
     assert(rejected);
 
+    NSObject *arrayElement = [NSObject new];
+    NSMutableArray *mutableArray = [NSMutableArray arrayWithObject:arrayElement];
+    NSArray *immutableArray = [NSArray arrayWithObject:arrayElement];
+    assert([mutableArray isKindOfClass:[NSMutableArray class]]);
+    assert(![immutableArray isKindOfClass:[NSMutableArray class]]);
+    [mutableArray addObject:arrayElement];
+    assert(mutableArray.count == 2 && immutableArray.count == 1);
+    assert([mutableArray objectAtIndex:1] == arrayElement);
+    [arrayElement release];
+    for (Class arrayClass in @[[NSArray class], [NSMutableArray class]]) {
+        rejected = NO;
+        @try {
+            [arrayClass arrayWithObject:nil];
+        } @catch (NSException *exception) {
+            rejected = [exception.name isEqual:NSInvalidArgumentException];
+        }
+        assert(rejected);
+    }
+
     CopyToken *element = [CopyToken new];
     NSMutableSet *source = [[NSMutableSet alloc] initWithObjects:element, nil];
     NSMutableSet *mutable = [source mutableCopy];
@@ -88,6 +107,6 @@ int main(void) {
     assert(liveTokens == 1 && [immutable anyObject] == element);
     [immutable release];
     assert(liveTokens == 0);
-    puts("Foundation defaults/removal and set-copy reference contracts passed.");
+    puts("Foundation defaults, set-copy and singleton-array reference contracts passed.");
     return 0;
 }
