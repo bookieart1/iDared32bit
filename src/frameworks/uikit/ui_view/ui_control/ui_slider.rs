@@ -272,7 +272,8 @@ mod tests {
         () = msg![env; slider setMinimumValue:10.0f32];
         () = msg![env; slider setMaximumValue:20.0f32];
         () = msg![env; slider setValue:15.0f32];
-        assert_eq!(msg![env; slider value], 15.0f32);
+        let value: f32 = msg![env; slider value];
+        assert_eq!(value, 15.0f32);
         () = msg![env; slider layoutSubviews];
         release(env, slider);
         env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
