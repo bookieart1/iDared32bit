@@ -101,3 +101,28 @@ Device predictions:
 - Spoing must retain normal launch, play, and Home-return behavior.
 
 No title is promoted to working merely for crossing one contract.
+
+## Verified delivery
+
+The delivered source/package revision is
+`80c78363adaff869117b23e0ba15274dd973265e`.
+
+- Hosted test run
+  [41359428038](https://github.com/bookieart1/iDared32bit/actions/runs/41359428038)
+  passed 162/162 development-library tests on both macOS and Windows. The
+  native Foundation reference and the focused diagnostic reproducers passed on
+  macOS. Lint emitted exit code 1 on macOS, Windows and Android but is allowed
+  to fail on this development branch. Formatting and full guest-executable
+  tests were branch-gated and skipped.
+- IPA run
+  [41359428012](https://github.com/bookieart1/iDared32bit/actions/runs/41359428012)
+  produced artifact `13105100103`. The artifact ZIP SHA-256 is
+  `c805e4e3025033a2ecb0fbf9e7842afafd66f414e3be02c73a8b4a7d9e05f9b6`,
+  matching GitHub's published digest.
+- The verified local IPA is 20,054,430 bytes with SHA-256
+  `f38857c82ee134758c3639ac6bd3faffc1a32be1685c6ba0ff849f988e513acc`.
+  It is an unsigned arm64 package with no provisioning profile, bundle ID
+  `com.bookieart1.idared32bit.dev`, display name `iDared Dev`, embedded source
+  and workflow identifiers, and the unchanged universal recorder.
+
+Physical-device results remain pending and separate from build verification.
