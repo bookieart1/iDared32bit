@@ -88,8 +88,8 @@ checks, save resets or universal-recorder changes.
 Focused guest tests cover UTF-16 occurrence replacement, replacement counts,
 case-insensitive matching, backwards overlap selection and write-failure path
 metadata. The native Foundation fixture covers replacement and successful
-atomic write/success-error preservation. A bounded audio-format test verifies the new WAV
-metadata line.
+atomic write/success-error preservation. A bounded audio-format test verifies
+the new WAV metadata line.
 
 Device predictions:
 
@@ -107,5 +107,31 @@ Device predictions:
 
 ## Delivery status
 
-Implementation and hosted/package verification are pending. Physical-device
-results remain separate from source, host-test and package verification.
+Final source/package commit is
+`34adad5822892507e593680040ebd14193eed4f5`; the main implementation commit is
+`abcd130a5f021ab9062fd836371d5b34d4bebf72`, followed only by the native-contract
+and Rust value-semantics correction found by the first hosted run.
+
+- Hosted validation
+  [41362430452](https://github.com/bookieart1/iDared32bit/actions/runs/41362430452)
+  passed 166/166 development-library tests on both macOS and Windows. The
+  native Foundation reference and both focused recorder reproducers passed on
+  macOS. The macOS, Windows and Android lint commands each returned exit code 1
+  for the development branch's existing long-comment diagnostics; those steps
+  are explicitly allowed to fail. Formatting and the full guest-executable
+  test stages were branch-gated and skipped.
+- IPA workflow
+  [41362430320](https://github.com/bookieart1/iDared32bit/actions/runs/41362430320)
+  passed arm64 iOS compilation, separate identity verification, unsigned
+  packaging and artifact upload. Artifact `13105961965` has outer ZIP SHA-256
+  `c41d5aabf020895b7076a7579ca08b41e8f12aeb4f38da915582fff51612edf0`,
+  matching GitHub's published digest.
+- Local `outputs/iDared-Dev-1.91.ipa` is 20,051,553 bytes with SHA-256
+  `75ea469db3881af5fdd57c281849cb78e1ee0b4181cb039b0dd4abd2ae8302ac`.
+  Independent inspection verified its embedded source and workflow, arm64
+  Mach-O, `com.bookieart1.idared32bit.dev` / `iDared Dev`, absence of a code
+  signature and provisioning profile, permanent universal recorder, and all
+  three new implementation/diagnostic markers.
+
+Physical-device results remain separate from source, host-test and package
+verification.
