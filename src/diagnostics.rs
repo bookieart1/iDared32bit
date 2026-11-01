@@ -1034,21 +1034,15 @@ mod tests {
         let result: id = msg_class![env; NSDictionary new];
         env.diagnostics = Some(Recorder::new());
 
-        let object_for_key = env
-            .objc
-            .register_host_selector("objectForKey:".to_owned(), &mut env.mem);
+        let object_for_key = env.mem.alloc_and_write_cstr(b"objectForKey:").to_bits();
         env.cpu.regs_mut()[0..4].copy_from_slice(&[
             defaults.to_bits(),
-            object_for_key.as_ptr().to_bits(),
+            object_for_key,
             preference_key.to_bits(),
             0,
         ]);
         let call = env
-            .diagnostic_objc_begin(
-                defaults.to_bits(),
-                object_for_key.as_ptr().to_bits(),
-                false,
-            )
+            .diagnostic_objc_begin(defaults.to_bits(), object_for_key, false)
             .unwrap();
         env.diagnostic_user_defaults_lookup(
             defaults.to_bits(),
@@ -1072,20 +1066,17 @@ mod tests {
             .starts_with(b"\"settings/items\""));
 
         let set_object = env
-            .objc
-            .register_host_selector("setObject:forKey:".to_owned(), &mut env.mem);
+            .mem
+            .alloc_and_write_cstr(b"setObject:forKey:")
+            .to_bits();
         env.cpu.regs_mut()[0..4].copy_from_slice(&[
             result.to_bits(),
-            set_object.as_ptr().to_bits(),
+            set_object,
             value.to_bits(),
             mutation_key.to_bits(),
         ]);
         let call = env
-            .diagnostic_objc_begin(
-                result.to_bits(),
-                set_object.as_ptr().to_bits(),
-                false,
-            )
+            .diagnostic_objc_begin(result.to_bits(), set_object, false)
             .unwrap();
         let detail = env
             .diagnostics

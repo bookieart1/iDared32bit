@@ -167,7 +167,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         return res;
     }
     let global_domain_dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).global_domain_dict;
-    let res = msg![env; global_domain_dict objectForKey:key];
+    let res: id = msg![env; global_domain_dict objectForKey:key];
     if res != nil {
         env.diagnostic_user_defaults_lookup(
             this.to_bits(), key.to_bits(), res.to_bits(), "global"
