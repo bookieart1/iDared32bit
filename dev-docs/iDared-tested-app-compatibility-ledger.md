@@ -2,8 +2,8 @@
 
 Last reconciled: November 1, 2026
 Latest device-tested checkpoint: **iDared Dev 1.81** (`178cc51`; focused device result; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.81** (`178cc51`; Dev 1.82 is the current unbuilt candidate)
-Current activity: **Dev 1.81 device testing verifies the new picker paging/page continuity and Dirt's physical gravity; Blot remains healthy. Dark Nebula 2 now reaches a missing mutable index-set factory, and Glowfish reaches the named-pasteboard contract. Glowfish HD advances through intro and level selection but reports a missing bundled level file before a genuine abort. Hamlet works after a verified incorrect first host orientation; Parachute Ninja remains at its invalid callback-argument origin. Spoing produced one early null-page crash followed by two working launches, so it remains a regression watch rather than a patch target. Dev 1.82 implements general Foundation index sets, bounded named pasteboards, explicit host-scene orientation, safer direct-touch capture at letterbox bars, and guest-only background termination so screenshot review cannot close the entire host. The universal recorder is unchanged. Hosted tests, iOS compilation, package verification and physical validation remain pending.**
+Latest built checkpoint: **iDared Dev 1.82** (`99580ce`; package verified; physical-device validation pending)
+Current activity: **Dev 1.81 device testing verifies the new picker paging/page continuity and Dirt's physical gravity; Blot remains healthy. Dark Nebula 2 now reaches a missing mutable index-set factory, and Glowfish reaches the named-pasteboard contract. Glowfish HD advances through intro and level selection but reports a missing bundled level file before a genuine abort. Hamlet works after a verified incorrect first host orientation; Parachute Ninja remains at its invalid callback-argument origin. Spoing produced one early null-page crash followed by two working launches, so it remains a regression watch rather than a patch target. Dev 1.82 implements general Foundation index sets, bounded named pasteboards, explicit host-scene orientation, safer direct-touch capture at letterbox bars, and guest-only background termination so screenshot review cannot close the entire host. The universal recorder is unchanged. The arm64 unsigned IPA and separate development identity are verified; macOS and Windows each passed 135/135 library tests, the native Foundation reference passed, and both diagnostic reproducers passed. Physical validation is pending.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3704,6 +3704,36 @@ Dev 1.82 is therefore a coherent shared-contract and host-boundary candidate:
 
 The universal recorder remains unchanged. No game identifier, save reset,
 fabricated resource, swallowed abort, invalid-object accommodation or unrelated
-compatibility patch is included. Hosted tests and iOS compilation remain
-pending at this candidate stage. The focused device procedure is recorded in
-the Dev 1.82 engineering note; no save deletion is requested.
+compatibility patch is included.
+
+### Dev 1.82 verified delivery
+
+- Final implementation/source commit:
+  `99580ce5a9230eb3fb7c51588412e6cc93851d51` (`e6adddee` contains the main
+  sixth-stage implementation, `f2d8f1a9` makes pasteboard registry keys owned,
+  and the final commit resolves the Swift host-orientation bridge at runtime).
+- [Hosted tests 41298463237](https://github.com/bookieart1/iDared32bit/actions/runs/41298463237):
+  **135/135 library tests passed on macOS x86_64 and 135/135 on Windows**.
+  The native Foundation copy/defaults reference and both selected diagnostic
+  reproducers also passed. The development-branch lint step is allowed to fail
+  and reported the two existing overlong comments; Android likewise reached an
+  allowed lint failure, so Android cross-compilation is not claimed. Formatting,
+  full guest executable integration and the native macOS guest-test sanity path
+  are branch-gated and skipped.
+- [IPA build 41298463255](https://github.com/bookieart1/iDared32bit/actions/runs/41298463255):
+  arm64 iOS compilation, separate development identity verification, unsigned
+  packaging and artifact upload passed. Artifact
+  `iDared32bit-dev-unsigned-99580ce5a9230eb3fb7c51588412e6cc93851d51`;
+  downloaded ZIP SHA-256
+  `e66c636636a0a5e1d293f08e0cc45217cbe275a7b4cc4e61923858f689af2d8d`
+  matches GitHub's published digest.
+- Local `outputs/iDared-Dev-1.82.ipa`, 19,947,034 bytes, SHA-256
+  `6c1856fbfb84a8e293b746e15a83151c4adfb9e00fc1aabfef7a65ab41ad696e`,
+  passed archive extraction, arm64 Mach-O, separate
+  `com.bookieart1.idared32bit.dev` identity and unsigned-package checks. It
+  embeds source `99580ce`, workflow `41298463255`, the permanent universal
+  recorder and the host-orientation bridge marker.
+
+Verification: `outputs/iDared-Dev-1.82.verification.json`. The focused device
+procedure is recorded in the Dev 1.82 engineering note; no save deletion is
+requested. **Physical-device compatibility remains pending.**

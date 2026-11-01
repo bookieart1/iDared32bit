@@ -134,5 +134,28 @@ Without deleting saves, test:
 9. In any stable running game, take a screenshot, accept/save it, reopen
    iDared, and report whether iDared stayed alive and returned to the picker.
 
-Package verification and exact hosted-test results are recorded after the
-workflow completes. They remain distinct from device compatibility.
+## Verified build and validation boundary
+
+- Final implementation/source commit:
+  `99580ce5a9230eb3fb7c51588412e6cc93851d51`.
+- [Hosted tests 41298463237](https://github.com/bookieart1/iDared32bit/actions/runs/41298463237):
+  135/135 library tests passed on macOS x86_64 and 135/135 on Windows. The
+  native Foundation copy/defaults reference and both selected diagnostic
+  reproducers passed. Development lint is explicitly allowed to fail and found
+  the two existing overlong comments; the Android job reached the same allowed
+  lint boundary, so Android cross-compilation is not claimed. Formatting, the
+  full guest executable path and native macOS guest-test sanity are skipped on
+  this development branch.
+- [IPA build 41298463255](https://github.com/bookieart1/iDared32bit/actions/runs/41298463255):
+  arm64 iOS compilation, development-identity verification, unsigned packaging
+  and artifact upload passed. Downloaded artifact ZIP SHA-256:
+  `e66c636636a0a5e1d293f08e0cc45217cbe275a7b4cc4e61923858f689af2d8d`.
+- Local `outputs/iDared-Dev-1.82.ipa`: 19,947,034 bytes, SHA-256
+  `6c1856fbfb84a8e293b746e15a83151c4adfb9e00fc1aabfef7a65ab41ad696e`.
+  Extraction, arm64 Mach-O, `com.bookieart1.idared32bit.dev`, absence of a
+  provisioning profile/code signature, embedded source/workflow metadata and
+  the universal-recorder marker were verified.
+
+The exact package record is `outputs/iDared-Dev-1.82.verification.json`.
+Compilation and host-library tests remain distinct from physical-device
+compatibility, which is pending.
