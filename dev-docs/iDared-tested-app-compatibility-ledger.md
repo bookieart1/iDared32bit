@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: October 31, 2026
-Latest device-tested checkpoint: **iDared Dev 1.70** (`6ca62e0e`)
+Latest device-tested checkpoint: **iDared Dev 1.71 Survey** (`50ece578`; full catalog audit, functional scope qualified below)
 Latest built checkpoint: **iDared Dev 1.71 Survey** (`50ece578`)
-Current activity: **Dev 1.71 Survey is built and independently package-verified. Its existing bounded flight recorder is enabled by default for every launched game; no compatibility implementation is included. The ordinary source default was restored to off in `1b0328f0`, while the verified survey IPA retains the enabled `50ece578` source. Physical-device calibration and the page-by-page catalog survey are pending.**
+Current activity: **Complete Dev 1.71 survey audited: 131 attempts / 126 selected apps; all 120 CPU starts enabled diagnostics and 119 dumped completely. App reviews, historical comparisons and a prioritized queue are preserved in outputs. No compatibility changes, push or build were made for this audit. Ordinary source defaults remain off after `1b0328f0`; the survey IPA remains `50ece578`. Read the superseding maintainer review at the end before selecting the next work.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -2811,3 +2811,131 @@ behavior remains unverified. Calibrate first with Spoing, Paper Monsters,
 Spirits, Bounce and Blot. For the catalog pass, export a separate combined log
 after each app-picker page so the iOS logging buffer cannot erase early apps;
 normal exits should use emulator Home so the recorder emits its bounded dump.
+
+## Dev 1.71 complete catalog survey — superseding maintainer review
+
+**Evidence checkpoint, October 31, 2026. Audit only; no compatibility or
+diagnostic implementation, commit, push, build, or save reset.** This review
+supersedes older broad compatibility assumptions where the new evidence
+contradicts them; the original observations and audits remain preserved.
+
+The complete eight-file ZIP (Page 5 is split) embeds `50ece57` and workflow
+`41250258745` in every file, matching the verified Dev 1.71 Survey package.
+The preserved ZIP is `outputs/device-logs/iDared-Dev-1.71-survey.zip`,
+SHA-256 `11AC9469B1ABAE6A206EFD666379543BC77E723322797C106ADD27E3F027E849`.
+All original historical ZIP entries were also checked byte-for-byte against
+the preserved extracted files used in comparison; all three ZIP CRC checks
+passed.
+
+### Coverage and what the survey does not prove
+
+- 131 attempts, 126 distinct selected IPA filenames, 53,967 physical lines.
+  All 120 attempts entering CPU emulation (115 unique apps) enable both the
+  universal and normal recorder banners. 119 complete bounded dumps follow.
+- Rogue Sky is the only eligible session without a final dump. The log ends
+  during repeated reachability registrations. This does not establish a host
+  crash, watchdog kill, or deadlock.
+- Eleven pre-runtime rejections are separate: eight encrypted executables,
+  NOM 5 constant-string decoding, Wimp Mach-O debug-symbol handling, and Ramps
+  startup orientation. Another 26 invalid ZIP filenames are picker skips.
+- Unique-title outcomes: 97 panic/fatal, 18 Home without fatal, eight encrypted,
+  one guest exit (Pig Rush, twice calling exit(1)), one Home shutdown timeout
+  (LoveCatch), one uncertain terminal (Rogue Sky). These are outcomes of tested
+  paths, not an overall percentage of fully working games.
+- 46 attempts have successful EAGL returns, including 28 that later fail.
+  Pixels, guest controls, audible correctness and game progress are not proved
+  by that counter. Zero EAGL does not exclude UIKit rendering.
+- Current shutdown writes/defaults synchronization provide useful API evidence,
+  but no log-only proof of saved game contents or successful reload.
+- No slow-transition snapshot was captured. Its threshold cannot detect every
+  constant slowdown, no-frame condition or sudden stall; no diagnostics-on/off
+  performance benchmark was performed.
+
+### Historical reconciliation
+
+The original mixed-commit survey remains 127 attempts/123 identities.
+Dev 1.42 is 128 canonical attempts/126 identities, after excluding its known
+20 duplicated Page 6 segments at the start of Page 7. Dev 1.71 covers all
+123 original identities and 125 of 126 from 1.42; Jungle is absent and Galaxy
+returns. The combined per-app delta has 127 identities.
+
+Four earlier fatal 1.42 records now return Home without fatal: Spirits,
+SimplePhysics, Ski Jumping and AB Buster. Only the first three also have
+earlier user-confirmed usable gameplay. AB Buster remains skipped/test-validity
+uncertain because the same copy stalled on the original iPod. Relative to the
+original survey, nine fatal-to-Home changes include Blot, Bounce, Bulba,
+Flick Buddies and Paper Monsters in addition to those four.
+
+The unchanged-terminal bucket must not erase qualitative improvements: Bulba
+previously displayed a frozen picture and Blot previously slowed on
+Challenges/Back despite nonfatal Home records. The earlier user-confirmed
+repairs remain valid within their stated scope. Spirits/Paper Monsters/Bulba/
+Spoing earlier save-relaunch evidence remains historical; this survey does not
+repeat every functional assertion. SimplePhysics silence was also observed on
+the original iPod and is not an established emulator audio fault.
+
+No matched 1.42 Home-without-fatal title becomes a panic title here. That is
+not proof of regression freedom because test paths and saved state differ.
+CrazyGolf now fails on two separate paths (UISlider setContinuous and encoding
+0x500), so its earlier working-in-tested-portion status must remain partial.
+Sprinkle's Home return with 1,786 loops and zero EAGL returns plus API2 rejection
+does not certify working graphics. Sandwiches now decodes saved state before
+missing finishDecoding; its earlier black-screen path is a separate unresolved
+observation. Never delete saves to hide this distinction.
+
+The survey itself adds no compatibility fix over 1.70. Attribute actual
+improvements to intervening compatibility changes and user tests, not to the
+recorder. “Same screen” can conceal a changed internal blocker; “same panic
+site” can conceal a different causal path.
+
+### Corrected causal model and prioritized next work
+
+| Problem / apps | Evidence and hypothesis | Implementation status / next verification |
+|---|---|---|
+| Defaults nil removal: MageGauntlet, HookWorld, QuickHook | Recorder shows guest setObject:nil -> NSUserDefaults -> strict dictionary. Current defaults setter unconditionally forwards nil. Modern Foundation removes the preference for nil. Previous assumption that the game necessarily supplied an invalid identity is no longer justified. | **Not implemented. Strong contract candidate.** Verify legacy behavior, registration fallback/KVO, persistence and dictionary rejection separately. MageGauntlet primary; Hook games optional because user priority is low. |
+| Mutable-set copy: Infinight, Sharpshooter | Real mutable sets call mutableCopyWithZone; missing in the emulator. Sharpshooter repeats three times; both titles present first. | **Missing contract.** Independent membership, correct shallow element retention, immutable/mutable variants and release-order tests; then both games. |
+| B'Blast CFNumber conversion | The decisive operation is **CFNumberGetValue type 11**, not creation. Earlier Dev 1.70 wording was wrong. CFNumberCreate already handles long long. | **Partial contract.** Extend only after 64-bit output width, exact/lossy conversions and canary tests. Still blocked; no visible compatibility gain yet. |
+| Glowfish / Glowfish HD anonymous mmap | Both pass valid-looking Darwin VM tag bits 0xf0000000; source asserts fd == -1. Historical Apple mmap documentation permits tags on MAP_ANON. | **Partial platform contract.** Verify supported flags/tag behavior; test zeroing, map/unmap, failure and file-backed mapping. VM changes need Unity regression controls. |
+| Hamlet / HookChamp descriptions | NSLog requests instance descriptions on valid UIImage / DBH objects; NSObject only has class description. | **Missing inherited contract.** Review semantic overrides before implementing fallback; no game-specific selectors. |
+| Rogue Sky callback recursion | 119 reachability registrations repeat the callback/target while context addresses descend. SetCallback resets delivered state; ScheduleWithRunLoop invokes synchronously. | **Strong hypothesis, not a proven host crash.** Re-register/reschedule fixture and cancellation/context ownership first. High risk to Spoing/Diversion/Sticky networking if guessed. |
+| Null URL / early Unity cohorts | Three pinball titles plus Mystery Agency share URL construction/release; four Unity titles share collection initialization. Crucial preceding results are nonnil. | **Unresolved causes.** Resolve guest fault instruction/imported operand; compare a second game before implementation. Do not globally change URL, array or null behavior. |
+| Cut Buttons / Soul / Fly Kiwi / Tesla | Stack-block copy / audio NSError consumer / returned UIImage with isa zero / MainMenu dealloc scheduling at refcount zero. | **Separate runtime/ownership investigations.** Current evidence rejects one generic dispatch fix. No object resurrection or invalid-pointer tolerance. |
+| Blot | Earlier Challenges slowdown repair remains supported. Long-session death crash did not recur in 1.70; current survey has no explicit death marker. | **Working in sampled scope, exact death path not universally verified.** Preserve earlier formatter prediction and test death when relevant. |
+| Splode | 593 EAGL returns then achievement/offline-service path and null 0x8. | **Partial gameplay, unresolved completion fault.** Inspect guest service initialization/dereference; no fake OpenFeint success. |
+| Addicus | 54 presentations then null analytics streams and missing CFWriteStreamSetClient. | **Still blocked.** Determine legacy stream creation/error lifecycle before adding client handling. |
+| Saved-state coding: Sandwiches / Piyo Blocks | Missing finishDecoding / encodeBool on distinct coder paths. | **Partial contracts.** Preserve old saves and test round trips/lifetime, not only new-game startup. |
+
+Recommended next iteration: two small, separately reviewable Foundation
+changes for defaults nil removal and set copying. Primary device targets:
+**MageGauntlet, Infinight and Sharpshooter**. Spoing and Spirits are the
+focused input/transition/existing-save regression controls. The low-priority
+Hook games can corroborate the defaults fix without becoming the main batch.
+B'Blast is the next isolated conversion follow-up. Proposed work is not yet
+implemented or native/guest-contract verified.
+
+No broader recorder is required before these candidates. For opaque null
+faults, first inspect existing guest addresses against executable instructions.
+Only if that is insufficient, consider a bounded fault-time instruction/
+operand snapshot and targeted allocation-generation history for implicated
+classes. More universal event volume is not the objective.
+
+### Durable audit artifacts and validation boundary
+
+Full rationale: `outputs/iDared-holistic-survey-audit-1.71.md`.
+Companions in `outputs/`:
+`iDared-per-app-review-survey-1.71.csv` (126 apps),
+`iDared-launch-inventory-survey-1.71.csv` (131 attempts),
+`iDared-per-app-delta-1.00-1.42-1.71.csv` (127 identities),
+`iDared-cause-groups-survey-1.71.csv`,
+`iDared-error-family-delta-survey-1.71.csv`,
+`iDared-invalid-packages-survey-1.71.csv` (26),
+`iDared-recent-boundaries-survey-1.71.csv` (11,283 events),
+`iDared-survey-source-manifest-1.71.csv`,
+and `iDared-engineering-queue-survey-1.71.csv` (14 ranked proposals).
+
+Reproducible analysis is in `work/audit-survey-1.71/analyze.py` and
+`review.py`. Archive CRC/hash checks, historical-byte comparisons, CSV/schema
+counts, per-launch commit/banner checks and dump coverage checks passed.
+No emulator compilation or automated compatibility test was run during this
+audit; earlier build/test records remain separate. The two historical narrative
+audits and their CSVs were not overwritten.
