@@ -3,7 +3,7 @@
 Last reconciled: October 31, 2026
 Latest device-tested checkpoint: **iDared Dev 1.71 Survey** (`50ece578`; full catalog audit, functional scope qualified below)
 Latest built checkpoint: **iDared Dev 1.71 Survey** (`50ece578`)
-Current activity: **Complete Dev 1.71 survey audited: 131 attempts / 126 selected apps; all 120 CPU starts enabled diagnostics and 119 dumped completely. App reviews, historical comparisons and a prioritized queue are preserved in outputs. No compatibility changes, push or build were made for this audit. Ordinary source defaults remain off after `1b0328f0`; the survey IPA remains `50ece578`. Read the superseding maintainer review at the end before selecting the next work.**
+Current activity: **Preparing Dev 1.72: shared Foundation fixes for MageGauntlet, Infinight and Sharpshooter; bounded flight recording becomes the permanent universal default. Build and device verification pending. Historical survey audit remains preserved below.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -2939,3 +2939,41 @@ counts, per-launch commit/banner checks and dump coverage checks passed.
 No emulator compilation or automated compatibility test was run during this
 audit; earlier build/test records remain separate. The two historical narrative
 audits and their CSVs were not overwritten.
+
+
+## Dev 1.72 — survey-led Foundation batch (October 31, 2026)
+
+User authorized the first two shared survey fixes and the next IPA. They report
+**no noticeable overall slowdown** during universal 1.71 testing and requested
+universal recording permanently. This is a device observation, not a controlled
+zero-overhead benchmark for every game.
+
+- Baseline: tested survey `50ece578`; previous normal source `784ef91a`;
+  full survey ledger preserved in `b6856aae`. Fetched upstream `ca1de89c` still
+  lacks the two contracts.
+- MageGauntlet: nil for `trpg/gcID` now uses existing NSUserDefaults removal,
+  preserving KVO and application-domain-only behavior. Lower-priority defaults
+  and unrelated values remain; dictionary nil rejection is unchanged.
+- Infinight / Sharpshooter: implement independent shallow mutable copies of sets
+  and immutable copies of mutable sets. Correct directly involved allObjects
+  snapshot ownership so temporary arrays retain members and balance on pool drain.
+- All eligible apps: flight is the permanent default. Explicit
+  `--diagnostics=off` remains available. No recorder capacity/filter changes.
+- Status: general semantic corrections, not app-specific hacks. Build/tests
+  pending; not physically validated and not a claim that these games are fixed.
+- Four added host tests cover defaults fallback/unrelated settings, dictionary
+  strictness, set copying/mutability/membership/identity/ownership/release order,
+  and recorder defaults/overrides. Independent native macOS Foundation fixture
+  checks the reference contracts including nil removal, one KVO event and
+  persisted-domain exclusion. It is not a historical iPhone OS runtime oracle.
+- Local formatting/whitespace reviewed. Offline compilation stopped because the
+  cached SDL dependency submodule is incomplete; hosted results pending.
+- Device plan: launch/play MageGauntlet, Infinight and Sharpshooter, return to menu
+  and reopen saved progress if available. Brief Spoing and Spirits regressions
+  include existing saves. HookWorld/QuickHook remain optional low priority.
+- Limits: existing broader NSSet and defaults domain/KVO TODOs remain. Host tests
+  do not verify ARM ABI, actual game binaries or emulator disk persistence;
+  downstream blockers may appear. B'Blast/Addicus are outside this batch.
+
+Details and primary references: `dev-docs/compatibility-1.72-foundation.md`.
+Build identity and actual validation will be appended when CI completes.

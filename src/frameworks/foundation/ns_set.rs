@@ -72,6 +72,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, this)
 }
 
+// NSMutableCopying always produces independent, mutable membership.
+- (id)mutableCopyWithZone:(NSZonePtr)zone {
+    let objects: id = msg![env; this allObjects];
+    let copy: id = msg_class![env; NSMutableSet allocWithZone:zone];
+    msg![env; copy initWithArray:objects]
+}
+
 - (bool)containsObject:(id)object {
     let enumerator: id = msg![env; this objectEnumerator];
     loop {
@@ -116,8 +123,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 // NSCopying implementation
-- (id)copyWithZone:(NSZonePtr)_zone {
-    todo!(); // TODO: this should produce an immutable copy
+- (id)copyWithZone:(NSZonePtr)zone {
+    let objects: id = msg![env; this allObjects];
+    let copy: id = msg_class![env; NSSet allocWithZone:zone];
+    msg![env; copy initWithArray:objects]
 }
 
 @end
@@ -175,8 +184,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)allObjects {
-    let objects = env.objc.borrow_mut::<SetHostObject>(this).dict.iter_keys().collect();
-    ns_array::from_vec(env, objects)
+    all_objects(env, this)
 }
 
 - (id)objectEnumerator { // NSEnumerator*
@@ -260,8 +268,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)allObjects {
-    let objects = env.objc.borrow_mut::<SetHostObject>(this).dict.iter_keys().collect();
-    ns_array::from_vec(env, objects)
+    all_objects(env, this)
 }
 
 - (id)objectEnumerator { // NSEnumerator*
@@ -327,6 +334,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
+/// An autoreleased snapshot owns its elements independently of the set.
+/// This is also used by enumeration and collection copying.
+fn all_objects(env: &mut Environment, set: id) -> id {
+    let objects: Vec<id> = env
+        .objc
+        .borrow::<SetHostObject>(set)
+        .dict
+        .iter_keys()
+        .collect();
+    for &object in &objects {
+        retain(env, object);
+    }
+    let array = ns_array::from_vec(env, objects);
+    autorelease(env, array)
+}
+
 /// Helper method shared between `initWithObjects:` of `_touchHLE_NSSet` and
 /// `_touchHLE_NSMutableSet`
 fn set_from_objects(env: &mut Environment, first_obj: id, args: DotDotDot) -> DictionaryHostObject {
@@ -357,4 +380,89 @@ fn set_from_array(env: &mut Environment, array: id) -> DictionaryHostObject {
         dict.insert(env, next, null, /* copy_key: */ false);
     }
     dict
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::objc::{release, Class};
+
+    #[test]
+    fn copies_preserve_element_identity_and_independent_membership() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        // NSObject has no copy implementation: elements must be retained,
+        // never copied, even when the container becomes immutable.
+        let element: id = msg_class![env; NSObject new];
+        let source: id = msg_class![env; NSMutableSet alloc];
+        let source: id = msg![env; source initWithObject:element];
+        let mutable: id = msg![env; source mutableCopy];
+        let immutable: id = msg![env; source copy];
+        let another: id = msg![env; immutable mutableCopy];
+        let retained: id = msg![env; immutable copy];
+        assert_eq!(retained, immutable);
+        release(env, retained);
+        assert_ne!(mutable, source);
+        assert_ne!(another, immutable);
+        let mutable_class: Class = msg_class![env; NSMutableSet class];
+        assert!(msg![env; mutable isKindOfClass:mutable_class]);
+        assert!(!msg![env; immutable isKindOfClass:mutable_class]);
+        for set in [source, mutable, immutable, another] {
+            assert_eq!(msg![env; set anyObject], element);
+            let count: NSUInteger = msg![env; set count];
+            assert_eq!(count, 1);
+        }
+        () = msg![env; source removeAllObjects];
+        let count: NSUInteger = msg![env; mutable count];
+        assert_eq!(count, 1);
+        () = msg![env; mutable removeObject:element];
+        let count: NSUInteger = msg![env; immutable count];
+        assert_eq!(count, 1);
+        let enumerator: id = msg![env; immutable objectEnumerator];
+        assert_eq!(msg![env; enumerator nextObject], element);
+        assert_eq!(msg![env; enumerator nextObject], nil);
+        release(env, source);
+        release(env, mutable);
+        release(env, another);
+        release(env, pool); // Temporary arrays/enumerators must balance.
+        assert_eq!(env.objc.get_refcount(element).get(), 2);
+        assert_eq!(msg![env; immutable anyObject], element);
+        release(env, immutable);
+        assert_eq!(env.objc.get_refcount(element).get(), 1);
+        release(env, element);
+    }
+
+    #[test]
+    fn set_snapshots_own_elements_and_empty_copies_are_mutable() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let element: id = msg_class![env; NSObject new];
+        let source: id = msg_class![env; NSSet alloc];
+        let source: id = msg![env; source initWithObject:element];
+        let snapshot: id = msg![env; source allObjects];
+        retain(env, snapshot);
+        let copy: id = msg![env; source mutableCopy];
+        release(env, copy); // Opposite release order from the previous test.
+        release(env, source);
+        release(env, pool);
+        assert_eq!(env.objc.get_refcount(element).get(), 2);
+        assert_eq!(msg![env; snapshot objectAtIndex:0u32], element);
+        release(env, snapshot);
+        assert_eq!(env.objc.get_refcount(element).get(), 1);
+
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let empty: id = msg_class![env; NSSet new];
+        let copy: id = msg![env; empty mutableCopy];
+        () = msg![env; copy addObject:element];
+        let count: NSUInteger = msg![env; empty count];
+        assert_eq!(count, 0);
+        assert_eq!(msg![env; copy anyObject], element);
+        release(env, copy);
+        release(env, empty);
+        release(env, pool);
+        assert_eq!(env.objc.get_refcount(element).get(), 1);
+        release(env, element);
+    }
 }

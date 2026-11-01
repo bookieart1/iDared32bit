@@ -14,6 +14,7 @@ use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, Class, ClassExports, HostObject,
     NSZonePtr,
 };
+
 use crate::Environment;
 
 #[derive(Default)]
@@ -187,6 +188,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setObject:(id)object
          forKey:(id)key { // NSString*
+    // In defaults, nil removes the application-domain value. It is not a
+    // dictionary insertion; lower-priority domains remain available.
+    if object == nil {
+        return msg![env; this removeObjectForKey:key];
+    }
     // Only app domain gets affected!
     let dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
     () = msg![env; this willChangeValueForKey:key];
@@ -317,3 +323,51 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nil_setting_removes_only_application_value_and_reveals_fallbacks() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        // Isolate the domains without touching the developer's preferences.
+        // All reads/mutations below go through real Objective-C dispatch.
+        let defaults: id = msg_class![env; NSUserDefaults alloc];
+        let app: id = msg_class![env; NSMutableDictionary new];
+        let global: id = msg_class![env; NSMutableDictionary new];
+        let registered: id = msg_class![env; NSMutableDictionary new];
+        *env.objc.borrow_mut::<NSUserDefaultsHostObject>(defaults) = NSUserDefaultsHostObject {
+            app_domain_dict: app,
+            global_domain_dict: global,
+            registration_domain_dict: registered,
+        };
+        let key = ns_string::get_static_str(env, "trpg/gcID");
+        let missing = ns_string::get_static_str(env, "absent");
+        let unrelated = ns_string::get_static_str(env, "saved-level");
+        let value = ns_string::get_static_str(env, "saved-value");
+        let fallback = ns_string::get_static_str(env, "registered-value");
+        () = msg![env; registered setObject:fallback forKey:key];
+        () = msg![env; defaults setObject:value forKey:key];
+        () = msg![env; defaults setObject:value forKey:unrelated];
+        assert_eq!(msg![env; defaults objectForKey:key], value);
+        () = msg![env; defaults setObject:nil forKey:key];
+        assert_eq!(msg![env; app objectForKey:key], nil);
+        assert_eq!(msg![env; defaults objectForKey:key], fallback);
+        () = msg![env; global setObject:value forKey:key];
+        () = msg![env; defaults setObject:nil forKey:key];
+        assert_eq!(msg![env; defaults objectForKey:key], value);
+        () = msg![env; defaults setObject:nil forKey:missing];
+        assert_eq!(msg![env; defaults objectForKey:missing], nil);
+        assert_eq!(msg![env; defaults objectForKey:unrelated], value);
+        // The same nil remains invalid in NSMutableDictionary itself.
+        let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            () = msg![env; app setObject:nil forKey:key];
+        }));
+        assert!(failure.is_err());
+        release(env, defaults);
+        release(env, pool);
+    }
+}

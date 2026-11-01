@@ -26,6 +26,11 @@ jobs:
           fetch-depth: 0
       - name: Install clang-format
         run: brew install clang-format
+      - name: Native Foundation copy/defaults reference
+        if: github.ref == 'refs/heads/ci/unsigned-ipa-baseline'
+        run: |
+          cc tests/FoundationCopyDefaults.m -framework Foundation -o "$RUNNER_TEMP/foundation-contracts"
+          "$RUNNER_TEMP/foundation-contracts"
       - name: Check formatting
         if: github.ref == 'refs/heads/idared32bit'
         run: dev-scripts/format.sh --check

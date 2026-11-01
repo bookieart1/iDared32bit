@@ -1457,9 +1457,6 @@ impl Environment {
     /// `std::process::exit` to end the process so this function never returns.
     pub fn run(mut self) -> bool {
         if self.diagnostics.is_some() {
-            if crate::options::UNIVERSAL_FLIGHT_RECORDER_SURVEY {
-                echo!("flight recorder v1 survey build: universal app coverage enabled");
-            }
             echo!("flight recorder v1 enabled: bounded API/ObjC history; 5s progress reports (first 12); dump on panic/Home. No instruction tracing.");
         }
         let mut curr_host_context = self.threads[0].host_context.take().unwrap();
@@ -1984,6 +1981,22 @@ impl Environment {
     #[cfg(test)]
     pub fn new_fake_for_test() -> Self {
         Self::new_fake_for_test_with_null_segment(0)
+    }
+
+    /// A host-side fixture with thread-local storage for autorelease pools.
+    #[cfg(test)]
+    pub fn new_fake_for_test_with_thread() -> Self {
+        let mut env = Self::new_fake_for_test();
+        env.threads.push(Thread {
+            state: ThreadState::Running,
+            blocked_by: ThreadBlock::NotBlocked,
+            framework_state: Default::default(),
+            return_value: None,
+            guest_context: None,
+            host_context: None,
+            stack: None,
+        });
+        env
     }
 
     #[cfg(test)]

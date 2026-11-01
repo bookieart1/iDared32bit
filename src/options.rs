@@ -16,10 +16,6 @@ use std::path::PathBuf;
 pub const OPTIONS_HELP: &str =
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/OPTIONS_HELP.txt"));
 
-/// One-off catalog survey switch. This is enabled only in the dedicated
-/// Dev 1.71 survey artifact and restored to `false` immediately afterwards.
-pub(crate) const UNIVERSAL_FLIGHT_RECORDER_SURVEY: bool = false;
-
 /// Game controller button for `--button-to-touch=` option.
 #[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
 pub enum Button {
@@ -100,7 +96,9 @@ impl Default for Options {
             dumping_file: crate::paths::user_data_base_path().join("DUMP.txt"),
             ignore_gl_errors: false,
             zero_stack_after_guest_to_host_call: None,
-            diagnostics: UNIVERSAL_FLIGHT_RECORDER_SURVEY,
+            // Keep the bounded survey recorder for every app. An explicit
+            // --diagnostics=off remains available for controlled comparisons.
+            diagnostics: true,
         }
     }
 }
@@ -345,4 +343,20 @@ fn parse_dump_options(options: &str) -> Result<DumpingOptions, String> {
         }
     }
     Ok(dumping_options)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recorder_defaults_to_flight_but_allows_explicit_override() {
+        let mut options = Options::default();
+        assert!(options.diagnostics);
+        assert_eq!(options.parse_argument("--diagnostics=off"), Ok(true));
+        assert!(!options.diagnostics);
+        assert_eq!(options.parse_argument("--diagnostics=flight"), Ok(true));
+        assert!(options.diagnostics);
+        assert!(options.parse_argument("--diagnostics=unknown").is_err());
+    }
 }
