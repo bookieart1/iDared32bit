@@ -16,6 +16,17 @@ type FERoundingDirection = i32;
 const FE_TONEAREST: FERoundingDirection = 0x000000;
 const FE_TOWARDZERO: FERoundingDirection = 0xc00000;
 
+// Darwin's ARM fenv exception masks are the cumulative exception bits in
+// FPSCR. Keeping them there matters: guest VMRS instructions and other fenv
+// calls must observe the same state.
+const FE_INVALID: i32 = 0x01;
+const FE_DIVBYZERO: i32 = 0x02;
+const FE_OVERFLOW: i32 = 0x04;
+const FE_UNDERFLOW: i32 = 0x08;
+const FE_INEXACT: i32 = 0x10;
+const FE_ALL_EXCEPT: i32 =
+    FE_INVALID | FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW | FE_INEXACT;
+
 #[derive(Default)]
 pub struct State {
     rounding_direction: FERoundingDirection,
@@ -469,6 +480,22 @@ fn fesetround(env: &mut Environment, round: i32) -> i32 {
     0 // Success
 }
 
+fn feclearexcept(env: &mut Environment, exceptions: i32) -> i32 {
+    let mask = (exceptions & FE_ALL_EXCEPT) as u32;
+    env.cpu.set_fpscr(env.cpu.fpscr() & !mask);
+    0
+}
+
+fn fetestexcept(env: &mut Environment, exceptions: i32) -> i32 {
+    (env.cpu.fpscr() & (exceptions & FE_ALL_EXCEPT) as u32) as i32
+}
+
+fn feraiseexcept(env: &mut Environment, exceptions: i32) -> i32 {
+    let mask = (exceptions & FE_ALL_EXCEPT) as u32;
+    env.cpu.set_fpscr(env.cpu.fpscr() | mask);
+    0
+}
+
 // Remainder functions
 // TODO: implement the rest
 fn fmod(env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
@@ -612,6 +639,9 @@ pub const FUNCTIONS: FunctionExports = &[
     // Rounding direction
     export_c_func!(fegetround()),
     export_c_func!(fesetround(_)),
+    export_c_func!(feclearexcept(_)),
+    export_c_func!(fetestexcept(_)),
+    export_c_func!(feraiseexcept(_)),
     // Remainder functions
     export_c_func!(fmod(_, _)),
     export_c_func!(fmodf(_, _)),
@@ -626,3 +656,25 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(hypotf(_, _)),
     export_c_func!(__fpclassifyf(_)),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fenv_exception_functions_share_the_guest_fpscr() {
+        let mut env = Environment::new_fake_for_test();
+        let controls = env.cpu.fpscr();
+
+        assert_eq!(feraiseexcept(&mut env, FE_INVALID | FE_INEXACT), 0);
+        assert_eq!(
+            fetestexcept(&mut env, FE_ALL_EXCEPT),
+            FE_INVALID | FE_INEXACT
+        );
+        assert_eq!(env.cpu.fpscr() & !FE_ALL_EXCEPT as u32, controls);
+
+        assert_eq!(feclearexcept(&mut env, FE_INVALID), 0);
+        assert_eq!(fetestexcept(&mut env, FE_ALL_EXCEPT), FE_INEXACT);
+        assert_eq!(env.cpu.fpscr() & !FE_ALL_EXCEPT as u32, controls);
+    }
+}

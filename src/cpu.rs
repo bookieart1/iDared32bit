@@ -229,6 +229,18 @@ impl Cpu {
         unsafe { touchHLE_MgbaWrapper_set_cpsr(self.mgba_wrapper, cpsr) }
     }
 
+    /// Read the current thread's ARM floating-point status and control
+    /// register. This includes both controls and cumulative exception flags.
+    pub fn fpscr(&self) -> u32 {
+        unsafe { touchHLE_MgbaWrapper_fpscr(self.mgba_wrapper) }
+    }
+
+    /// Replace the current thread's ARM floating-point status and control
+    /// register.
+    pub fn set_fpscr(&mut self, fpscr: u32) {
+        unsafe { touchHLE_MgbaWrapper_set_fpscr(self.mgba_wrapper, fpscr) }
+    }
+
     /// Swap the current state of the CPU (registers etc) with the state stored
     /// in the context object.
     pub fn swap_context(&mut self, context: &mut CpuContext) {

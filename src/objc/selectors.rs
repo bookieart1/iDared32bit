@@ -291,3 +291,28 @@ pub(super) fn sel_registerName(env: &mut Environment, name: ConstPtr<u8>) -> SEL
     let name = name.to_string();
     env.objc.register_host_selector(name, &mut env.mem)
 }
+
+/// Historical Objective-C runtime spelling for selector lookup/registration.
+/// Apple's runtime documents this as having the same interning behavior as
+/// `sel_registerName`.
+pub(super) fn sel_getUid(env: &mut Environment, name: ConstPtr<u8>) -> SEL {
+    sel_registerName(env, name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_uid_and_register_name_share_selector_identity() {
+        let mut env = Environment::new_fake_for_test();
+        let first_name = env.mem.alloc_and_write_cstr(b"parachuteTest:");
+        let second_name = env.mem.alloc_and_write_cstr(b"parachuteTest:");
+
+        let first = sel_getUid(&mut env, first_name.cast_const());
+        let second = sel_registerName(&mut env, second_name.cast_const());
+
+        assert_eq!(first, second);
+        assert_eq!(first.as_str(&env.mem), "parachuteTest:");
+    }
+}

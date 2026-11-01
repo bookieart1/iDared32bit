@@ -3,7 +3,7 @@
 Last reconciled: November 1, 2026
 Latest device-tested checkpoint: **iDared Dev 1.76** (`c5005dd4`; focused diagnostic test; Dev 1.71 remains the latest full-catalog survey)
 Latest built checkpoint: **iDared Dev 1.76** (`c5005dd4`; verified diagnostic package and focused device result)
-Current activity: **Dev 1.76 identified two distinct restored application-preference dictionaries behind the Rocketcat failures: Hook World `qh/items` mutated at `player/zelle`, and Mage Gauntlet `trpg/stats` mutated at `firstPlay`. This supports a shared legacy Settings pattern, not one identical corrupt save. A global mutable-defaults change would violate the historical preferences contract; inspect the shared call sites before choosing a narrowly justified accommodation. No compatibility behavior or save data changed.**
+Current activity: **Dev 1.77 is the first user-prioritized batch from the fully re-read Dev 1.71 survey: Parachute Ninja, Dark Nebula 2, Dirt, Hamlet and Glowfish. Five general contracts are implemented without app-specific branches: selector interning via `sel_getUid`, ARM FPSCR exception flags, file-backed NSData options/errors, inherited NSObject descriptions, and Darwin-tagged anonymous mappings. Hosted validation and physical-device results are pending; this is not yet a compatibility claim.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3350,3 +3350,31 @@ but it will not legitimize the Rocketcat direct mutation and may expose it
 earlier. Next inspect the shared Rocketcat Settings call sites and historical
 wrapper behavior. Any compatibility accommodation must be explicit, narrow and
 provisional rather than a global weakening of the preferences contract.
+
+## Dev 1.77: first user-prioritized survey batch (candidate)
+
+Before editing, all eight files in the Dev 1.71 universal-recorder survey were
+re-read and verified byte-for-byte against the preserved manifest and extracted
+copies: 7,998,477 bytes and 53,967 lines, all embedding source `50ece57` and
+workflow `41250258745`. The selected apps have distinct first blockers:
+
+| App | Dev 1.71 first decisive blocker | Candidate contract change | Status before device test |
+|---|---|---|---|
+| Parachute Ninja | Missing `_sel_getUid` before a run-loop iteration or EAGL return. | Historical runtime alias uses the existing selector-interning path and preserves identity with `sel_registerName`. | Blocker targeted; no launch/menu/gameplay claim. |
+| Dark Nebula 2 | Missing `_feraiseexcept(1)` before a run-loop iteration or EAGL return. | Exception raise/clear/test operate on the active guest ARM FPSCR cumulative bits rather than disconnected host state. | Blocker targeted; traps and the older rounding implementation remain outside this boundary. |
+| Dirt | Missing `+[NSData dataWithContentsOfURL:options:error:]` after GL/audio setup; option 2 is `NSDataReadingUncached`. | File URL and file path option/error readers use the guest filesystem, honor option semantics as non-observable hints, and return a Cocoa missing-file error. | Blocker targeted; synchronous network URL loading remains unsupported. |
+| Hamlet | `NSLog` requests `-description` from a valid UIImage, but NSObject lacks its inherited fallback. | NSObject returns `<Class: 0x...>` and debugDescription dispatches through description; subclass overrides remain authoritative. | Blocker targeted; HookChamp is a corroborating future test. |
+| Glowfish | Anonymous mmap asserts because Darwin VM tag `0xf0000000` is carried in `fd`; Glowfish HD repeats it. | Accept only the documented high-byte `VM_MAKE_TAG` field; reject unrelated bits before allocation. Purgable mappings remain explicitly unsupported. | Blocker targeted; no rendering/gameplay claim. |
+
+This is five general contract work items in one requested batch, not a claim of
+one common root cause. No game identifier, selector special-case, invalid
+object tolerance, memory-fault suppression or fabricated success was added.
+Focused unit tests cover each new boundary. The universal bounded recorder
+remains enabled. Engineering detail and exact survey ranges:
+`dev-docs/compatibility-1.77-priority-batch-contracts.md`.
+
+Predicted device test order is Parachute Ninja, Dark Nebula 2, Dirt, Hamlet and
+Glowfish, followed by Spoing and Blot as narrow VM/Foundation regressions.
+Glowfish HD can directly corroborate the tagged-mapping path. Preserve existing
+saves; a removed first blocker, menu reached, gameplay observed and functional
+compatibility must be reported separately.

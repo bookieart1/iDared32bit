@@ -400,6 +400,15 @@ void touchHLE_MgbaWrapper_set_cpsr(struct touchHLE_MgbaWrapper *w,
   _ARMReadCPSR(&w->cpu);
 }
 
+uint32_t touchHLE_MgbaWrapper_fpscr(const struct touchHLE_MgbaWrapper *w) {
+  return w->vfp.fpscr;
+}
+
+void touchHLE_MgbaWrapper_set_fpscr(struct touchHLE_MgbaWrapper *w,
+                                    uint32_t fpscr) {
+  w->vfp.fpscr = fpscr;
+}
+
 /* The encoding that last came back undefined. Only meaningful right after
  * run_or_step has returned RESULT_UNDEFINED_INSTRUCTION. */
 uint32_t touchHLE_MgbaWrapper_last_undefined_opcode(

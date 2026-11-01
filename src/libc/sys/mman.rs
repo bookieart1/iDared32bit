@@ -12,13 +12,16 @@ use crate::libc::errno::{set_errno, EINVAL, ENOTSUP};
 use crate::libc::posix_io;
 use crate::libc::posix_io::{off_t, FileDescriptor, SEEK_SET};
 use crate::mem::VMAllocError;
-use crate::mem::{ConstPtr, GuestUSize, MutVoidPtr, PAGE_SIZE_ALIGN_MASK};
+use crate::mem::{ConstPtr, GuestUSize, MutVoidPtr, Ptr, PAGE_SIZE_ALIGN_MASK};
 use std::collections::HashMap;
 
 #[allow(dead_code)]
 const MAP_FILE: i32 = 0x0000;
 const MAP_FIXED: i32 = 0x0010;
 const MAP_ANON: i32 = 0x1000;
+const VM_FLAGS_PURGABLE: u32 = 0x0000_0002;
+const VM_FLAGS_ALIAS_MASK: u32 = 0xff00_0000;
+const MAP_FAILED: MutVoidPtr = Ptr::from_bits(u32::MAX);
 
 #[derive(Default)]
 pub struct State {
@@ -62,6 +65,33 @@ fn mmap(
         offset
     );
 
+    if len == 0 {
+        set_errno(env, EINVAL);
+        return MAP_FAILED;
+    }
+
+    if flags & MAP_ANON != 0 && fd != -1 {
+        let vm_flags = fd as u32;
+        // Darwin permits an anonymous mapping's otherwise-unused descriptor
+        // to carry VM_MAKE_TAG(tag), encoded in the high byte. Keep rejecting
+        // every unrelated bit. Purgeable mappings need lifecycle semantics
+        // that the VM allocator does not implement yet.
+        if vm_flags & !(VM_FLAGS_ALIAS_MASK | VM_FLAGS_PURGABLE) != 0 {
+            log!(
+                "Warning: mmap anonymous fd/VM flags {vm_flags:#x} are invalid, returning MAP_FAILED"
+            );
+            set_errno(env, EINVAL);
+            return MAP_FAILED;
+        }
+        if vm_flags & VM_FLAGS_PURGABLE != 0 {
+            log!(
+                "Warning: mmap anonymous purgeable allocation flags {vm_flags:#x} are unsupported"
+            );
+            set_errno(env, ENOTSUP);
+            return MAP_FAILED;
+        }
+    }
+
     assert_eq!(offset, 0);
     let ptr = if addr.is_null() {
         env.mem.vm_alloc(None, len).unwrap()
@@ -98,9 +128,7 @@ fn mmap(
 
     assert!(ptr.to_bits() & PAGE_SIZE_ALIGN_MASK == 0);
 
-    if (flags & MAP_ANON) != 0 {
-        assert_eq!(fd, -1);
-    } else {
+    if (flags & MAP_ANON) == 0 {
         let new_offset = posix_io::lseek(env, fd, offset, SEEK_SET);
         assert_eq!(new_offset, offset);
 
@@ -168,3 +196,44 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(shm_open(_, _, _)),
     export_c_func!(mprotect(_, _, _)),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::libc::errno::get_errno;
+
+    #[test]
+    fn anonymous_mmap_accepts_darwin_vm_tags() {
+        let mut env = Environment::new_fake_for_test();
+        let ptr = mmap(
+            &mut env,
+            MutVoidPtr::null(),
+            0x1000,
+            3,
+            MAP_ANON | 0x0002,
+            0xf000_0000u32 as i32,
+            0,
+        );
+
+        assert_ne!(ptr, MAP_FAILED);
+        assert!(env.mem.bytes_at(ptr.cast(), 0x1000).iter().all(|&b| b == 0));
+        assert_eq!(munmap(&mut env, ptr, 0x1000), 0);
+    }
+
+    #[test]
+    fn anonymous_mmap_rejects_non_tag_descriptors_before_allocating() {
+        let mut env = Environment::new_fake_for_test();
+        let ptr = mmap(
+            &mut env,
+            MutVoidPtr::null(),
+            0x1000,
+            3,
+            MAP_ANON | 0x0002,
+            3,
+            0,
+        );
+
+        assert_eq!(ptr, MAP_FAILED);
+        assert_eq!(get_errno(&mut env), EINVAL);
+    }
+}

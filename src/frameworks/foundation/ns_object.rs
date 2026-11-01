@@ -217,10 +217,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     this == other
 }
 
-// TODO: Instance description and debugDescription.
-// This is not hard to add, but before adding a fallback implementation of it,
-// we should make sure all the Foundation classes' overrides of it are there,
-// to prevent weird behavior.
+- (id)description {
+    let class = ObjC::read_isa(this, &env.mem);
+    let name = env.objc.get_class_name(class);
+    let description = format!("<{name}: {this:?}>");
+    let string = from_rust_string(env, description);
+    autorelease(env, string)
+}
+
+- (id)debugDescription {
+    msg![env; this description]
+}
+
 // TODO: localized description methods also? (not sure if NSObject has them)
 
 // Helper for NSCopying
@@ -731,3 +739,27 @@ forUndefinedKey:(id)key { // NSString*
 @end
 
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn instance_description_is_inherited_without_replacing_overrides() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+
+        let object: id = msg_class![env; NSObject new];
+        let description: id = msg![env; object description];
+        let description = to_rust_string(env, description);
+        assert!(description.starts_with("<NSObject: 0x"));
+        assert!(description.ends_with('>'));
+
+        let string = from_rust_string(env, "override".to_string());
+        let string_description: id = msg![env; string description];
+        assert_eq!(string_description, string);
+
+        release(env, object);
+        release(env, string);
+    }
+}

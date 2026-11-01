@@ -5,7 +5,8 @@
  */
 //! `NSData` and `NSMutableData`.
 
-use super::ns_string::{from_rust_string, to_rust_string};
+use super::ns_error::{NSCocoaErrorDomain, NSFileReadNoSuchFileError};
+use super::ns_string::{from_rust_string, get_static_str, to_rust_string};
 use super::{NSRange, NSUInteger};
 use crate::frameworks::foundation::ns_keyed_unarchiver::decode_current_data;
 use crate::fs::GuestPath;
@@ -21,6 +22,69 @@ pub(super) struct NSDataHostObject {
     free_when_done: bool,
 }
 impl HostObject for NSDataHostObject {}
+
+const NS_DATA_READING_MAPPED_IF_SAFE: NSUInteger = 1 << 0;
+const NS_DATA_READING_UNCACHED: NSUInteger = 1 << 1;
+const NS_DATA_READING_MAPPED_ALWAYS: NSUInteger = 1 << 3;
+const NS_DATA_READING_KNOWN_OPTIONS: NSUInteger = NS_DATA_READING_MAPPED_IF_SAFE
+    | NS_DATA_READING_UNCACHED
+    | NS_DATA_READING_MAPPED_ALWAYS;
+
+fn populate_file_read_error(env: &mut Environment, out_error: MutPtr<id>) {
+    if out_error.is_null() {
+        return;
+    }
+    let domain = get_static_str(env, NSCocoaErrorDomain);
+    let error: id = msg_class![env; NSError errorWithDomain:domain
+                                                 code:NSFileReadNoSuchFileError
+                                             userInfo:nil];
+    env.mem.write(out_error, error);
+}
+
+fn init_with_contents_of_file(
+    env: &mut Environment,
+    this: id,
+    path: id,
+    options: NSUInteger,
+    out_error: MutPtr<id>,
+) -> id {
+    let unknown_options = options & !NS_DATA_READING_KNOWN_OPTIONS;
+    if unknown_options != 0 {
+        log!(
+            "Warning: NSData read uses unknown option bits {unknown_options:#x}; ignoring them"
+        );
+    }
+    // The defined options are caching/mapping hints. The guest filesystem
+    // currently provides owned bytes, so an eager read has the same visible
+    // contents and lifetime while deliberately ignoring those hints.
+    if path == nil {
+        populate_file_read_error(env, out_error);
+        release(env, this);
+        return nil;
+    }
+    let path_string = to_rust_string(env, path);
+    log_dbg!(
+        "[(NSData*){:?} initWithContentsOfFile:{:?} options:{:#x} error:{:?}]",
+        this,
+        path_string,
+        options,
+        out_error
+    );
+    let Ok(bytes) = env.fs.read(GuestPath::new(&path_string)) else {
+        populate_file_read_error(env, out_error);
+        release(env, this);
+        return nil;
+    };
+    let size = bytes.len().try_into().unwrap();
+    let alloc = env.mem.alloc(size);
+    let slice = env.mem.bytes_at_mut(alloc.cast(), size);
+    slice.copy_from_slice(&bytes);
+
+    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
+    host_object.bytes = alloc;
+    host_object.length = size;
+    this
+}
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -81,6 +145,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)dataWithContentsOfURL:(id)url {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithContentsOfURL:url];
+    autorelease(env, new)
+}
+
++ (id)dataWithContentsOfURL:(id)url
+                    options:(NSUInteger)options
+                      error:(MutPtr<id>)out_error {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfURL:url options:options error:out_error];
+    autorelease(env, new)
+}
+
++ (id)dataWithContentsOfFile:(id)path
+                     options:(NSUInteger)options
+                       error:(MutPtr<id>)out_error {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfFile:path options:options error:out_error];
     autorelease(env, new)
 }
 
@@ -148,25 +228,27 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-- (id)initWithContentsOfFile:(id)path {
-    if path == nil {
-        return nil;
+- (id)initWithContentsOfURL:(id)url // NSURL *
+                    options:(NSUInteger)options
+                      error:(MutPtr<id>)out_error {
+    if url != nil && msg![env; url isFileURL] {
+        let path: id = msg![env; url path];
+        msg![env; this initWithContentsOfFile:path options:options error:out_error]
+    } else {
+        // Preserve the existing URL-loader boundary for non-file schemes.
+        // Network loading is a separate unimplemented contract.
+        msg![env; this initWithContentsOfURL:url]
     }
-    let path = to_rust_string(env, path);
-    log_dbg!("[(NSData*){:?} initWithContentsOfFile:{:?}]", this, path);
-    let Ok(bytes) = env.fs.read(GuestPath::new(&path)) else {
-        release(env, this);
-        return nil;
-    };
-    let size = bytes.len().try_into().unwrap();
-    let alloc = env.mem.alloc(size);
-    let slice = env.mem.bytes_at_mut(alloc.cast(), size);
-    slice.copy_from_slice(&bytes);
+}
 
-    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
-    host_object.bytes = alloc;
-    host_object.length = size;
-    this
+- (id)initWithContentsOfFile:(id)path {
+    init_with_contents_of_file(env, this, path, 0, MutPtr::null())
+}
+
+- (id)initWithContentsOfFile:(id)path
+                     options:(NSUInteger)options
+                       error:(MutPtr<id>)out_error {
+    init_with_contents_of_file(env, this, path, options, out_error)
 }
 
 - (id)initWithContentsOfMappedFile:(id)path {
@@ -379,4 +461,39 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     assert!(!borrowed_data.bytes.is_null() && borrowed_data.length != 0);
     env.mem
         .bytes_at(borrowed_data.bytes.cast(), borrowed_data.length)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn options_url_reader_reports_a_missing_file() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        // Dirt reaches this API with +URLWithString: after prefixing its
+        // bundle path with file:// and percent-escaping it, rather than with
+        // +fileURLWithPath:. Exercise that complete shared contract here.
+        let url_string =
+            from_rust_string(env, "file:///missing%20dirt%20resource".to_string());
+        let url: id = msg_class![env; NSURL alloc];
+        let url: id = msg![env; url initWithString:url_string];
+        assert!(msg![env; url isFileURL]);
+        let out_error = env.mem.alloc_and_write(nil);
+        let data: id = msg_class![env; NSData alloc];
+
+        let data: id = msg![env; data initWithContentsOfURL:url
+                                         options:NS_DATA_READING_UNCACHED
+                                           error:out_error];
+
+        assert_eq!(data, nil);
+        let error = env.mem.read(out_error);
+        assert_ne!(error, nil);
+        let code: i32 = msg![env; error code];
+        assert_eq!(code, NSFileReadNoSuchFileError);
+
+        env.mem.free(out_error.cast());
+        release(env, url);
+        release(env, url_string);
+    }
 }

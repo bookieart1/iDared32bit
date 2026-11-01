@@ -67,6 +67,8 @@ extern "C" {
     pub fn touchHLE_MgbaWrapper_regs_mut(cpu: *mut touchHLE_MgbaWrapper) -> *mut u32;
     pub fn touchHLE_MgbaWrapper_cpsr(cpu: *const touchHLE_MgbaWrapper) -> u32;
     pub fn touchHLE_MgbaWrapper_set_cpsr(cpu: *mut touchHLE_MgbaWrapper, cpsr: u32);
+    pub fn touchHLE_MgbaWrapper_fpscr(cpu: *const touchHLE_MgbaWrapper) -> u32;
+    pub fn touchHLE_MgbaWrapper_set_fpscr(cpu: *mut touchHLE_MgbaWrapper, fpscr: u32);
     /// The encoding that last came back undefined. Only meaningful right
     /// after `run_or_step` returned -3.
     pub fn touchHLE_MgbaWrapper_last_undefined_opcode(cpu: *const touchHLE_MgbaWrapper) -> u32;
