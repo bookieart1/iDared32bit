@@ -1526,6 +1526,58 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setString:res];
 }
 
+- (NSUInteger)replaceOccurrencesOfString:(id)target // NSString*
+                               withString:(id)replacement // NSString*
+                                  options:(NSStringCompareOptions)options
+                                    range:(NSRange)search_range {
+    assert_ne!(target, nil);
+    assert_ne!(replacement, nil);
+
+    // Find every non-overlapping match before mutating the receiver. Besides
+    // preventing replacement text from being searched again, this preserves
+    // the original UTF-16 search range when target or replacement aliases the
+    // mutable receiver.
+    let mut matches = Vec::new();
+    let backwards = options & NSBackwardsSearch != 0;
+    let mut remaining = search_range;
+    loop {
+        let found = range_of_string(env, this, target, options, remaining);
+        if found.location == NSNotFound as NSUInteger {
+            break;
+        }
+        matches.push(found);
+        if options & NSAnchoredSearch != 0 {
+            break;
+        }
+
+        if backwards {
+            remaining.length = found.location - search_range.location;
+        } else {
+            let next = found.location.checked_add(found.length).unwrap();
+            let search_end = search_range
+                .location
+                .checked_add(search_range.length)
+                .unwrap();
+            remaining = NSRange {
+                location: next,
+                length: search_end - next,
+            };
+        }
+    }
+
+    // Apply from the end so every recorded UTF-16 range stays valid even when
+    // the replacement has a different length. Copying also gives stable
+    // behavior when replacement is the receiver itself.
+    matches.sort_by_key(|range| range.location);
+    let stable_replacement: id = msg![env; replacement copy];
+    for &found in matches.iter().rev() {
+        () = msg![env; this replaceCharactersInRange:found withString:stable_replacement];
+    }
+    release(env, stable_replacement);
+
+    matches.len().try_into().unwrap()
+}
+
 @end
 
 // Our private subclass that is the single implementation of NSString for the
@@ -2275,12 +2327,14 @@ fn range_of_string(
         return NSRange { location: NSNotFound as NSUInteger, length: 0 };
     }
 
-    let unsupported = options & !(NSCaseInsensitiveSearch | NSLiteralSearch | NSBackwardsSearch);
+    let unsupported = options
+        & !(NSCaseInsensitiveSearch | NSLiteralSearch | NSBackwardsSearch | NSAnchoredSearch);
     if unsupported != 0 {
         log!("Warning: ignoring unsupported NSString search option bits {:#x}", unsupported);
     }
     let case_insensitive = options & NSCaseInsensitiveSearch != 0;
     let backwards = options & NSBackwardsSearch != 0;
+    let anchored = options & NSAnchoredSearch != 0;
     let last_start = range_end - len_search;
 
     let matches = |env: &mut Environment, i| {
@@ -2295,7 +2349,12 @@ fn range_of_string(
         })
     };
 
-    if backwards {
+    if anchored {
+        let i = if backwards { last_start } else { range.location };
+        if matches(env, i) {
+            return NSRange { location: i, length: len_search };
+        }
+    } else if backwards {
         for i in (range.location..=last_start).rev() {
             if matches(env, i) {
                 return NSRange { location: i, length: len_search };
@@ -2498,6 +2557,70 @@ mod ns_string_tests {
 
         release(env, exclamation);
         release(env, snowman);
+        release(env, string);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
+        env.mem.free(stack);
+    }
+
+    #[test]
+    fn mutable_string_replaces_non_overlapping_occurrences_in_utf16_range() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        // options: and range: are passed on the synthetic guest stack.
+        let stack = env.mem.alloc(0x1000);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = stack.to_bits() + 0x1000;
+
+        let string = from_rust_string(env, "🚀cat-CAT-cat".to_owned());
+        let mutable: id = msg_class![env; NSMutableString alloc];
+        let mutable: id = msg![env; mutable initWithString:string];
+        let target = from_rust_string(env, "cat".to_owned());
+        let replacement = from_rust_string(env, "dog".to_owned());
+        let range = NSRange {
+            location: 2,
+            length: 11,
+        };
+
+        let count: NSUInteger = msg![env; mutable
+            replaceOccurrencesOfString:target
+            withString:replacement
+            options:NSCaseInsensitiveSearch
+            range:range];
+
+        assert_eq!(count, 3);
+        assert_eq!(to_rust_string(env, mutable), "🚀dog-dog-dog");
+
+        release(env, replacement);
+        release(env, target);
+        release(env, mutable);
+        release(env, string);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
+        env.mem.free(stack);
+    }
+
+    #[test]
+    fn backwards_replacement_chooses_the_last_overlapping_match() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let stack = env.mem.alloc(0x1000);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = stack.to_bits() + 0x1000;
+
+        let string = from_rust_string(env, "aaa".to_owned());
+        let mutable: id = msg_class![env; NSMutableString alloc];
+        let mutable: id = msg![env; mutable initWithString:string];
+        let target = from_rust_string(env, "aa".to_owned());
+        let replacement = from_rust_string(env, "X".to_owned());
+        let count: NSUInteger = msg![env; mutable
+            replaceOccurrencesOfString:target
+            withString:replacement
+            options:NSBackwardsSearch
+            range:(NSRange { location: 0, length: 3 })];
+
+        assert_eq!(count, 1);
+        assert_eq!(to_rust_string(env, mutable), "aX");
+
+        release(env, replacement);
+        release(env, target);
+        release(env, mutable);
         release(env, string);
         env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
         env.mem.free(stack);

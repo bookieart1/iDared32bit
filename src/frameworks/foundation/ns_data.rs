@@ -5,7 +5,10 @@
  */
 //! `NSData` and `NSMutableData`.
 
-use super::ns_error::{NSCocoaErrorDomain, NSFileReadNoSuchFileError};
+use super::ns_error::{
+    NSCocoaErrorDomain, NSFilePathErrorKey, NSFileReadNoSuchFileError,
+    NSFileWriteFileExistsError, NSFileWriteUnknownError,
+};
 use super::ns_string::{from_rust_string, get_static_str, to_rust_string};
 use super::{NSRange, NSUInteger};
 use crate::frameworks::foundation::ns_keyed_unarchiver::decode_current_data;
@@ -30,6 +33,10 @@ const NS_DATA_READING_MAPPED_ALWAYS: NSUInteger = 1 << 3;
 const NS_DATA_READING_KNOWN_OPTIONS: NSUInteger = NS_DATA_READING_MAPPED_IF_SAFE
     | NS_DATA_READING_UNCACHED
     | NS_DATA_READING_MAPPED_ALWAYS;
+const NS_DATA_WRITING_ATOMIC: NSUInteger = 1 << 0;
+const NS_DATA_WRITING_WITHOUT_OVERWRITING: NSUInteger = 1 << 1;
+const NS_DATA_WRITING_KNOWN_OPTIONS: NSUInteger =
+    NS_DATA_WRITING_ATOMIC | NS_DATA_WRITING_WITHOUT_OVERWRITING;
 
 fn populate_file_read_error(env: &mut Environment, out_error: MutPtr<id>) {
     if out_error.is_null() {
@@ -40,6 +47,101 @@ fn populate_file_read_error(env: &mut Environment, out_error: MutPtr<id>) {
                                                  code:NSFileReadNoSuchFileError
                                              userInfo:nil];
     env.mem.write(out_error, error);
+}
+
+fn populate_file_write_error(
+    env: &mut Environment,
+    path: id,
+    out_error: MutPtr<id>,
+    code: super::NSInteger,
+) {
+    if out_error.is_null() {
+        return;
+    }
+    let user_info = if path == nil {
+        nil
+    } else {
+        let key = get_static_str(env, NSFilePathErrorKey);
+        msg_class![env; NSDictionary dictionaryWithObject:path forKey:key]
+    };
+    let domain = get_static_str(env, NSCocoaErrorDomain);
+    let error: id = msg_class![env; NSError errorWithDomain:domain
+                                                 code:code
+                                             userInfo:user_info];
+    env.mem.write(out_error, error);
+}
+
+fn write_to_file(
+    env: &mut Environment,
+    this: id,
+    path: id,
+    options: NSUInteger,
+    out_error: MutPtr<id>,
+) -> bool {
+    if !out_error.is_null() {
+        env.mem.write(out_error, nil);
+    }
+    if path == nil {
+        populate_file_write_error(env, path, out_error, NSFileWriteUnknownError);
+        return false;
+    }
+
+    let unknown_options = options & !NS_DATA_WRITING_KNOWN_OPTIONS;
+    if unknown_options != 0 {
+        log!(
+            "Warning: NSData write uses unknown option bits {unknown_options:#x}; ignoring them"
+        );
+    }
+
+    let file = to_rust_string(env, path);
+    let guest_path = GuestPath::new(&file);
+    log_dbg!(
+        "[(NSData*){:?} writeToFile:{:?} options:{:#x} error:{:?}]",
+        this,
+        file,
+        options,
+        out_error
+    );
+
+    if options & NS_DATA_WRITING_WITHOUT_OVERWRITING != 0 && env.fs.exists(guest_path) {
+        populate_file_write_error(env, path, out_error, NSFileWriteFileExistsError);
+        return false;
+    }
+
+    let host_object = env.objc.borrow::<NSDataHostObject>(this);
+    // Mem::bytes_at() panics when the pointer is NULL, but NSData's pointer can
+    // be NULL if the length is 0.
+    let slice = if host_object.length == 0 {
+        &[]
+    } else {
+        env.mem.bytes_at(host_object.bytes.cast(), host_object.length)
+    };
+
+    let result = if options & NS_DATA_WRITING_ATOMIC != 0 {
+        // Keep the auxiliary file beside its destination so the final rename
+        // stays on one filesystem. The object address disambiguates ordinary
+        // synchronous writers, while a stale file from an interrupted write is
+        // safely truncated before use.
+        let auxiliary = format!("{file}.touchHLE-atomic-{:08x}", this.to_bits());
+        let auxiliary_path = GuestPath::new(&auxiliary);
+        let result = env
+            .fs
+            .write(auxiliary_path, slice)
+            .and_then(|()| env.fs.rename(auxiliary_path, guest_path));
+        if result.is_err() {
+            let _ = env.fs.remove(auxiliary_path);
+        }
+        result
+    } else {
+        env.fs.write(guest_path, slice)
+    };
+
+    if result.is_err() {
+        populate_file_write_error(env, path, out_error, NSFileWriteUnknownError);
+        false
+    } else {
+        true
+    }
 }
 
 fn init_with_contents_of_file(
@@ -261,20 +363,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this initWithContentsOfFile:path]
 }
 
-// FIXME: writes should be atomic
 - (bool)writeToFile:(id)path // NSString*
-         atomically:(bool)_use_aux_file {
-    let file = to_rust_string(env, path);
-    log_dbg!("[(NSData*){:?} writeToFile:{:?} atomically:_]", this, file);
-    let host_object = env.objc.borrow::<NSDataHostObject>(this);
-    // Mem::bytes_at() panics when the pointer is NULL, but NSData's pointer can
-    // be NULL if the length is 0.
-    let slice = if host_object.length == 0 {
-        &[]
-    } else {
-        env.mem.bytes_at(host_object.bytes.cast(), host_object.length)
-    };
-    env.fs.write(GuestPath::new(&file), slice).is_ok()
+         atomically:(bool)use_aux_file {
+    let options = if use_aux_file { NS_DATA_WRITING_ATOMIC } else { 0 };
+    write_to_file(env, this, path, options, MutPtr::null())
+}
+
+- (bool)writeToFile:(id)path // NSString*
+            options:(NSUInteger)options
+              error:(MutPtr<id>)out_error { // NSError**
+    write_to_file(env, this, path, options, out_error)
 }
 
 - (())dealloc {
@@ -553,6 +651,42 @@ mod tests {
         env.mem.free(out_error.cast());
         release(env, url);
         release(env, url_string);
+        release(env, pool);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
+        env.mem.free(stack);
+    }
+
+    #[test]
+    fn options_writer_reports_path_metadata_on_failure() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        // error: is the fifth explicit ABI argument and therefore needs guest
+        // stack space in the host-side fixture.
+        let stack = env.mem.alloc(0x1000);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = stack.to_bits() + 0x1000;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let data: id = msg_class![env; NSData data];
+        let path = from_rust_string(env, "/missing-parent/toybot-save.dat".to_owned());
+        let sentinel = from_rust_string(env, "sentinel".to_owned());
+        let out_error = env.mem.alloc_and_write(sentinel);
+
+        let success: bool = msg![env; data writeToFile:path
+                                      options:NS_DATA_WRITING_ATOMIC
+                                        error:out_error];
+
+        assert!(!success);
+        let error = env.mem.read(out_error);
+        assert_ne!(error, nil);
+        let code: i32 = msg![env; error code];
+        assert_eq!(code, NSFileWriteUnknownError);
+        let user_info: id = msg![env; error userInfo];
+        let key = get_static_str(env, NSFilePathErrorKey);
+        let reported_path: id = msg![env; user_info objectForKey:key];
+        assert_eq!(to_rust_string(env, reported_path), "/missing-parent/toybot-save.dat");
+
+        env.mem.free(out_error.cast());
+        release(env, sentinel);
+        release(env, path);
         release(env, pool);
         env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
         env.mem.free(stack);

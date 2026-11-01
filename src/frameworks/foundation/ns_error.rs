@@ -18,8 +18,11 @@ pub const NSOSStatusErrorDomain: &str = "NSOSStatusErrorDomain";
 
 const NSLocalizedDescriptionKey: &str = "NSLocalizedDescriptionKey";
 const NSLocalizedFailureReasonErrorKey: &str = "NSLocalizedFailureReasonErrorKey";
+pub const NSFilePathErrorKey: &str = "NSFilePath";
 
 pub const NSFileReadNoSuchFileError: NSInteger = 260;
+pub const NSFileWriteUnknownError: NSInteger = 512;
+pub const NSFileWriteFileExistsError: NSInteger = 516;
 
 struct ErrorHostObject {
     domain: NSErrorDomain,
@@ -117,6 +120,10 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_NSLocalizedFailureReasonErrorKey",
         HostConstant::NSString(NSLocalizedFailureReasonErrorKey),
+    ),
+    (
+        "_NSFilePathErrorKey",
+        HostConstant::NSString(NSFilePathErrorKey),
     ),
     (
         "_NSCocoaErrorDomain",

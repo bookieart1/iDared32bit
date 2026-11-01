@@ -106,6 +106,25 @@ int main(void) {
     assert(![floatScanner scanFloat:&scannedFloat]);
     assert(scannedFloat == 77.0f && floatScanner.scanLocation == 10);
 
+    NSMutableString *replaceTarget = [@"🚀cat-CAT-cat" mutableCopy];
+    NSUInteger replacementCount = [replaceTarget
+        replaceOccurrencesOfString:@"cat"
+        withString:@"dog"
+        options:NSCaseInsensitiveSearch
+        range:NSMakeRange(2, 11)];
+    assert(replacementCount == 3);
+    assert([replaceTarget isEqual:@"🚀dog-dog-dog"]);
+    [replaceTarget release];
+
+    NSString *atomicPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
+        [@"touchhle-nsdata-" stringByAppendingString:[[NSUUID UUID] UUIDString]]];
+    NSData *atomicPayload = [@"toybot-save" dataUsingEncoding:NSUTF8StringEncoding];
+    NSError *writeError = [NSError errorWithDomain:@"sentinel" code:1 userInfo:nil];
+    assert([atomicPayload writeToFile:atomicPath options:NSDataWritingAtomic error:&writeError]);
+    assert(writeError == nil);
+    assert([[NSData dataWithContentsOfFile:atomicPath] isEqualToData:atomicPayload]);
+    [[NSFileManager defaultManager] removeItemAtPath:atomicPath error:NULL];
+
     NSObject *arrayElement = [NSObject new];
     NSMutableArray *mutableArray = [NSMutableArray arrayWithObject:arrayElement];
     NSArray *immutableArray = [NSArray arrayWithObject:arrayElement];
@@ -172,6 +191,6 @@ int main(void) {
     assert(liveTokens == 1 && [immutable anyObject] == element);
     [immutable release];
     assert(liveTokens == 0);
-    puts("Foundation date, process-info, defaults, mutable-collection and copy contracts passed.");
+    puts("Foundation date, process-info, defaults, string/data, mutable-collection and copy contracts passed.");
     return 0;
 }

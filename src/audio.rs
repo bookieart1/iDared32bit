@@ -104,6 +104,51 @@ fn sniff_file_type(bytes: &[u8]) -> Option<[u8; 4]> {
     }
 }
 
+/// Compact format evidence for a file which none of the decoders accepted.
+/// This deliberately reports only container metadata, never sample contents.
+fn failed_audio_format_description(bytes: &[u8]) -> String {
+    if bytes.get(..4) == Some(b"RIFF") && bytes.get(8..12) == Some(b"WAVE") {
+        let mut pos = 12usize;
+        while pos.checked_add(8).is_some_and(|end| end <= bytes.len()) {
+            let size = u32::from_le_bytes(bytes[pos + 4..pos + 8].try_into().unwrap()) as usize;
+            let start = pos + 8;
+            let Some(end) = start.checked_add(size) else {
+                break;
+            };
+            if &bytes[pos..pos + 4] == b"fmt " && end <= bytes.len() && size >= 16 {
+                let u16_at = |offset| {
+                    u16::from_le_bytes(bytes[start + offset..start + offset + 2].try_into().unwrap())
+                };
+                let u32_at = |offset| {
+                    u32::from_le_bytes(bytes[start + offset..start + offset + 4].try_into().unwrap())
+                };
+                return format!(
+                    "RIFF/WAVE tag={:#06x} channels={} rate={} block-align={} bits={} bytes={}",
+                    u16_at(0),
+                    u16_at(2),
+                    u32_at(4),
+                    u16_at(12),
+                    u16_at(14),
+                    bytes.len()
+                );
+            }
+            let Some(next) = end.checked_add(size & 1) else {
+                break;
+            };
+            pos = next;
+        }
+        return format!("RIFF/WAVE without a valid fmt chunk; bytes={}", bytes.len());
+    }
+
+    let magic = bytes
+        .iter()
+        .take(12)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<Vec<_>>()
+        .join("");
+    format!("unrecognized/unsupported container magic={magic} bytes={}", bytes.len())
+}
+
 fn wav_to_pcm16<R: std::io::Read>(
     reader: hound::WavReader<R>,
 ) -> Result<symphonia_formats::SymphoniaDecodedToPcm, AudioFileOpenError> {
@@ -248,14 +293,18 @@ impl AudioFile {
             return Err(AudioFileOpenError::FileReadError);
         };
 
-        if let Ok(bytes) = Self::read_from_vec(bytes) {
-            Ok(bytes)
-        } else {
-            log!(
-                "Could not decode audio file at path {:?}, likely an unimplemented file format.",
-                path.as_ref()
-            );
-            Err(AudioFileOpenError::FileReadError)
+        let format_description = failed_audio_format_description(&bytes);
+        match Self::read_from_vec(bytes) {
+            Ok(audio_file) => Ok(audio_file),
+            Err(error) => {
+                log!(
+                    "Could not decode audio file at path {:?}: {:?}; {}.",
+                    path.as_ref(),
+                    error,
+                    format_description
+                );
+                Err(AudioFileOpenError::FileReadError)
+            }
         }
     }
 
@@ -532,6 +581,19 @@ mod tests {
         assert_eq!(sniff_file_type(&[0xff, 0xf1, 0x50, 0x80]), Some(*b"adts"));
         assert_eq!(sniff_file_type(b"OggS"), None);
         assert_eq!(sniff_file_type(b""), None);
+    }
+
+    #[test]
+    fn failed_wave_diagnostic_reports_bounded_format_metadata() {
+        let bytes = [
+            b'R', b'I', b'F', b'F', 0, 0, 0, 0, b'W', b'A', b'V', b'E', b'f', b'm', b't',
+            b' ', 16, 0, 0, 0, 2, 0, 1, 0, 0x22, 0x56, 0, 0, 0, 0, 0, 0, 0x00, 0x01, 4,
+            0,
+        ];
+        assert_eq!(
+            failed_audio_format_description(&bytes),
+            "RIFF/WAVE tag=0x0002 channels=1 rate=22050 block-align=256 bits=4 bytes=36"
+        );
     }
 
     #[test]
