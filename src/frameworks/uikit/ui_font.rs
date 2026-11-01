@@ -308,7 +308,31 @@ pub(crate) fn new_font_for_name(env: &mut Environment, name: &str) -> Option<Fon
         }
     }
 
-    get_equivalent_font(name).map(new_system_font)
+    let kind = match name {
+        // Historical iPhone system fonts for which touchHLE already uses its
+        // bundled metric-compatible families. UIFont falls back to SansRegular
+        // for these today; CGFont must still return a real font for a valid
+        // installed name.
+        "Courier" | "CourierNewPSMT" => FontKind::MonoRegular,
+        "Courier-Bold" | "CourierNewPS-BoldMT" => FontKind::MonoBold,
+        "Courier-Oblique" | "CourierNewPS-ItalicMT" => FontKind::MonoItalic,
+        "Courier-BoldOblique" | "CourierNewPS-BoldItalicMT" => FontKind::MonoBoldItalic,
+        "Helvetica" | "HelveticaNeue" | "Verdana" | "AppleGothic" | "STHeitiTC-Light"
+        | "STHeitiTC-Medium" | "STHeitiSC-Light" | "STHeitiSC-Medium" | "HiraKakuProN-W3"
+        | "ArialUnicodeMS" => FontKind::SansRegular,
+        "Helvetica-Bold" | "HelveticaNeue-Bold" | "Verdana-Bold" | "HiraKakuProN-W6" => {
+            FontKind::SansBold
+        }
+        "Helvetica-Oblique" | "Verdana-Italic" => FontKind::SansItalic,
+        "Helvetica-BoldOblique" | "Verdana-BoldItalic" => FontKind::SansBoldItalic,
+        "Georgia" => FontKind::SerifRegular,
+        "Georgia-Bold" => FontKind::SerifBold,
+        "Georgia-Italic" | "Zapfino" => FontKind::SerifItalic,
+        "Georgia-BoldItalic" => FontKind::SerifBoldItalic,
+        "DBLCDTempBlack" => FontKind::MonoRegular,
+        _ => get_equivalent_font(name)?,
+    };
+    Some(new_system_font(kind))
 }
 
 fn new_system_font(kind: FontKind) -> Font {
