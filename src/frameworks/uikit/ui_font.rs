@@ -232,6 +232,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::msg_class;
 
     #[test]
     fn font_name_and_resized_font_preserve_public_identity() {

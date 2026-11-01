@@ -122,7 +122,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Environment;
+    use crate::{msg_class, Environment};
 
     #[test]
     fn slider_continuous_state_defaults_true_and_round_trips() {
