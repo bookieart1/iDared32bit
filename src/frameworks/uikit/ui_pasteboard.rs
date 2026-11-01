@@ -64,7 +64,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if name == nil {
         return nil;
     }
-    let key = ns_string::to_rust_string(env, name);
+    let key = ns_string::to_rust_string(env, name).into_owned();
     if let Some(&pasteboard) = env.framework_state.uikit.ui_pasteboard.named.get(&key) {
         return pasteboard;
     }
@@ -104,7 +104,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if name == nil {
         return;
     }
-    let key = ns_string::to_rust_string(env, name);
+    let key = ns_string::to_rust_string(env, name).into_owned();
     if let Some(pasteboard) = env.framework_state.uikit.ui_pasteboard.named.remove(&key) {
         release(env, pasteboard);
     }
