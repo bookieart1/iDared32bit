@@ -141,6 +141,21 @@ pub enum FingerId {
 }
 pub type Coords = (f32, f32);
 
+/// Clamp a host input point to the emulated screen's visible rectangle.
+///
+/// Fullscreen phone builds can have black bars around an older app's aspect
+/// ratio. Those bars were not part of the original device, so forwarding
+/// their co-ordinates gives the guest impossible negative or over-width touch
+/// locations. Keeping an existing drag at the nearest edge also matches what
+/// would have happened when a finger reached the edge of the original screen.
+fn clamp_to_viewport((x, y): Coords, (vx, vy, vw, vh): (u32, u32, u32, u32)) -> Coords {
+    let min_x = vx as f32;
+    let min_y = vy as f32;
+    let max_x = vx.saturating_add(vw) as f32;
+    let max_y = vy.saturating_add(vh) as f32;
+    (x.clamp(min_x, max_x), y.clamp(min_y, max_y))
+}
+
 /// A touch on the on-screen Home button (see [Window::home_button_overlay]).
 /// Its later movement and release are the button's too, not the app's.
 struct HomeButtonPress {
@@ -518,6 +533,11 @@ impl Window {
             } else {
                 window.viewport()
             };
+            let (in_x, in_y) = if independent_of_viewport {
+                (in_x, in_y)
+            } else {
+                clamp_to_viewport((in_x, in_y), (vx, vy, vw, vh))
+            };
             // normalize to unit square centred on origin
             let x = (in_x - vx as f32) / vw as f32 - 0.5;
             let y = (in_y - vy as f32) / vh as f32 - 0.5;
@@ -529,7 +549,18 @@ impl Window {
             let out_x = (x + 0.5) * out_w as f32;
             let out_y = (y + 0.5) * out_h as f32;
             // Round to match touch precision of official devices.
-            (out_x.round(), out_y.round())
+            let (out_x, out_y) = (out_x.round(), out_y.round());
+            if independent_of_viewport {
+                (out_x, out_y)
+            } else {
+                // The original touchscreen's valid co-ordinates stop just
+                // inside its width and height; never expose the mathematical
+                // far edge produced by clamping a black-bar touch.
+                (
+                    out_x.clamp(0.0, out_w.saturating_sub(1) as f32),
+                    out_y.clamp(0.0, out_h.saturating_sub(1) as f32),
+                )
+            }
         }
         fn transform_virt_accel_coords(window: &Window, (in_x, in_y): (i32, i32)) -> (f32, f32) {
             let (_, _, vw, vh) = window.viewport();
@@ -2237,4 +2268,19 @@ pub fn get_preferred_country_codes(env: &mut Environment) -> Vec<String> {
             .filter_map(|loc| loc.country)
             .collect()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_to_viewport;
+
+    #[test]
+    fn physical_input_is_clamped_to_the_visible_guest_viewport() {
+        let viewport = (100, 20, 800, 480);
+        assert_eq!(clamp_to_viewport((99.0, 250.0), viewport), (100.0, 250.0));
+        assert_eq!(clamp_to_viewport((901.0, 250.0), viewport), (900.0, 250.0));
+        assert_eq!(clamp_to_viewport((400.0, 19.0), viewport), (400.0, 20.0));
+        assert_eq!(clamp_to_viewport((400.0, 501.0), viewport), (400.0, 500.0));
+        assert_eq!(clamp_to_viewport((450.0, 250.0), viewport), (450.0, 250.0));
+    }
 }

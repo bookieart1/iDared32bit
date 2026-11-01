@@ -203,5 +203,11 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
         }
     }
 
-    ui_accelerometer::handle_accelerometer(env)
+    let orientation_due = ui_device::handle_device_orientation(env);
+    let accelerometer_due = ui_accelerometer::handle_accelerometer(env);
+    match (orientation_due, accelerometer_due) {
+        (Some(orientation), Some(accelerometer)) => Some(orientation.min(accelerometer)),
+        (Some(due), None) | (None, Some(due)) => Some(due),
+        (None, None) => None,
+    }
 }

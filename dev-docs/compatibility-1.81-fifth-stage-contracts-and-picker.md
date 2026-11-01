@@ -25,7 +25,7 @@ weaken pointer/object checks, or add application-identifier branches.
 | Glowfish HD | Core Motion passes and the menu/profile-name UI runs. The reproducible post-name transition presents 892 frames over 19.966 seconds, then calls missing `+[NSDictionary dictionaryWithObjects:forKeys:count:]`. | Implement the standard pointer-array constructor for immutable and mutable concrete dictionaries with copied keys, retained values, empty-count handling and existing strict nil checks. |
 | Hamlet | The app runs for 33.823 seconds, 4,072 main loops and 1,943 EAGL returns, then exits cleanly through Home. The user observed a transient wrong initial layout before landscape corrected itself. | Working checkpoint in the observed interaction. Record the orientation defect; do not mix an unproven rotation change into this runtime batch. |
 | Parachute Ninja | Three genuine offline request failures return. A later main-thread selector callback passes `UIApplication` where guest code treats its argument as an error and sends `domain`; the strict missing-selector panic follows after 140 ms. | No compatibility change. Adding `domain` to `UIApplication` would conceal an invalid-object origin. A future bounded callback/selector-origin investigation must identify why that object occupies the error argument. |
-| Blot / Dirt / Spoing | The first two return normally through Home and Spoing remains a clean working control. User observations confirm normal Blot, working Dirt and unchanged Spoing. | Regression checkpoints only. |
+| Blot / Dirt / Spoing | The first two return normally through Home and Spoing remains a clean working control. A later Dirt test clarified that its physical-rotation gravity mechanic is inert and a held touch can reverse when it leaves the old app viewport for a modern phone's black bar. | Blot and Spoing remain regression checkpoints. Dirt receives two general input-contract corrections described below. |
 
 Glowfish HD's native keyboard appeared portrait-oriented inside the landscape
 game but accepted text. That is a separate UIKit/host-input orientation defect;
@@ -45,6 +45,42 @@ current app count. This preserves page position after normal guest Home return,
 an emulator-caught panic, or a complete iDared process restart without touching
 guest saves or the separate App Store installation.
 
+## Physical orientation and viewport-bound touch input
+
+Dirt's previously tested traversal did not exercise two important mechanics,
+so its earlier “working checkpoint” is narrowed to **partial** rather than
+silently treated as whole-game compatibility:
+
+- Rotating the physical device is supposed to change gravity, but Dev 1.80
+  leaves it unchanged. The prior Dirt launch never activated `UIAccelerometer`
+  or Core Motion. The separate `UIDevice` implementation only returned the
+  fixed interface orientation and posted a seeded launch notification, even
+  though Apple's historical contract says
+  `beginGeneratingDeviceOrientationNotifications` enables accelerometer-based
+  updates to the physical `orientation` property and change notifications.
+- A held movement touch can leave the 3:2 guest viewport and enter a modern
+  iPhone's surrounding black bar. The common input transform forwarded that
+  impossible negative/over-width co-ordinate to the guest, where Dirt could
+  interpret it as the opposite side.
+
+Dev 1.81 samples the existing real/simulated gravity source at 20 Hz only while
+an app has requested physical-orientation notifications. It distinguishes
+portrait, landscape and face-up/down using the dominant gravity axis, rejects
+weak/non-finite readings, requires a changed reading to remain stable for 100
+ms, supports nested begin/end requests, and posts the existing historical
+notification. This does not rotate the interface or fabricate motion.
+
+Physical touch input is now clamped to the visible guest viewport before its
+existing scale/rotation transform, and the resulting guest co-ordinate is kept
+inside the original touchscreen bounds. A drag that enters a black bar remains
+at the nearest original-device edge. Controller-generated virtual touch points
+remain independent of the host viewport.
+
+Both corrections are application-independent. Focused unit coverage checks
+gravity-axis classification, rejection of invalid/weak readings, and black-bar
+clamping on every side. Actual sensor direction, notification delivery and
+Dirt's gameplay response still require the iPhone test.
+
 ## Validation boundary and prediction
 
 Focused guest coverage exercises raw ivar assignment, once-only block
@@ -62,7 +98,9 @@ Predictions:
 - Parachute Ninja fails at the same strict invalid-object boundary because it
   is intentionally not masked.
 - Picker pages move visibly during a swipe and reopen on the last-used page.
-- Blot, Dirt and Spoing retain their stated behavior.
+- Dirt responds to stable physical rotations by changing its gravity and a
+  held edge touch no longer reverses after entering a black bar.
+- Blot and Spoing retain their stated behavior.
 
 ## Focused device procedure
 
@@ -70,7 +108,11 @@ Without deleting saves:
 
 1. Blot: play briefly and use emulator Home.
 2. Dark Nebula 2: select a level.
-3. Dirt: move, pause/resume, use Home, reopen and confirm the position.
+3. Dirt: move and slowly rotate the phone through the four upright
+   orientations; confirm gravity follows. While holding movement toward one
+   side, slide the finger from the game into that side's black bar and confirm
+   the character does not reverse. Then pause/resume, use Home, reopen and
+   confirm the position.
 4. Glowfish: launch and try to enter gameplay.
 5. Glowfish HD: press Play, enter a name if asked, and continue.
 6. Hamlet: launch and navigate briefly; note whether the opening orientation

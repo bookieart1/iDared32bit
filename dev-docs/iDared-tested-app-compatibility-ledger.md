@@ -3,7 +3,7 @@
 Last reconciled: November 1, 2026
 Latest device-tested checkpoint: **iDared Dev 1.80** (`764d60e`; focused multi-log result; Dev 1.71 remains the latest full-catalog survey)
 Latest built checkpoint: **iDared Dev 1.80** (`764d60e`; verified package and now device-tested)
-Current activity: **Dev 1.81 implements the next three shared contracts exposed by Dev 1.80—raw Objective-C ivar assignment, `dispatch_once`, and the pointer-array `NSDictionary` constructor—and improves native picker paging/last-page continuity. Hamlet is working in the observed scope; Dirt, Blot and Spoing remain healthy checkpoints. Parachute Ninja is deliberately unchanged because its `UIApplication`-as-error callback argument is an origin problem, not a missing `domain` API. Compilation, package verification and physical-device behavior are pending.**
+Current activity: **Dev 1.81 implements the next three shared contracts exposed by Dev 1.80—raw Objective-C ivar assignment, `dispatch_once`, and the pointer-array `NSDictionary` constructor—and improves native picker paging/last-page continuity. A later Dirt observation narrows its status from working to partial: traversal/save recovery work, but physical rotation does not change gravity and a held touch can reverse after leaving the guest viewport. Dev 1.81 therefore also implements accelerometer-derived `UIDevice` physical-orientation notifications and clamps physical touches to the original screen boundary. Hamlet is working in the observed scope; Blot and Spoing remain healthy checkpoints. Parachute Ninja is deliberately unchanged because its `UIApplication`-as-error callback argument is an origin problem, not a missing `domain` API. Compilation, package verification and physical-device behavior are pending.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3607,7 +3607,7 @@ source `764d60e`, workflow `41292778118`, and the universal bounded recorder.
 |---|---|---|
 | Blot | Normal smooth play and clean Home return. | **Regression pass in stated scope.** |
 | Dark Nebula 2 | Menu remains functional; level loading reaches missing `_object_setInstanceVariable` after 6.319 s, 251 loops and 127 EAGL returns. | **Partial.** Implement the standard raw ivar assignment contract; ownership remains deliberately untouched. |
-| Dirt | Continues to run normally in the user's tested traversal. | **Working checkpoint in observed scope.** |
+| Dirt | Traversal, pause/resume and save recovery continue to work. A later focused observation established that rotating the phone does not change gravity, and a held directional touch can reverse after entering the black bar outside the old guest viewport. Its Dev 1.80 launch never activated UIAccelerometer or Core Motion; the shared UIDevice implementation reports only the fixed interface orientation. | **Partial, prior “working” scope narrowed.** Dev 1.81 derives requested physical-orientation updates from the existing real/simulated gravity source with bounded sampling/debounce, separately from interface rotation. It also clamps physical input to the guest viewport before transformation. Both are general contracts; device validation is pending. |
 | Glowfish | Core Motion now passes; startup reaches missing `_dispatch_once` after 1.465 s. | **Startup-blocked.** Implement zero-initialized once semantics with synchronous block completion and cooperative contention waiting. |
 | Glowfish HD | Reaches menu and name entry. After accepting a name it presents 892 frames over 19.966 s, then calls missing `+[NSDictionary dictionaryWithObjects:forKeys:count:]`. | **Major stage advance; partial.** Implement the standard pointer-array constructor. The portrait keyboard in landscape is a separate unresolved orientation defect. |
 | Hamlet | Runs and responds for 33.823 s / 4,072 loops / 1,943 EAGL returns, then exits cleanly through Home. A transient initial orientation/layout error self-corrects. | **Working checkpoint in observed scope, with an orientation defect.** No speculative rotation change in this batch. |
@@ -3618,6 +3618,16 @@ Dev 1.81 also changes the native picker from end-of-gesture page cuts to
 bounded interactive adjacent-page movement and persists the last page across
 normal returns, emulator panics and process restarts. Rust's in-session reload
 page remains authoritative; no guest save/container behavior changes.
+
+The same candidate corrects two general input contracts newly exposed by Dirt.
+`UIDevice` now samples the existing real/simulated gravity source only while
+physical-orientation generation is requested, distinguishes the six historical
+orientations, rejects weak/invalid samples, debounces changes, honors nested
+begin/end calls and posts the existing notification without rotating the
+interface. Physical touches are clamped to the displayed guest viewport and
+original touchscreen bounds; controller-synthesized points are unchanged.
+These predict working gravity rotation and no direction reversal when a held
+finger enters a black bar, but both remain unverified on the iPhone.
 
 Implementation status is **candidate** until CI and package verification pass.
 The focused retest is Blot, Dark Nebula 2, Dirt, Glowfish, Glowfish HD, Hamlet,

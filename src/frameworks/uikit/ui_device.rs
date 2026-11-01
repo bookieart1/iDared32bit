@@ -15,6 +15,7 @@ use crate::objc::{
     id, msg, objc_classes, todo_objc_setter, ClassExports, NSZonePtr, TrivialHostObject,
 };
 use crate::window::{get_battery_status, BatteryState, DeviceFamily, DeviceOrientation};
+use std::time::{Duration, Instant};
 
 pub const UIDeviceOrientationDidChangeNotification: &str =
     "UIDeviceOrientationDidChangeNotification";
@@ -46,11 +47,61 @@ const UIUserInterfaceIdiomPad: UIUserInterfaceIdiom = 1;
 #[derive(Default)]
 pub struct State {
     current_device: Option<id>,
-    is_generating_device_orientation_notifications: bool,
+    orientation_generation_count: usize,
+    physical_orientation: Option<UIDeviceOrientation>,
+    orientation_candidate: Option<UIDeviceOrientation>,
+    orientation_candidate_since: Option<Instant>,
+    orientation_due_by: Option<Instant>,
 }
 impl State {
     pub fn is_generating_device_orientation_notifications(&self) -> bool {
-        self.is_generating_device_orientation_notifications
+        self.orientation_generation_count > 0
+    }
+}
+
+const ORIENTATION_SAMPLE_INTERVAL: Duration = Duration::from_millis(50);
+const ORIENTATION_STABILITY_INTERVAL: Duration = Duration::from_millis(100);
+const ORIENTATION_MINIMUM_GRAVITY: f32 = 0.5;
+
+fn interface_orientation(orientation: DeviceOrientation) -> UIDeviceOrientation {
+    match orientation {
+        DeviceOrientation::Portrait => UIDeviceOrientationPortrait,
+        DeviceOrientation::PortraitUpsideDown => UIDeviceOrientationPortraitUpsideDown,
+        DeviceOrientation::LandscapeLeft => UIDeviceOrientationLandscapeLeft,
+        DeviceOrientation::LandscapeRight => UIDeviceOrientationLandscapeRight,
+    }
+}
+
+/// Infer the physical device orientation from UIAcceleration-compatible
+/// gravity values. The dominant axis is used only when the reading is strong
+/// enough to reject free-fall/noisy samples.
+fn orientation_from_acceleration(x: f32, y: f32, z: f32) -> Option<UIDeviceOrientation> {
+    if !x.is_finite() || !y.is_finite() || !z.is_finite() {
+        return None;
+    }
+    let (abs_x, abs_y, abs_z) = (x.abs(), y.abs(), z.abs());
+    let strongest = abs_x.max(abs_y).max(abs_z);
+    if strongest < ORIENTATION_MINIMUM_GRAVITY {
+        return None;
+    }
+    if abs_z >= abs_x && abs_z >= abs_y {
+        Some(if z < 0.0 {
+            UIDeviceOrientationFaceUp
+        } else {
+            UIDeviceOrientationFaceDown
+        })
+    } else if abs_x >= abs_y {
+        Some(if x < 0.0 {
+            UIDeviceOrientationLandscapeLeft
+        } else {
+            UIDeviceOrientationLandscapeRight
+        })
+    } else {
+        Some(if y < 0.0 {
+            UIDeviceOrientationPortrait
+        } else {
+            UIDeviceOrientationPortraitUpsideDown
+        })
     }
 }
 
@@ -77,14 +128,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())beginGeneratingDeviceOrientationNotifications {
     log_dbg!("[UIDevice beginGeneratingDeviceOrientationNotifications]");
-    env.framework_state.uikit.ui_device.is_generating_device_orientation_notifications = true;
+    let state = &mut env.framework_state.uikit.ui_device;
+    state.orientation_generation_count = state.orientation_generation_count.saturating_add(1);
+    if state.orientation_generation_count == 1 {
+        state.orientation_due_by = Some(Instant::now());
+    }
 }
 - (())endGeneratingDeviceOrientationNotifications {
     log_dbg!("[UIDevice endGeneratingDeviceOrientationNotifications]");
-    env.framework_state.uikit.ui_device.is_generating_device_orientation_notifications = false;
+    let state = &mut env.framework_state.uikit.ui_device;
+    state.orientation_generation_count = state.orientation_generation_count.saturating_sub(1);
+    if state.orientation_generation_count == 0 {
+        state.orientation_candidate = None;
+        state.orientation_candidate_since = None;
+        state.orientation_due_by = None;
+    }
 }
 - (bool)isGeneratingDeviceOrientationNotifications {
-    let res = env.framework_state.uikit.ui_device.is_generating_device_orientation_notifications;
+    let res = env.framework_state.uikit.ui_device.is_generating_device_orientation_notifications();
     log_dbg!("[UIDevice isGeneratingDeviceOrientationNotifications] -> {}", res);
     res
 }
@@ -130,12 +191,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (UIDeviceOrientation)orientation {
-    match env.window().current_rotation() {
-        DeviceOrientation::Portrait => UIDeviceOrientationPortrait,
-        DeviceOrientation::PortraitUpsideDown => UIDeviceOrientationPortraitUpsideDown,
-        DeviceOrientation::LandscapeLeft => UIDeviceOrientationLandscapeLeft,
-        DeviceOrientation::LandscapeRight => UIDeviceOrientationLandscapeRight
-    }
+    let fallback = interface_orientation(env.window().current_rotation());
+    env.framework_state
+        .uikit
+        .ui_device
+        .physical_orientation
+        .unwrap_or(fallback)
 }
 - (())setOrientation:(UIDeviceOrientation)orientation {
     let prev_orientation = env.window().current_rotation();
@@ -147,6 +208,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         _ => unimplemented!("Orientation {} not handled yet", orientation),
     })});
     if prev_orientation != env.window().current_rotation() {
+        let state = &mut env.framework_state.uikit.ui_device;
+        state.physical_orientation = Some(orientation);
+        state.orientation_candidate = None;
+        state.orientation_candidate_since = None;
         generate_device_orientation_notification(env);
     }
 }
@@ -203,9 +268,111 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
+/// For use by `NSRunLoop`: sample the real/simulated gravity source while an
+/// app has requested physical orientation notifications. Interface orientation
+/// remains independent; only UIDevice's physical orientation changes here.
+pub(super) fn handle_device_orientation(env: &mut Environment) -> Option<Instant> {
+    let now = Instant::now();
+    {
+        let state = &mut env.framework_state.uikit.ui_device;
+        if !state.is_generating_device_orientation_notifications() {
+            return None;
+        }
+        if state.orientation_due_by.is_some_and(|due_by| due_by > now) {
+            return state.orientation_due_by;
+        }
+        state.orientation_due_by = Some(now + ORIENTATION_SAMPLE_INTERVAL);
+    }
+
+    let (x, y, z) = env.window().get_acceleration(&env.options);
+    let observed = orientation_from_acceleration(x, y, z);
+    let fallback = interface_orientation(env.window().current_rotation());
+    let mut changed_to = None;
+
+    if let Some(observed) = observed {
+        let state = &mut env.framework_state.uikit.ui_device;
+        match state.physical_orientation {
+            None => {
+                if observed != fallback {
+                    changed_to = Some(observed);
+                }
+                state.physical_orientation = Some(observed);
+                state.orientation_candidate = None;
+                state.orientation_candidate_since = None;
+            }
+            Some(current) if current == observed => {
+                state.orientation_candidate = None;
+                state.orientation_candidate_since = None;
+            }
+            Some(_) if state.orientation_candidate == Some(observed) => {
+                let stable = state
+                    .orientation_candidate_since
+                    .is_some_and(|since| {
+                        now.duration_since(since) >= ORIENTATION_STABILITY_INTERVAL
+                    });
+                if stable {
+                    state.physical_orientation = Some(observed);
+                    state.orientation_candidate = None;
+                    state.orientation_candidate_since = None;
+                    changed_to = Some(observed);
+                }
+            }
+            Some(_) => {
+                state.orientation_candidate = Some(observed);
+                state.orientation_candidate_since = Some(now);
+            }
+        }
+    }
+
+    if let Some(orientation) = changed_to {
+        log!("UIDevice physical orientation changed to {}.", orientation);
+        generate_device_orientation_notification(env);
+    }
+    env.framework_state.uikit.ui_device.orientation_due_by
+}
+
 pub fn generate_device_orientation_notification(env: &mut Environment) {
     let center: id = msg_class![env; NSNotificationCenter defaultCenter];
     let name = get_static_str(env, UIDeviceOrientationDidChangeNotification);
     let device: id = msg_class![env; UIDevice currentDevice];
     let _: () = msg![env; center postNotificationName:name object:device];
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn physical_orientation_uses_dominant_gravity_axis() {
+        assert_eq!(
+            orientation_from_acceleration(0.0, -1.0, 0.0),
+            Some(UIDeviceOrientationPortrait)
+        );
+        assert_eq!(
+            orientation_from_acceleration(0.0, 1.0, 0.0),
+            Some(UIDeviceOrientationPortraitUpsideDown)
+        );
+        assert_eq!(
+            orientation_from_acceleration(-1.0, 0.0, 0.0),
+            Some(UIDeviceOrientationLandscapeLeft)
+        );
+        assert_eq!(
+            orientation_from_acceleration(1.0, 0.0, 0.0),
+            Some(UIDeviceOrientationLandscapeRight)
+        );
+        assert_eq!(
+            orientation_from_acceleration(0.0, 0.0, -1.0),
+            Some(UIDeviceOrientationFaceUp)
+        );
+        assert_eq!(
+            orientation_from_acceleration(0.0, 0.0, 1.0),
+            Some(UIDeviceOrientationFaceDown)
+        );
+    }
+
+    #[test]
+    fn physical_orientation_rejects_weak_or_invalid_samples() {
+        assert_eq!(orientation_from_acceleration(0.1, 0.2, 0.3), None);
+        assert_eq!(orientation_from_acceleration(f32::NAN, 1.0, 0.0), None);
+    }
 }
