@@ -743,6 +743,7 @@ forUndefinedKey:(id)key { // NSString*
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::objc::release;
 
     #[test]
     fn instance_description_is_inherited_without_replacing_overrides() {

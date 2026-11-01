@@ -482,7 +482,8 @@ fn fesetround(env: &mut Environment, round: i32) -> i32 {
 
 fn feclearexcept(env: &mut Environment, exceptions: i32) -> i32 {
     let mask = (exceptions & FE_ALL_EXCEPT) as u32;
-    env.cpu.set_fpscr(env.cpu.fpscr() & !mask);
+    let fpscr = env.cpu.fpscr();
+    env.cpu.set_fpscr(fpscr & !mask);
     0
 }
 
@@ -492,7 +493,8 @@ fn fetestexcept(env: &mut Environment, exceptions: i32) -> i32 {
 
 fn feraiseexcept(env: &mut Environment, exceptions: i32) -> i32 {
     let mask = (exceptions & FE_ALL_EXCEPT) as u32;
-    env.cpu.set_fpscr(env.cpu.fpscr() | mask);
+    let fpscr = env.cpu.fpscr();
+    env.cpu.set_fpscr(fpscr | mask);
     0
 }
 
