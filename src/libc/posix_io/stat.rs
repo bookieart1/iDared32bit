@@ -8,7 +8,9 @@
 use super::{close, off_t, open_direct, FileDescriptor};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::fs::{FsError, GuestFile, GuestPath};
-use crate::libc::errno::{set_errno, EACCES, EBADF, EEXIST, ENOENT};
+use crate::libc::errno::{
+    set_errno, EACCES, EBADF, EEXIST, EINTR, EINVAL, EIO, ENOENT, EPERM, EROFS,
+};
 use crate::libc::time::timespec;
 use crate::mem::{ConstPtr, MutPtr, SafeRead};
 use crate::Environment;
@@ -172,8 +174,91 @@ fn lstat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
     stat(env, path, buf)
 }
 
+fn fchmod(env: &mut Environment, fd: FileDescriptor, mode: mode_t) -> i32 {
+    set_errno(env, 0);
+
+    if fd < super::NORMAL_FILENO_BASE {
+        set_errno(env, EBADF);
+        return -1;
+    }
+
+    let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
+        set_errno(env, EBADF);
+        return -1;
+    };
+
+    enum FchmodError {
+        Errno(i32),
+        Io(std::io::Error),
+    }
+
+    let result = match &file.file {
+        GuestFile::File(file) => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+
+                file.metadata().and_then(|metadata| {
+                    let mut permissions = metadata.permissions();
+                    permissions.set_mode(u32::from(mode));
+                    file.set_permissions(permissions)
+                })
+                .map_err(FchmodError::Io)
+            }
+            #[cfg(not(unix))]
+            {
+                // Windows does not expose Unix permission bits. Keep the
+                // validation and return contract used by the guest filesystem;
+                // iOS/macOS builds take the Unix branch above.
+                let _ = mode;
+                Ok(())
+            }
+        }
+        GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => {
+            Err(FchmodError::Errno(EROFS))
+        }
+        GuestFile::Socket => Err(FchmodError::Errno(EINVAL)),
+        GuestFile::Directory => {
+            // Guest directory descriptors do not retain a host directory
+            // handle, so their permission bits are not currently observable.
+            // The descriptor and mode are still valid in the single-user guest
+            // filesystem model.
+            log_once!("Warning: fchmod() on a directory cannot persist permission bits");
+            return 0;
+        }
+    };
+
+    match result {
+        Ok(()) => 0,
+        Err(FchmodError::Errno(errno)) => {
+            set_errno(env, errno);
+            -1
+        }
+        Err(FchmodError::Io(error)) => {
+            set_errno(
+                env,
+                match error.kind() {
+                    std::io::ErrorKind::PermissionDenied => EPERM,
+                    std::io::ErrorKind::ReadOnlyFilesystem => EROFS,
+                    std::io::ErrorKind::Interrupted => EINTR,
+                    std::io::ErrorKind::InvalidInput => EINVAL,
+                    _ => EIO,
+                },
+            );
+            log!(
+                "Warning: fchmod({:?}, {:#o}) failed with {:?}, returning -1",
+                fd,
+                mode,
+                error
+            );
+            -1
+        }
+    }
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(mkdir(_, _)),
+    export_c_func!(fchmod(_, _)),
     export_c_func!(fstat(_, _)),
     export_c_func!(stat(_, _)),
     export_c_func!(lstat(_, _)),

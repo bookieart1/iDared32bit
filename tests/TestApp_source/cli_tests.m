@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/sysctl.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/times.h>
 #include <sys/types.h>
@@ -4057,6 +4058,31 @@ int test_open() {
   return 0;
 }
 
+int test_fchmod() {
+  errno = 0;
+  if (fchmod(-1, 0600) != -1 || errno != EBADF) {
+    return -1;
+  }
+
+  FILE *file = tmpfile();
+  if (file == NULL) {
+    return -2;
+  }
+  int fd = fileno(file);
+  if (fd < 0) {
+    fclose(file);
+    return -3;
+  }
+
+  int result = fchmod(fd, 0600);
+  fclose(file);
+  if (result != 0) {
+    return -4;
+  }
+
+  return 0;
+}
+
 int test_close() {
   if (close(0) != 0)
     return -1;
@@ -6809,6 +6835,88 @@ int test_NSKeyedArchiver_encodeIntForKey() {
   return 0;
 }
 
+@interface BoolCoderObject : NSObject <NSCoding> {
+@public
+  BOOL value;
+}
+- (instancetype)initWithValue:(BOOL)value;
+@end
+
+@implementation BoolCoderObject
+- (instancetype)initWithValue:(BOOL)newValue {
+  self = [super init];
+  if (self) {
+    value = newValue;
+  }
+  return self;
+}
+- (void)encodeWithCoder:(NSCoder *)coder {
+  [coder encodeBool:value forKey:@"value"];
+}
+- (instancetype)initWithCoder:(NSCoder *)coder {
+  self = [super init];
+  if (self) {
+    value = [coder decodeBoolForKey:@"value"];
+  }
+  return self;
+}
+@end
+
+int test_NSKeyedArchiver_encodeBoolForKey() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+  for (int raw = 0; raw <= 1; raw++) {
+    BoolCoderObject *obj = [[BoolCoderObject alloc] initWithValue:(BOOL)raw];
+    NSData *archivedData = [NSKeyedArchiver archivedDataWithRootObject:obj];
+    BoolCoderObject *decoded =
+        [NSKeyedUnarchiver unarchiveObjectWithData:archivedData];
+    if (decoded->value != (BOOL)raw) {
+      [obj release];
+      [pool drain];
+      return -1 - raw;
+    }
+    [obj release];
+  }
+  [pool drain];
+  return 0;
+}
+
+int test_UINavigationController_navigationBarHidden() {
+#ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
+  // UIKit is unavailable to the native macOS sanity-test executable.
+  return 0;
+#else
+  UINavigationController *controller = [UINavigationController new];
+  if ([controller isNavigationBarHidden]) {
+    [controller release];
+    return -1;
+  }
+  [controller setNavigationBarHidden:YES animated:YES];
+  if (![controller isNavigationBarHidden]) {
+    [controller release];
+    return -2;
+  }
+  [controller setNavigationBarHidden:NO];
+  if ([controller isNavigationBarHidden]) {
+    [controller release];
+    return -3;
+  }
+  [controller release];
+  return 0;
+#endif
+}
+
+int test_UIApplicationLaunchOptionsURLKey() {
+#ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
+  // UIKit is unavailable to the native macOS sanity-test executable.
+  return 0;
+#else
+  return [UIApplicationLaunchOptionsURLKey
+             isEqualToString:@"UIApplicationLaunchOptionsURLKey"]
+             ? 0
+             : -1;
+#endif
+}
+
 int test_NSKeyedArchiver_NSKeyedUnarchiver() {
   NSAutoreleasePool *pool = [NSAutoreleasePool new];
   char buffer[100];
@@ -8001,6 +8109,7 @@ struct {
     FUNC_DEF(test_flockfile_blocks_other_thread),
     FUNC_DEF(test_flockfile_io_while_locked),
     FUNC_DEF(test_open),
+    FUNC_DEF(test_fchmod),
     FUNC_DEF(test_close),
     FUNC_DEF(test_cond_var),
     FUNC_DEF(test_cond_var_static),
@@ -8065,9 +8174,12 @@ struct {
     FUNC_DEF(test_pthread_cancel_configuration),
     FUNC_DEF(test_UIImage_drawAsPatternInRect),
     FUNC_DEF(test_NSKeyedArchiver_encodeIntForKey),
+    FUNC_DEF(test_NSKeyedArchiver_encodeBoolForKey),
     FUNC_DEF(test_NSKeyedArchiver_NSKeyedUnarchiver),
     FUNC_DEF(test_NSKeyedArchiver_NSDictionary_of_NSArray_of_NSStrings),
     FUNC_DEF(test_NSKeyedArchiver_initForWritingWithMutableData),
+    FUNC_DEF(test_UINavigationController_navigationBarHidden),
+    FUNC_DEF(test_UIApplicationLaunchOptionsURLKey),
     FUNC_DEF(test_AutoreleasePool),
     FUNC_DEF(test_NSNumber_stringValue),
     FUNC_DEF(test_NSMethodSignature),

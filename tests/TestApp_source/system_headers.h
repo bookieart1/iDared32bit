@@ -64,6 +64,7 @@ Method class_getInstanceMethod(Class cls, SEL name);
 void (*method_getImplementation(Method m))(void);
 void (*method_setImplementation(Method m, void (*imp)(void)))(void);
 Ivar object_getInstanceVariable(id obj, const char *name, void **outValue);
+const char *ivar_getTypeEncoding(Ivar v);
 #ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
 SEL method_getName(Method m);
 #endif
@@ -338,6 +339,8 @@ typedef enum {
                       returnedLength:(NSUInteger *)lengthp;
 - (void)encodeInt:(int)value forKey:(NSString *)key;
 - (int)decodeIntForKey:(NSString *)key;
+- (void)encodeBool:(BOOL)value forKey:(NSString *)key;
+- (BOOL)decodeBoolForKey:(NSString *)key;
 @end
 
 @interface NSKeyedArchiver : NSCoder
@@ -694,6 +697,13 @@ typedef enum {
 @interface UIApplication : NSObject
 + (instancetype)sharedApplication;
 - (id)delegate;
+@end
+extern NSString *const UIApplicationLaunchOptionsURLKey;
+
+@interface UINavigationController : NSObject
+- (BOOL)isNavigationBarHidden;
+- (void)setNavigationBarHidden:(BOOL)hidden;
+- (void)setNavigationBarHidden:(BOOL)hidden animated:(BOOL)animated;
 @end
 @interface UIScreen : NSObject
 + (instancetype)mainScreen;

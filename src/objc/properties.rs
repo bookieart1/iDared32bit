@@ -200,6 +200,20 @@ pub(super) fn object_getInstanceVariable(
     ivar_handle
 }
 
+/// Returns the compiler-provided Objective-C type encoding for an ivar runtime
+/// handle. Ivar handles exposed by this runtime are stable pointers to the
+/// guest binary's `ivar_t` metadata, so the returned string has the same
+/// lifetime as that image.
+pub(super) fn ivar_getTypeEncoding(
+    env: &mut Environment,
+    ivar: ConstPtr<ivar_t>,
+) -> ConstPtr<u8> {
+    if ivar.is_null() {
+        return Ptr::null();
+    }
+    env.mem.read(ivar).type_
+}
+
 /// Undocumented function (see link above) apparently used by auto-generated
 /// methods for properties to get an ivar.
 pub(super) fn objc_getProperty(

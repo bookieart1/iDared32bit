@@ -57,7 +57,8 @@ use messages::{objc_msgSendSuper2, objc_msgSend_stret, MsgSendSignature, MsgSend
 use methods::{method_list_t, method_t};
 use objects::{objc_object, object_getClass, HostObjectEntry};
 use properties::{
-    ivar_list_t, objc_copyStruct, objc_getProperty, objc_setProperty, object_getInstanceVariable,
+    ivar_getTypeEncoding, ivar_list_t, objc_copyStruct, objc_getProperty, objc_setProperty,
+    object_getInstanceVariable,
 };
 use selectors::{sel_getUid, sel_registerName};
 use synchronization::{objc_sync_enter, objc_sync_exit};
@@ -292,6 +293,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_sync_exit(_)),
     export_c_func!(object_getClass(_)),
     export_c_func!(object_getInstanceVariable(_, _, _)),
+    export_c_func!(ivar_getTypeEncoding(_)),
     export_c_func!(object_getClassName(_)),
     export_c_func!(sel_getUid(_)),
     export_c_func!(sel_registerName(_)),

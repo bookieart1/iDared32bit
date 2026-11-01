@@ -109,6 +109,10 @@ int test_object_getInstanceVariable(void) {
   if (object_getInstanceVariable(instance, "instanceVariable", 0) != ivar) {
     return -3;
   }
+  const char *type = ivar_getTypeEncoding(ivar);
+  if (type == 0 || strcmp(type, "@") != 0 || ivar_getTypeEncoding(0) != 0) {
+    return -4;
+  }
   [instance release];
   return 0;
 }

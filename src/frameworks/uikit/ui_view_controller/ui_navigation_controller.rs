@@ -22,6 +22,10 @@ struct UINavigationControllerHostObject {
     /// Navigation stack of view controllers, non-retaining
     /// (we explicitly retain/release on push/pop messages)
     navigation_stack: Vec<id>,
+    /// Whether the controller's navigation bar is hidden. The navigation bar
+    /// itself is not rendered yet, but callers can still observe and update the
+    /// public property consistently.
+    navigation_bar_hidden: bool,
 }
 impl_HostObject_with_superclass!(UINavigationControllerHostObject);
 
@@ -146,8 +150,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     // TODO
     nil
 }
-- (())setNavigationBarHidden:(bool)_hidden {
-    // TODO
+- (bool)isNavigationBarHidden {
+    env.objc.borrow::<UINavigationControllerHostObject>(this).navigation_bar_hidden
+}
+- (())setNavigationBarHidden:(bool)hidden {
+    env.objc.borrow_mut::<UINavigationControllerHostObject>(this).navigation_bar_hidden = hidden;
+}
+- (())setNavigationBarHidden:(bool)hidden
+                     animated:(bool)_animated {
+    // Bar animations are not implemented. The final visibility state and
+    // observable property value are applied synchronously.
+    () = msg![env; this setNavigationBarHidden:hidden];
 }
 
 @end

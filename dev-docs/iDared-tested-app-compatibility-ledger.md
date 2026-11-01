@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: November 1, 2026
-Latest device-tested checkpoint: **iDared Dev 1.76** (`c5005dd4`; focused diagnostic test; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.76** (`c5005dd4`; verified diagnostic package and focused device result)
-Current activity: **Dev 1.77 is the first user-prioritized batch from the fully re-read Dev 1.71 survey: Parachute Ninja, Dark Nebula 2, Dirt, Hamlet and Glowfish. Five general contracts are implemented without app-specific branches: selector interning via `sel_getUid`, ARM FPSCR exception flags, file-backed NSData options/errors, inherited NSObject descriptions, and Darwin-tagged anonymous mappings. Hosted validation and physical-device results are pending; this is not yet a compatibility claim.**
+Latest device-tested checkpoint: **iDared Dev 1.78** (`1af64fa`; focused seven-app test; Dev 1.71 remains the latest full-catalog survey)
+Latest built checkpoint: **iDared Dev 1.78** (`1af64fa`; verified package and focused device result)
+Current activity: **Dev 1.79 targets the five newly exposed shared contracts: Objective-C ivar type metadata, keyed boolean archives, descriptor permission changes, navigation-bar visibility state and the UIKit launch-options URL constant. Blot and Spoing remain regression controls. Hosted validation and physical-device results are pending; this is not yet a compatibility claim.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3453,6 +3453,49 @@ diagnostics. Cancellation delivery remains outside the partial pthread contract.
   and all new contract symbols.
 
 Verification: `outputs/iDared-Dev-1.78.verification.json`. Engineering detail:
-`dev-docs/compatibility-1.78-second-stage-contracts.md`. **Physical-device
-testing is pending; removed blocker, visible stage advance and functional
-compatibility remain separate claims.**
+`dev-docs/compatibility-1.78-second-stage-contracts.md`. Physical-device results
+are recorded below; removed blocker, visible stage advance and functional
+compatibility remain separate claims.
+
+### Dev 1.78 physical-device result
+
+The supplied 544,116-byte log embeds source `1af64fa` and workflow
+`41287654525`; its SHA-256 is
+`c40ca031bcdad068b7c5c1db56662d5fdf158b929f6fa8de715f2c682e916ac3`.
+The unmodified file is preserved as
+`outputs/device-logs/iDared-Dev-1.78-device-results.txt`. The universal bounded
+recorder is active for every relevant launch.
+
+| App | Dev 1.78 device result | Status and next first blocker |
+|---|---|---|
+| Blot | Smooth through the requested play/death path and Home exit after 35.533 s, 1,275 loops and 1,233 EAGL returns. | **Regression pass in stated scope.** |
+| Dark Nebula 2 | Menu remains smooth. Starting gameplay reaches a real ivar handle from `object_getInstanceVariable`, then missing `_ivar_getTypeEncoding` after 6.816 s, 353 loops and 179 EAGL returns. | **Partial; same visible stage, newly precise runtime blocker.** |
+| Dirt | Launches directly into smooth gameplay. Movement, mechanics and pause/resume work. The user-observed pickaxe/map transition reaches missing `NSKeyedArchiver encodeBool:forKey:` on thread 6 after 27.984 s, 1,652 loops and 1,651 EAGL returns. | **Verified major stage advance; partial compatibility.** The XML/CF blocker is removed; boolean save/archive is next. |
+| Glowfish / Glowfish HD | Both pass VM-tag and pthread-cancellation-state startup. Each reaches `_fchmod` after `flock` in about half a second, before a loop or frame. | **Previous blocker removed; corroborated file-descriptor blocker.** No visible launch claim. |
+| Hamlet | The image pattern method now completes. A valid `UINavigationController` receives missing `setNavigationBarHidden:YES animated:NO` after 113 ms, before a loop/frame. | **Previous blocker removed; still startup-blocked.** |
+| Parachute Ninja | UIApplication swizzling progresses through mutable copying, but `_UIApplicationLaunchOptionsURLKey` is unresolved; launch code dereferences the null global and faults after 98 ms. | **Previous blocker removed; still startup-blocked.** The null-page origin is now specific and is not an invalid-object tolerance issue. |
+| Spoing | Smooth and returns through emulator Home after 41.418 s, 1,132 loops and 522 EAGL returns. | **Regression pass in stated scope.** |
+
+## Dev 1.79: third-stage shared contracts (candidate)
+
+Dev 1.79 implements the five contracts exposed above without app identifiers,
+permissive memory handling, fabricated service responses or diagnostic growth:
+
+- Objective-C `ivar_getTypeEncoding` reads the stable type string from real
+  ivar metadata and handles a null handle.
+- `NSKeyedArchiver encodeBool:forKey:` stores a keyed property-list boolean;
+  focused round-trip coverage includes false and true.
+- `fchmod` validates descriptors and applies Unix mode bits to host-backed
+  writable files, with errno for read-only/socket/I/O failures. Directory mode
+  persistence and non-Unix host bits remain an explicitly partial contract.
+- `UINavigationController` retains observable navigation-bar-hidden state; the
+  animated setter applies the final state synchronously. Bar rendering and
+  animation are still unsupported.
+- UIKit exports `UIApplicationLaunchOptionsURLKey` with its historical string
+  value.
+
+Predicted focused retest: Blot, Dark Nebula 2, Dirt, Glowfish, Glowfish HD,
+Hamlet, Parachute Ninja and Spoing. No save reset is requested. Engineering
+detail: `dev-docs/compatibility-1.79-third-stage-contracts.md`. Hosted tests,
+iOS compilation, package verification and physical-device behavior remain
+separate pending results.
