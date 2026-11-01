@@ -218,7 +218,7 @@ mod tests {
         let env = &mut env;
         let formatter: id = msg_class![env; NSNumberFormatter new];
         () = msg![env; formatter setNumberStyle:NSNumberFormatterDecimalStyle];
-        () = msg![env; formatter setMaximumFractionDigits:2];
+        () = msg![env; formatter setMaximumFractionDigits:2u32];
         () = msg![env; formatter setUsesGroupingSeparator:true];
         let number: id = msg_class![env; NSNumber numberWithDouble:1234.5f64];
         let string: id = msg![env; formatter stringFromNumber:number];

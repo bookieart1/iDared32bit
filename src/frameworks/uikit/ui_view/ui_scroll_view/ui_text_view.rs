@@ -320,6 +320,8 @@ mod tests {
     fn keyboard_traits_keep_their_guest_visible_state() {
         let mut env = Environment::new_fake_for_test_with_thread();
         let env = &mut env;
+        let stack = env.mem.alloc(0x1000);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = stack.to_bits() + 0x1000;
         let text_view: id = msg_class![env; UITextView alloc];
         let text_view: id = msg![env; text_view initWithFrame:CGRectZero];
         () = msg![env; text_view setKeyboardType:7i32];
@@ -329,5 +331,7 @@ mod tests {
         assert_eq!(keyboard_type, 7);
         assert_eq!(keyboard_appearance, 1);
         release(env, text_view);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
+        env.mem.free(stack);
     }
 }
