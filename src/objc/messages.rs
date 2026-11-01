@@ -760,6 +760,12 @@ mod tests {
     fn super2_struct_return_preserves_hidden_pointer_and_rewrites_receiver() {
         let mut env = Environment::new_fake_for_test_with_thread();
         let env = &mut env;
+        // Large host-to-guest returns reserve their result buffer on the guest
+        // stack. The lightweight test environment deliberately has no stack,
+        // so provide one just as the other ABI-focused tests do.
+        let stack_size = 0x1000;
+        let stack = env.mem.alloc(stack_size);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = stack.to_bits() + stack_size;
         let frame = CGRect {
             origin: CGPoint { x: 3.0, y: 4.0 },
             size: CGSize {
@@ -791,5 +797,7 @@ mod tests {
 
         env.mem.free(super_ptr.cast());
         release(env, label);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
+        env.mem.free(stack);
     }
 }
