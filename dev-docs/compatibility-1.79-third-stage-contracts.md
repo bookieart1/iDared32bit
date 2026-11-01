@@ -49,3 +49,29 @@ Predictions for Dev 1.79:
 A removed blocker, a visible stage advance and functional compatibility remain
 separate results. The next device log must be used to update these contracts and
 predictions rather than treating successful compilation as compatibility.
+
+## Verified delivery
+
+- Implementation/source commit:
+  `4de150e74abe3163ae05e2e9f422df413e2e5621`.
+- [Tests 41289274669](https://github.com/bookieart1/iDared32bit/actions/runs/41289274669):
+  **129/129 library tests passed on macOS and 129/129 on Windows**. The
+  development native-Foundation reference and both diagnostic reproducers
+  passed. Android lint/cross-compilation passed. The workflow still skips the
+  guest executable and native macOS guest-test sanity step on this branch.
+- [IPA build 41289274667](https://github.com/bookieart1/iDared32bit/actions/runs/41289274667):
+  iOS arm64 compilation, separate development identity verification, unsigned
+  packaging and upload passed. Artifact `13076855985`; downloaded artifact ZIP
+  is 19,856,736 bytes, SHA-256
+  `616600dc598851b987172204efde47907b51380653c3107c3b091823ee086d79`,
+  matching GitHub's digest.
+- Local `outputs/iDared-Dev-1.79.ipa` is 19,904,165 bytes, SHA-256
+  `f81dd5d701f5d7a6d6c12c67ba24d607d43fbd2293255a195d7a4e4892fe695e`.
+  All archive entries passed CRC reading. The executable is arm64, embeds source
+  `4de150e`, workflow `41289274667`, the branch/repository, permanent universal
+  recorder default and all five new contract markers. The package uses
+  `com.bookieart1.idared32bit.dev` / `iDared Dev` and contains no provisioning
+  profile, `_CodeSignature` entry or Mach-O code-signature command.
+
+Verification record: `outputs/iDared-Dev-1.79.verification.json`. **Physical
+device results are pending.**

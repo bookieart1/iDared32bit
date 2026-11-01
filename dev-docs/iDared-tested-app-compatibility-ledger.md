@@ -2,8 +2,8 @@
 
 Last reconciled: November 1, 2026
 Latest device-tested checkpoint: **iDared Dev 1.78** (`1af64fa`; focused seven-app test; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.78** (`1af64fa`; verified package and focused device result)
-Current activity: **Dev 1.79 targets the five newly exposed shared contracts: Objective-C ivar type metadata, keyed boolean archives, descriptor permission changes, navigation-bar visibility state and the UIKit launch-options URL constant. Blot and Spoing remain regression controls. Hosted validation and physical-device results are pending; this is not yet a compatibility claim.**
+Latest built checkpoint: **iDared Dev 1.79** (`4de150e`; verified package; physical-device results pending)
+Current activity: **Dev 1.79 targets the five newly exposed shared contracts: Objective-C ivar type metadata, keyed boolean archives, descriptor permission changes, navigation-bar visibility state and the UIKit launch-options URL constant. Blot and Spoing remain regression controls. Hosted compilation/tests and package verification pass; physical-device results are pending, so this is not yet a compatibility claim.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3497,5 +3497,32 @@ permissive memory handling, fabricated service responses or diagnostic growth:
 Predicted focused retest: Blot, Dark Nebula 2, Dirt, Glowfish, Glowfish HD,
 Hamlet, Parachute Ninja and Spoing. No save reset is requested. Engineering
 detail: `dev-docs/compatibility-1.79-third-stage-contracts.md`. Hosted tests,
-iOS compilation, package verification and physical-device behavior remain
-separate pending results.
+iOS compilation and package verification are recorded below; physical-device
+behavior remains pending.
+
+### Dev 1.79 verified delivery
+
+- Implementation/source commit:
+  `4de150e74abe3163ae05e2e9f422df413e2e5621`.
+- [Tests 41289274669](https://github.com/bookieart1/iDared32bit/actions/runs/41289274669):
+  **129/129 library tests passed on macOS and 129/129 on Windows**. The native
+  Foundation reference, bounded diagnostic reproducers and Android
+  lint/cross-compilation passed. Guest executable integration and the native
+  macOS guest-test sanity step remain skipped by the development workflow.
+- [IPA build 41289274667](https://github.com/bookieart1/iDared32bit/actions/runs/41289274667):
+  arm64 iOS compilation, separate development identity verification, unsigned
+  packaging and artifact upload passed. Artifact `13076855985`; downloaded ZIP
+  SHA-256
+  `616600dc598851b987172204efde47907b51380653c3107c3b091823ee086d79`
+  matches GitHub.
+- Local `outputs/iDared-Dev-1.79.ipa`, 19,904,165 bytes, SHA-256
+  `f81dd5d701f5d7a6d6c12c67ba24d607d43fbd2293255a195d7a4e4892fe695e`,
+  passed archive/CRC, arm64, identity and unsigned-package checks. It embeds
+  source `4de150e`, workflow `41289274667`, the permanent universal-recorder
+  default and all five new contract markers.
+- No application-specific branch, diagnostic expansion, save mutation/deletion
+  or weakened crash check is included. `fchmod` directory persistence and
+  navigation-bar rendering/animation remain explicitly partial contracts.
+
+Verification: `outputs/iDared-Dev-1.79.verification.json`. **Physical-device
+testing is pending; compilation does not establish compatibility.**
