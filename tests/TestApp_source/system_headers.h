@@ -65,6 +65,7 @@ void (*method_getImplementation(Method m))(void);
 void (*method_setImplementation(Method m, void (*imp)(void)))(void);
 Ivar object_getInstanceVariable(id obj, const char *name, void **outValue);
 const char *ivar_getTypeEncoding(Ivar v);
+ptrdiff_t ivar_getOffset(Ivar v);
 #ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
 SEL method_getName(Method m);
 #endif
@@ -258,6 +259,7 @@ extern NSString *const NSDefaultRunLoopMode;
 @interface NSURL : NSObject
 + (NSURL *)fileURLWithPath:(NSString *)path;
 - (NSString *)path;
+- (NSString *)absoluteString;
 @end
 
 NSString *NSHomeDirectory(void);
@@ -306,7 +308,13 @@ typedef enum {
 @end
 
 @interface NSError : NSObject
+- (NSInteger)code;
+- (NSString *)domain;
+- (NSDictionary *)userInfo;
 @end
+extern NSString *const NSURLErrorDomain;
+extern NSString *const NSErrorFailingURLStringKey;
+extern NSString *const NSURLErrorFailingURLStringErrorKey;
 
 @interface NSURLRequest : NSObject
 + (instancetype)requestWithURL:(NSURL *)url;
@@ -676,6 +684,9 @@ CFTimeInterval CACurrentMediaTime();
 
 // UIKit
 
+@interface UIResponder : NSObject
+@end
+
 typedef enum {
   UITextAlignmentLeft = 0,
   UITextAlignmentCenter = 1,
@@ -700,10 +711,36 @@ typedef enum {
 @end
 extern NSString *const UIApplicationLaunchOptionsURLKey;
 
-@interface UINavigationController : NSObject
+@class UINavigationItem;
+@interface UIViewController : UIResponder
+- (NSString *)title;
+- (void)setTitle:(NSString *)title;
+- (UINavigationItem *)navigationItem;
+@end
+@interface UINavigationController : UIViewController
 - (BOOL)isNavigationBarHidden;
 - (void)setNavigationBarHidden:(BOOL)hidden;
 - (void)setNavigationBarHidden:(BOOL)hidden animated:(BOOL)animated;
+@end
+@interface UINavigationItem : NSObject
+- (instancetype)initWithTitle:(NSString *)title;
+- (NSString *)title;
+- (void)setTitle:(NSString *)title;
+- (NSString *)prompt;
+- (void)setPrompt:(NSString *)prompt;
+- (id)titleView;
+- (void)setTitleView:(id)view;
+- (id)leftBarButtonItem;
+- (void)setLeftBarButtonItem:(id)item;
+- (void)setLeftBarButtonItem:(id)item animated:(BOOL)animated;
+- (id)rightBarButtonItem;
+- (void)setRightBarButtonItem:(id)item;
+- (void)setRightBarButtonItem:(id)item animated:(BOOL)animated;
+- (id)backBarButtonItem;
+- (void)setBackBarButtonItem:(id)item;
+- (BOOL)hidesBackButton;
+- (void)setHidesBackButton:(BOOL)hidden;
+- (void)setHidesBackButton:(BOOL)hidden animated:(BOOL)animated;
 @end
 @interface UIScreen : NSObject
 + (instancetype)mainScreen;
@@ -748,8 +785,6 @@ extern NSString *const UIApplicationLaunchOptionsURLKey;
 @class UIView;
 @interface UITouch : NSObject
 - (CGPoint)locationInView:(UIView *)view;
-@end
-@interface UIResponder : NSObject
 @end
 @class UIWindow;
 @interface UIView : UIResponder
@@ -815,5 +850,29 @@ NSString *NSStringFromCGSize(CGSize);
 NSString *NSStringFromCGRect(CGRect);
 
 void NSLog(NSString *, ...);
+
+// Core Motion
+
+typedef struct {
+  double x;
+  double y;
+  double z;
+} CMAcceleration;
+
+@interface CMLogItem : NSObject
+- (NSTimeInterval)timestamp;
+@end
+@interface CMAccelerometerData : CMLogItem
+- (CMAcceleration)acceleration;
+@end
+@interface CMMotionManager : NSObject
+- (BOOL)isAccelerometerAvailable;
+- (BOOL)isAccelerometerActive;
+- (void)startAccelerometerUpdates;
+- (void)stopAccelerometerUpdates;
+- (NSTimeInterval)accelerometerUpdateInterval;
+- (void)setAccelerometerUpdateInterval:(NSTimeInterval)interval;
+- (CMAccelerometerData *)accelerometerData;
+@end
 
 #endif // TOUCHHLE_SYSTEM_HEADERS_H

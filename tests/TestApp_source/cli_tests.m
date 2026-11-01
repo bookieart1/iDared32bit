@@ -4248,6 +4248,40 @@ int test_NSURLConnection_local_file() {
   return result;
 }
 
+int test_NSURLConnection_error_metadata() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+  NSString *path = [NSString
+      stringWithFormat:@"%@/touchhle-definitely-missing-url-error-file",
+                       NSTemporaryDirectory()];
+  remove([path UTF8String]);
+  NSURL *url = [NSURL fileURLWithPath:path];
+  NSURLRequest *request = [NSURLRequest requestWithURL:url];
+  NSURLResponse *response = (NSURLResponse *)0x1;
+  NSError *error = nil;
+  NSData *data = [NSURLConnection sendSynchronousRequest:request
+                                       returningResponse:&response
+                                                   error:&error];
+  int result = 0;
+  if (data != nil || response != nil || error == nil)
+    result = -1;
+  else if (![[error domain] isEqualToString:NSURLErrorDomain] ||
+           [error code] != -1100)
+    result = -2;
+  else if (![NSErrorFailingURLStringKey
+               isEqualToString:@"NSErrorFailingURLStringKey"] ||
+           ![NSURLErrorFailingURLStringErrorKey
+               isEqualToString:NSErrorFailingURLStringKey])
+    result = -3;
+  else {
+    NSString *failedURL =
+        [[error userInfo] objectForKey:NSErrorFailingURLStringKey];
+    if (![failedURL isEqualToString:[url absoluteString]])
+      result = -4;
+  }
+  [pool drain];
+  return result;
+}
+
 int test_CFMutableDictionary_NullCallbacks() {
   CFMutableDictionaryRef dict = CFDictionaryCreateMutable(NULL, 0, NULL, NULL);
   if (dict == NULL) {
@@ -6905,6 +6939,95 @@ int test_UINavigationController_navigationBarHidden() {
 #endif
 }
 
+int test_UIViewController_navigationItem() {
+#ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
+  // UIKit is unavailable to the native macOS sanity-test executable.
+  return 0;
+#else
+  UIViewController *controller = [UIViewController new];
+  [controller setTitle:@"First"];
+  UINavigationItem *item = [controller navigationItem];
+  if (item == nil || item != [controller navigationItem] ||
+      ![[controller title] isEqualToString:@"First"] ||
+      ![[item title] isEqualToString:@"First"]) {
+    [controller release];
+    return -1;
+  }
+  [controller setTitle:@"Second"];
+  if (![[item title] isEqualToString:@"Second"]) {
+    [controller release];
+    return -2;
+  }
+
+  NSObject *titleView = [NSObject new];
+  NSObject *left = [NSObject new];
+  NSObject *right = [NSObject new];
+  NSObject *back = [NSObject new];
+  [item setPrompt:@"Prompt"];
+  [item setTitleView:titleView];
+  [item setLeftBarButtonItem:left animated:YES];
+  [item setRightBarButtonItem:right animated:YES];
+  [item setBackBarButtonItem:back];
+  [item setHidesBackButton:YES animated:YES];
+  if (![[item prompt] isEqualToString:@"Prompt"] ||
+      [item titleView] != titleView || [item leftBarButtonItem] != left ||
+      [item rightBarButtonItem] != right || [item backBarButtonItem] != back ||
+      ![item hidesBackButton]) {
+    [titleView release];
+    [left release];
+    [right release];
+    [back release];
+    [controller release];
+    return -3;
+  }
+  [titleView release];
+  [left release];
+  [right release];
+  [back release];
+  [controller release];
+  return 0;
+#endif
+}
+
+int test_CMMotionManager_polling() {
+#ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
+  // The native sanity executable does not link Core Motion.
+  return 0;
+#else
+  CMMotionManager *manager = [CMMotionManager new];
+  if (![manager isAccelerometerAvailable] || [manager isAccelerometerActive] ||
+      [manager accelerometerData] != nil) {
+    [manager release];
+    return -1;
+  }
+  [manager setAccelerometerUpdateInterval:0.1];
+  if (fabs([manager accelerometerUpdateInterval] - 0.1) > 0.000001) {
+    [manager release];
+    return -2;
+  }
+  [manager startAccelerometerUpdates];
+  CMAccelerometerData *data = [manager accelerometerData];
+  if (![manager isAccelerometerActive] || data == nil ||
+      [data timestamp] < 0.0) {
+    [manager release];
+    return -3;
+  }
+  CMAcceleration acceleration = [data acceleration];
+  if (!isfinite(acceleration.x) || !isfinite(acceleration.y) ||
+      !isfinite(acceleration.z)) {
+    [manager release];
+    return -4;
+  }
+  [manager stopAccelerometerUpdates];
+  if ([manager isAccelerometerActive] || [manager accelerometerData] != nil) {
+    [manager release];
+    return -5;
+  }
+  [manager release];
+  return 0;
+#endif
+}
+
 int test_UIApplicationLaunchOptionsURLKey() {
 #ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
   // UIKit is unavailable to the native macOS sanity-test executable.
@@ -8132,6 +8255,7 @@ struct {
     FUNC_DEF(test_times_sysconf_clock_ticks),
     FUNC_DEF(test_NSURL_path_components),
     FUNC_DEF(test_NSURLConnection_local_file),
+    FUNC_DEF(test_NSURLConnection_error_metadata),
     FUNC_DEF(test_CFMutableDictionary_NullCallbacks),
     FUNC_DEF(test_CFMutableDictionary_CustomCallbacks_PrimitiveTypes),
     FUNC_DEF(test_CFMutableDictionary_CustomCallbacks_CFTypes),
@@ -8179,6 +8303,8 @@ struct {
     FUNC_DEF(test_NSKeyedArchiver_NSDictionary_of_NSArray_of_NSStrings),
     FUNC_DEF(test_NSKeyedArchiver_initForWritingWithMutableData),
     FUNC_DEF(test_UINavigationController_navigationBarHidden),
+    FUNC_DEF(test_UIViewController_navigationItem),
+    FUNC_DEF(test_CMMotionManager_polling),
     FUNC_DEF(test_UIApplicationLaunchOptionsURLKey),
     FUNC_DEF(test_AutoreleasePool),
     FUNC_DEF(test_NSNumber_stringValue),

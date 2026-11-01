@@ -28,7 +28,7 @@ pub struct State {
 
 type UIAccelerationValue = f64;
 
-const DEFAULT_UPDATE_INTERVAL: f64 = 1.0 / 60.0;
+pub(crate) const DEFAULT_UPDATE_INTERVAL: f64 = 1.0 / 60.0;
 
 struct UIAccelerationHostObject {
     x: UIAccelerationValue,
@@ -167,11 +167,7 @@ pub(super) fn handle_accelerometer(env: &mut Environment) -> Option<Instant> {
     // UIKit creates and drains autorelease pools when handling events.
     let pool: id = msg_class![env; NSAutoreleasePool new];
 
-    let (x, y, z) = env.window().get_acceleration(&env.options);
-    let timestamp: NSTimeInterval = {
-        let process_info = msg_class![env; NSProcessInfo processInfo];
-        msg![env; process_info systemUptime]
-    };
+    let (x, y, z, timestamp) = sample_acceleration(env);
     let acceleration: id = msg_class![env; UIAcceleration alloc];
     *env.objc.borrow_mut(acceleration) = UIAccelerationHostObject {
         x: x.into(),
@@ -201,4 +197,22 @@ pub(super) fn handle_accelerometer(env: &mut Environment) -> Option<Instant> {
     release(env, pool);
 
     env.framework_state.uikit.ui_accelerometer.due_by
+}
+
+/// Samples the same real/simulated device acceleration and monotonic timestamp
+/// used by the legacy UIAccelerometer delivery path. Core Motion's polling API
+/// reuses this so both historical APIs observe one consistent sensor source.
+pub(crate) fn sample_acceleration(
+    env: &mut Environment,
+) -> (f64, f64, f64, NSTimeInterval) {
+    // Headless mode has no input surface. A flat, stationary device is its
+    // deterministic simulated sensor value and keeps guest ABI tests usable.
+    let (x, y, z) = env
+        .window
+        .as_ref()
+        .map(|window| window.get_acceleration(&env.options))
+        .unwrap_or((0.0, 0.0, -1.0));
+    let process_info = msg_class![env; NSProcessInfo processInfo];
+    let timestamp: NSTimeInterval = msg![env; process_info systemUptime];
+    (x.into(), y.into(), z.into(), timestamp)
 }

@@ -214,6 +214,17 @@ pub(super) fn ivar_getTypeEncoding(
     env.mem.read(ivar).type_
 }
 
+/// Returns the byte offset stored in a compiler-provided ivar runtime handle.
+/// Apple's Objective-C runtime also returns zero for a null handle.
+pub(super) fn ivar_getOffset(env: &mut Environment, ivar: ConstPtr<ivar_t>) -> GuestISize {
+    if ivar.is_null() {
+        return 0;
+    }
+    let offset_ptr = env.mem.read(ivar).offset;
+    let offset = env.mem.read(offset_ptr);
+    GuestISize::try_from(offset).expect("ivar offset does not fit in guest ptrdiff_t")
+}
+
 /// Undocumented function (see link above) apparently used by auto-generated
 /// methods for properties to get an ivar.
 pub(super) fn objc_getProperty(

@@ -6,6 +6,7 @@
 //! `NSURLConnection` and `NSURLResponse`.
 
 use super::{ns_run_loop, ns_string, NSInteger, NSUInteger};
+use crate::dyld::{ConstantExports, HostConstant};
 use crate::environment::Environment;
 use crate::mem::MutPtr;
 use crate::objc::{
@@ -14,7 +15,20 @@ use crate::objc::{
 };
 use std::borrow::Cow;
 
-const NSURLErrorDomain: &str = "NSURLErrorDomain";
+pub const NSURLErrorDomain: &str = "NSURLErrorDomain";
+pub const NSErrorFailingURLStringKey: &str = "NSErrorFailingURLStringKey";
+
+pub const CONSTANTS: ConstantExports = &[
+    ("_NSURLErrorDomain", HostConstant::NSString(NSURLErrorDomain)),
+    (
+        "_NSErrorFailingURLStringKey",
+        HostConstant::NSString(NSErrorFailingURLStringKey),
+    ),
+    (
+        "_NSURLErrorFailingURLStringErrorKey",
+        HostConstant::NSString(NSErrorFailingURLStringKey),
+    ),
+];
 
 /// Our helper type, Foundation just uses ints.
 type NSURLErrorCode = NSInteger;
@@ -158,7 +172,7 @@ expectedContentLength:(NSInteger)expected_content_length
             out_error,
         );
         if !out_error.is_null() {
-            let error = make_url_error(env, NSURLErrorNotConnectedToInternet);
+            let error = make_url_error(env, request, NSURLErrorNotConnectedToInternet);
             env.mem.write(out_error, error);
         }
         return nil;
@@ -171,7 +185,7 @@ expectedContentLength:(NSInteger)expected_content_length
             url_string_from_request(env, request),
         );
         if !out_error.is_null() {
-            let error = make_url_error(env, NSURLErrorFileDoesNotExist);
+            let error = make_url_error(env, request, NSURLErrorFileDoesNotExist);
             env.mem.write(out_error, error);
         }
         return nil;
@@ -284,9 +298,21 @@ fn local_file_url_from_request(env: &mut Environment, request: id) -> Option<id>
     }
 }
 
-fn make_url_error(env: &mut Environment, code: NSURLErrorCode) -> id {
+fn make_url_error(env: &mut Environment, request: id, code: NSURLErrorCode) -> id {
     let domain = ns_string::get_static_str(env, NSURLErrorDomain);
-    msg_class![env; NSError errorWithDomain:domain code:code userInfo:nil]
+    let user_info = if request == nil {
+        nil
+    } else {
+        let url: id = msg![env; request URL];
+        let url_string: id = msg![env; url absoluteString];
+        if url_string == nil {
+            nil
+        } else {
+            let key = ns_string::get_static_str(env, NSErrorFailingURLStringKey);
+            msg_class![env; NSDictionary dictionaryWithObject:url_string forKey:key]
+        }
+    };
+    msg_class![env; NSError errorWithDomain:domain code:code userInfo:user_info]
 }
 
 fn make_file_response(env: &mut Environment, url: id, expected_content_length: NSInteger) -> id {
@@ -388,6 +414,10 @@ fn release_finished_delegate(env: &mut Environment, connection: id) {
 }
 
 fn fail_local_file_connection(env: &mut Environment, connection: id) {
+    let request = env
+        .objc
+        .borrow::<NSURLConnectionHostObject>(connection)
+        .request;
     let delegate = finish_connection(env, connection);
     if delegate != nil {
         let selector = env.objc.register_host_selector(
@@ -395,7 +425,7 @@ fn fail_local_file_connection(env: &mut Environment, connection: id) {
             &mut env.mem,
         );
         if msg![env; delegate respondsToSelector:selector] {
-            let error = make_url_error(env, NSURLErrorFileDoesNotExist);
+            let error = make_url_error(env, request, NSURLErrorFileDoesNotExist);
             () = msg_send(env, (delegate, selector, connection, error));
         }
     }

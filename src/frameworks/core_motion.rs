@@ -5,8 +5,57 @@
  */
 //! The Core Motion framework.
 
+use crate::abi::impl_GuestRet_for_large_struct;
 use crate::dyld::HostDylib;
-use crate::objc::{objc_classes, ClassExports};
+use crate::frameworks::foundation::NSTimeInterval;
+use crate::frameworks::uikit::ui_accelerometer::{
+    sample_acceleration, DEFAULT_UPDATE_INTERVAL,
+};
+use crate::mem::SafeRead;
+use crate::objc::{
+    id, impl_HostObject_with_superclass, nil, objc_classes, release, ClassExports, HostObject,
+    NSZonePtr,
+};
+
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+#[repr(C, packed)]
+pub struct CMAcceleration {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+unsafe impl SafeRead for CMAcceleration {}
+impl_GuestRet_for_large_struct!(CMAcceleration);
+
+#[derive(Default)]
+struct CMLogItemHostObject {
+    timestamp: NSTimeInterval,
+}
+impl HostObject for CMLogItemHostObject {}
+
+#[derive(Default)]
+struct CMAccelerometerDataHostObject {
+    superclass: CMLogItemHostObject,
+    acceleration: CMAcceleration,
+}
+impl_HostObject_with_superclass!(CMAccelerometerDataHostObject);
+
+struct CMMotionManagerHostObject {
+    accelerometer_active: bool,
+    accelerometer_update_interval: NSTimeInterval,
+    /// Strong reference to the latest polling sample while active.
+    accelerometer_data: id,
+}
+impl Default for CMMotionManagerHostObject {
+    fn default() -> Self {
+        Self {
+            accelerometer_active: false,
+            accelerometer_update_interval: DEFAULT_UPDATE_INTERVAL,
+            accelerometer_data: nil,
+        }
+    }
+}
+impl HostObject for CMMotionManagerHostObject {}
 
 pub const DYLIB: HostDylib = HostDylib {
     path: "/System/Library/Frameworks/CoreMotion.framework/CoreMotion",
@@ -20,7 +69,51 @@ const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
+@implementation CMLogItem: NSObject
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    env.objc.alloc_object(this, Box::<CMLogItemHostObject>::default(), &mut env.mem)
+}
+
+- (NSTimeInterval)timestamp {
+    env.objc.borrow::<CMLogItemHostObject>(this).timestamp
+}
+
+- (())dealloc {
+    env.objc.dealloc_object(this, &mut env.mem);
+}
+
+@end
+
+@implementation CMAccelerometerData: CMLogItem
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    env.objc.alloc_object(
+        this,
+        Box::<CMAccelerometerDataHostObject>::default(),
+        &mut env.mem,
+    )
+}
+
+- (CMAcceleration)acceleration {
+    env.objc.borrow::<CMAccelerometerDataHostObject>(this).acceleration
+}
+
+- (())dealloc {
+    env.objc.dealloc_object(this, &mut env.mem);
+}
+
+@end
+
 @implementation CMMotionManager: NSObject
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    env.objc.alloc_object(
+        this,
+        Box::<CMMotionManagerHostObject>::default(),
+        &mut env.mem,
+    )
+}
 
 - (bool)isGyroAvailable {
     // It could make sense to implement gyroscope support at least for Android.
@@ -39,6 +132,91 @@ const CLASSES: ClassExports = objc_classes! {
     // can still return false if the device isn't ready to produce data yet.
     // Here we always return true since we don't model that readiness state.
     true
+}
+
+- (())startAccelerometerUpdates {
+    let already_active = env
+        .objc
+        .borrow::<CMMotionManagerHostObject>(this)
+        .accelerometer_active;
+    if already_active {
+        return;
+    }
+
+    if let Some(window) = env.window.as_ref() {
+        window.print_accelerometer_notice(&env.options);
+    }
+    let data_class = env
+        .objc
+        .get_known_class("CMAccelerometerData", &mut env.mem);
+    let data = env.objc.alloc_object(
+        data_class,
+        Box::<CMAccelerometerDataHostObject>::default(),
+        &mut env.mem,
+    );
+    let host = env.objc.borrow_mut::<CMMotionManagerHostObject>(this);
+    host.accelerometer_active = true;
+    host.accelerometer_data = data;
+}
+
+- (())stopAccelerometerUpdates {
+    let data = {
+        let host = env.objc.borrow_mut::<CMMotionManagerHostObject>(this);
+        host.accelerometer_active = false;
+        std::mem::replace(&mut host.accelerometer_data, nil)
+    };
+    release(env, data);
+}
+
+- (bool)isAccelerometerActive {
+    env.objc
+        .borrow::<CMMotionManagerHostObject>(this)
+        .accelerometer_active
+}
+
+- (NSTimeInterval)accelerometerUpdateInterval {
+    env.objc
+        .borrow::<CMMotionManagerHostObject>(this)
+        .accelerometer_update_interval
+}
+
+- (())setAccelerometerUpdateInterval:(NSTimeInterval)interval {
+    // A zero interval is documented as requesting the platform default. Clamp
+    // invalid/high-frequency requests to the same 60 Hz floor as UIAccelerometer.
+    let interval = if interval <= 0.0 {
+        DEFAULT_UPDATE_INTERVAL
+    } else {
+        interval.max(DEFAULT_UPDATE_INTERVAL)
+    };
+    env.objc
+        .borrow_mut::<CMMotionManagerHostObject>(this)
+        .accelerometer_update_interval = interval;
+}
+
+- (id)accelerometerData {
+    let data = {
+        let host = env.objc.borrow::<CMMotionManagerHostObject>(this);
+        if !host.accelerometer_active {
+            return nil;
+        }
+        host.accelerometer_data
+    };
+    let (x, y, z, timestamp) = sample_acceleration(env);
+    *env.objc.borrow_mut::<CMAccelerometerDataHostObject>(data) =
+        CMAccelerometerDataHostObject {
+            superclass: CMLogItemHostObject { timestamp },
+            acceleration: CMAcceleration { x, y, z },
+        };
+    data
+}
+
+- (())dealloc {
+    let data = env
+        .objc
+        .borrow::<CMMotionManagerHostObject>(this)
+        .accelerometer_data;
+    release(env, data);
+    env.objc.dealloc_object(this, &mut env.mem);
 }
 
 @end

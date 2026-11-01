@@ -113,6 +113,11 @@ int test_object_getInstanceVariable(void) {
   if (type == 0 || strcmp(type, "@") != 0 || ivar_getTypeEncoding(0) != 0) {
     return -4;
   }
+  ptrdiff_t expected_offset =
+      (char *)&instance->instanceVariable - (char *)instance;
+  if (ivar_getOffset(ivar) != expected_offset || ivar_getOffset(0) != 0) {
+    return -5;
+  }
   [instance release];
   return 0;
 }

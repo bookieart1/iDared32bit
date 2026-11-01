@@ -3526,3 +3526,37 @@ behavior remains pending.
 
 Verification: `outputs/iDared-Dev-1.79.verification.json`. **Physical-device
 testing is pending; compilation does not establish compatibility.**
+
+## Dev 1.79 device result and Dev 1.80 fourth-stage contracts (candidate)
+
+The complete Dev 1.79 device log is preserved as
+`outputs/device-logs/iDared-Dev-1.79-device-results.txt`: 781,817 bytes,
+SHA-256
+`9c8c2c78d2cef030b7a14b63ec082ad4a1246499f4ea671f1198064cdfa1c5cc`.
+It embeds implementation source `4de150e7` and workflow `41289274667`; the
+universal bounded recorder is active for every relevant launch.
+
+| App | Dev 1.79 result | Current classification / Dev 1.80 contract |
+|---|---|---|
+| Blot | Smooth play through death and clean Home return after 60.495 s, 3,521 loops and 2,649 EAGL returns. | **Regression pass in stated scope.** No change. |
+| Dark Nebula 2 | Smooth menu; level loading reaches missing `_ivar_getOffset` after 6.842 s, 350 loops and 178 EAGL returns. | **Partial.** Implement the standard runtime offset lookup over stable guest ivar metadata, including null-handle behavior. |
+| Dirt | Smooth traversal through several areas, pause/resume, Home exit, relaunch and saved-position recovery. Clean launches lasted 113.893 s / 6,781 loops / 6,779 EAGL returns and 5.297 s / 293 loops / 292 returns. | **Working checkpoint in the tested scope.** Dev 1.79's archive contract is device-validated; broader levels/mechanics remain untested. No change. |
+| Glowfish | Valid `CMMotionManager` reaches missing `startAccelerometerUpdates` after 1.042 s, before a loop/frame. | **Startup-blocked.** Implement bounded polling accelerometer state using the existing real/simulated sensor source. |
+| Glowfish HD | Same valid-manager blocker after 1.467 s, before a loop/frame. | **Startup-blocked; corroborates Glowfish.** Same shared Core Motion contract. |
+| Hamlet | Valid `UINavigationController` reaches missing `navigationItem` after 113 ms, before a loop/frame. | **Startup-blocked.** Implement lazy stable `UINavigationItem` ownership and core historical state; bar rendering/animation remain out of scope. |
+| Parachute Ninja | Reaches a genuine offline error, but unresolved `_NSErrorFailingURLStringKey` and `_NSURLErrorDomain` make guest error handling dereference a null global after 104 ms. | **Startup-blocked.** Export historical URL-error constants and attach failed-URL metadata without fabricating network success. |
+| Spoing | Smooth and clean Home return after 46.129 s, 1,392 loops and 642 EAGL returns. | **Regression pass in stated scope.** No change. |
+
+Dev 1.80 implements these four shared contracts without app identifiers,
+permissive pointer handling, swallowed failures, diagnostic changes or save
+mutation. Focused guest source coverage was added for runtime offsets, polling
+Core Motion and struct ABI, navigation identity/ownership/title propagation,
+and URL-error constants/user-info. The development workflow still skips the
+guest executable; hosted library tests, iOS compilation, package verification
+and physical-device results must therefore remain separate.
+
+Predicted focused retest: Blot, Dark Nebula 2, Dirt, Glowfish, Glowfish HD,
+Hamlet, Parachute Ninja and Spoing, alphabetically and without deleting saves.
+Engineering detail:
+`dev-docs/compatibility-1.80-fourth-stage-contracts.md`. **Build and physical
+device verification are pending.**

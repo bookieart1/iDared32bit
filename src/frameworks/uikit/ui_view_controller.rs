@@ -39,6 +39,10 @@ struct UIViewControllerHostObject {
     /// of the nib by name, may be nil.
     /// `NSBundle*`
     bundle: id,
+    /// Copied NSString title, independently owned by the controller.
+    title: id,
+    /// Lazily-created UINavigationItem, retained for the controller lifetime.
+    navigation_item: id,
     /// The view controller this one presents modally, retained.
     modal_view_controller: id,
     /// The view controller presenting this one modally. Weak.
@@ -90,6 +94,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         view,
         nib_name,
         bundle,
+        title,
+        navigation_item,
         modal_view_controller,
         ..
     } = env.objc.borrow(this);
@@ -101,6 +107,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, view);
     release(env, nib_name);
     release(env, bundle);
+    release(env, title);
+    release(env, navigation_item);
 
     env.objc.dealloc_object(this, &mut env.mem);
 }
@@ -198,7 +206,35 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setTitle:(id)title { // NSString *
-    todo_objc_setter!(this, to_rust_string(env, title));
+    let title: id = msg![env; title copy];
+    let (old_title, navigation_item) = {
+        let host = env.objc.borrow_mut::<UIViewControllerHostObject>(this);
+        (std::mem::replace(&mut host.title, title), host.navigation_item)
+    };
+    release(env, old_title);
+    if navigation_item != nil {
+        () = msg![env; navigation_item setTitle:title];
+    }
+}
+- (id)title {
+    env.objc.borrow::<UIViewControllerHostObject>(this).title
+}
+- (id)navigationItem {
+    let existing = env
+        .objc
+        .borrow::<UIViewControllerHostObject>(this)
+        .navigation_item;
+    if existing != nil {
+        return existing;
+    }
+
+    let title = env.objc.borrow::<UIViewControllerHostObject>(this).title;
+    let item: id = msg_class![env; UINavigationItem alloc];
+    let item: id = msg![env; item initWithTitle:title];
+    env.objc
+        .borrow_mut::<UIViewControllerHostObject>(this)
+        .navigation_item = item;
+    item
 }
 - (())setEditing:(bool)editing {
     todo_objc_setter!(this, editing);
