@@ -307,11 +307,15 @@ public func idaredRequestHostOrientation(_ rawOrientation: Int32) {
             )
         }
     }
-    // Rust sets SDL's orientation hint immediately before constructing the
-    // game window. Even on the main thread, defer the scene request one turn
-    // so it sees SDL's newly installed root view controller instead of the
-    // picker that has just been dismissed.
-    DispatchQueue.main.async(execute: update)
+    // A synchronous request on the UIKit thread is required here. Deferring
+    // the geometry update until after SDL replaces the root controller caused
+    // later native text-alert presentation to terminate the host process on
+    // current iOS. Background callers still marshal the request to UIKit.
+    if Thread.isMainThread {
+        update()
+    } else {
+        DispatchQueue.main.async(execute: update)
+    }
 }
 
 /// Rust's images are premultiplied RGBA, top row first.

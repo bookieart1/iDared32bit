@@ -17,6 +17,7 @@ pub struct UISliderHostObject {
     value: f32,
     minimum_value: f32,
     maximum_value: f32,
+    continuous: bool,
 }
 impl_HostObject_with_superclass!(UISliderHostObject);
 impl Default for UISliderHostObject {
@@ -26,6 +27,7 @@ impl Default for UISliderHostObject {
             value: 0.0,
             minimum_value: 0.0,
             maximum_value: 1.0,
+            continuous: true,
         }
     }
 }
@@ -88,6 +90,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setValue:value];
 }
 
+- (bool)isContinuous {
+    env.objc.borrow::<UISliderHostObject>(this).continuous
+}
+
+- (())setContinuous:(bool)continuous {
+    env.objc.borrow_mut::<UISliderHostObject>(this).continuous = continuous;
+}
+
 - (())setThumbImage:(id)img
           forState:(UIControlState)state {
     log!("TODO: [(UISlider*){:?} setThumbImage:{:?} forState:{}]", this, img, state);
@@ -108,3 +118,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Environment;
+
+    #[test]
+    fn slider_continuous_state_defaults_true_and_round_trips() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let slider: id = msg_class![env; UISlider new];
+        assert!(msg![env; slider isContinuous]);
+        () = msg![env; slider setContinuous:false];
+        assert!(!msg![env; slider isContinuous]);
+    }
+}

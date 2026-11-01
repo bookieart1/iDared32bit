@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: November 1, 2026
-Latest device-tested checkpoint: **iDared Dev 1.82** (`99580ce`; focused device result; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.83** (`7d6a55e`; hosted tests and package verified; physical-device testing pending)
-Current activity: **Dev 1.82 device testing keeps Blot, Dirt and two normal Spoing launches healthy. Dark Nebula 2 now reaches missing `removeObjectsAtIndexes:` and Glowfish reaches missing `keysSortedByValueUsingSelector:`. Glowfish HD still reports an absent bundled level file before its genuine abort; Parachute Ninja remains at the invalid UIApplication-as-error callback argument. Every launch proves the Dev 1.82 host-orientation bridge was unavailable, explaining why the Glowfish HD keyboard and Hamlet's first presentation did not change. Screenshot review preserved iDared but deliberately ended the guest under the Dev 1.82 fallback. Dev 1.83 implements the two general Foundation contracts, replaces the failed dynamic orientation lookup with direct callback registration, and pauses/resumes the same guest across transient host interruptions. The universal recorder remains unchanged. Hosted validation and the downloaded package are verified; physical results are not yet claimed.**
+Latest device-tested checkpoint: **iDared Dev 1.84** (`e5045fb`; three-part focused result; Dev 1.71 remains the latest full-catalog survey)
+Latest built checkpoint: **iDared Dev 1.84** (`e5045fb`; hosted tests, package and physical-device result verified)
+Current activity: **Dev 1.85 is implementing four bounded shared contracts: `NSDate` keyed encoding for Glowfish, `UISlider.setContinuous:` for Toy Bot 1/2 with Crazy Golf as a regression, `UIFont.fontName` for Fragger/Cube, and run-loop target cancellation for Rolando/junny. Dev 1.84's deferred host-orientation request did not improve Hamlet or Glowfish HD and correlated with two reproducible whole-host exits at native keyboard presentation, so the ordering change is reverted to the Dev 1.83 keyboard-safe path. Parachute Ninja remains strict at a real UIApplication supplied as an error-like callback value; no selector fabrication is included. Blot and Spoing remain healthy, Dirt was not retested in this split run, and the universal recorder remains unchanged.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3824,3 +3824,51 @@ suppression, save mutation or permissive invalid-object behavior is included.
 
 Engineering detail and focused no-save-reset procedure:
 `dev-docs/compatibility-1.84-eighth-stage-contracts-and-orientation-ordering.md`.
+
+## Additional Dev 1.82 and Dev 1.83 new-game samples
+
+Two November 1 samples are preserved without altering the Dev 1.71 historical
+survey. The Dev 1.82 sample embeds `99580ce5` / workflow `41298463255`; the Dev
+1.83 sample embeds `7d6a55e` / workflow `41300999509`. The universal bounded
+recorder operated for every decrypted title that entered CPU emulation.
+
+| Result family | Apps and evidence |
+|---|---|
+| Working checkpoints in observed scope | Bumpy Road (clean Home; no logged random crash), Oscura (two clean launches), RastaMonkey, Snail Mail and Sway (two clean launches), supported by the user's gameplay/menu observations. |
+| Exact shared missing contracts | Fragger / Cube: `UIFont.fontName`; SpaceMnkey / Zombie Attack! 2nd Wave: `_mbsrtowcs`; SUPERFALL / Silverfish: `NSNumberFormatter`; Rolando / junny: run-loop cancellation; Toy Bot 1 and 2 / Crazy Golf: `UISlider.setContinuous:`. |
+| Exact shared subsystem boundaries | 1000:Find'Em / Glyder / Glyder 2 / JumpO'Clock: detached-view/window conversion; decrypted 8bitninja / DoDoFly: Core Foundation dictionary capacity/callback semantics; JellyCar 3 / Decoloro: `UINavigationBar`. |
+| New explicit general blockers | Max & the Magic Marker: `_nl_langinfo`; Peggle: localized `NSBundle` resource lookup; Ragdoll 3: `hw.activecpu`. |
+| Origin still unresolved | Slingshot: null dereference after an `objectAtIndex:` path; Topple: nil `If-None-Match` value after an unavailable service request; Topple 2: untracked receiver during Objective-C class initialization. These are not permission to weaken checks. |
+| Not a compatibility result | 8bitninja 1.4 is encrypted and never entered CPU emulation. |
+
+The complete analysis, implementation boundaries and exact per-app metrics are
+in `dev-docs/compatibility-new-game-samples-2026-11-01.md`. Archived logs:
+`outputs/device-logs/iDared-Dev-1.82-new-game-sample-2026-11-01.txt` and
+`outputs/device-logs/iDared-Dev-1.83-new-game-sample-2026-11-01.txt`.
+Machine-readable inventory:
+`outputs/iDared-new-game-samples-2026-11-01.csv`.
+
+## Dev 1.84 device result and Dev 1.85 ninth-stage contracts
+
+The three complete Dev 1.84 logs are preserved under `outputs/device-logs/`.
+They embed source `e5045fb063ce2d0c0b8f870ac29feae79c43510f`, workflow
+`41303668226`, and the unchanged universal bounded recorder.
+
+| App / family | Dev 1.84 evidence | Dev 1.85 action / boundary |
+|---|---|---|
+| Blot | Played normally; clean Home return. | Regression pass in stated scope. |
+| Dark Nebula 2 | Completed a level; whole iDared process ended when name entry was requested. Log ends after text-field configuration without a guest panic. | Revert the failed deferred scene-ordering change to the Dev 1.83 keyboard-safe path. No post-name score-flow claim yet. |
+| Dirt | Not retested in these split logs; preceding expanded checkpoint remains working. | No change; focused regression. |
+| Glowfish | Valid `NSDate` receives missing `encodeWithCoder:` during keyed archival after 1.321 s, before a main loop. | Implement standard `NS.time` double encoding and the matching archiver primitive. |
+| Glowfish HD | Menu reached; requesting name entry reproducibly ended the whole host without a guest panic. | Same host-ordering rollback. Genuine absent level resource remains separate and will not be fabricated. |
+| Hamlet | Runs after unchanged initial rotated/cropped presentation. | Orientation defect remains open; do not retain the regressive ordering attempt. |
+| Parachute Ninja | Offline paths culminate in `domain` sent to a real `UIApplication`. | Origin unresolved; strict behavior retained. No invalid-object accommodation. |
+| Spoing | Normal play and clean Home return. | Regression pass in stated scope. |
+| Toy Bot / Toy Bot 2 / Crazy Golf | Survey logs share missing `UISlider.setContinuous:`; Crazy Golf already has a working gameplay checkpoint. | Store the historical continuous flag; rendering remains incomplete. Crazy Golf is a regression/extended-path test, not a nonworking title. |
+| Fragger / Cube | Exact shared missing `UIFont.fontName`; Fragger had already reached a functional menu. | Preserve stable public font identity across resizing. |
+| Rolando / junny | Exact shared missing `NSRunLoop.cancelPerformSelectorsWithTarget:`. | Cancel matching queued targets with correct retain and waiter cleanup. |
+
+Implementation rationale, limitations, log hashes and predictions are in
+`dev-docs/compatibility-1.85-ninth-stage-shared-contracts.md`. This candidate
+contains no game-identifier branch, network-success fabrication, missing-file
+fabrication, relaxed memory check, save reset, or diagnostic redesign.

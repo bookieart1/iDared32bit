@@ -104,6 +104,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+- (())cancelPerformSelectorsWithTarget:(id)target {
+    cancel_all_perform_requests_for_target(env, this, target);
+}
+
 - (())addTimer:(id)timer // NSTimer*
        forMode:(NSRunLoopMode)mode {
     let default_mode = ns_string::get_static_str(env, NSDefaultRunLoopMode);
@@ -388,6 +392,35 @@ pub(super) fn cancel_perform_requests(
         .selector_objects = new_selector_objects;
 }
 
+/// Cancels every pending perform request for a target on this run loop. This
+/// is the contract behind `-[NSRunLoop cancelPerformSelectorsWithTarget:]`.
+/// Target matching is by object identity; retained targets and arguments are
+/// released and synchronous waiters are signalled just like the selective
+/// cancellation path.
+fn cancel_all_perform_requests_for_target(env: &mut Environment, run_loop: id, target: id) {
+    let mut kept = VecDeque::new();
+    let mut pending = std::mem::take(
+        &mut env
+            .objc
+            .borrow_mut::<NSRunLoopHostObject>(run_loop)
+            .selector_objects,
+    );
+    while let Some(request) = pending.pop_front() {
+        if request.target != target {
+            kept.push_back(request);
+            continue;
+        }
+        release(env, request.target);
+        release(env, request.argument);
+        if !request.semaphore.is_null() {
+            sem_post(env, request.semaphore);
+        }
+    }
+    env.objc
+        .borrow_mut::<NSRunLoopHostObject>(run_loop)
+        .selector_objects = kept;
+}
+
 /// For use by `CFRunLoopStop`.
 pub fn stop_run_loop(env: &mut Environment, run_loop: id) {
     env.objc.borrow_mut::<NSRunLoopHostObject>(run_loop).stopped = true;
@@ -637,4 +670,30 @@ pub(super) fn run_loop_for_thread(env: &mut Environment, this: Class, thread_id:
         .foundation
         .ns_run_loop
         .run_loop
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancel_perform_selectors_with_target_removes_only_that_target() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let run_loop: id = msg_class![env; NSRunLoop currentRunLoop];
+        let first: id = msg_class![env; NSObject new];
+        let second: id = msg_class![env; NSObject new];
+        let selector = env
+            .objc
+            .register_host_selector("description".to_owned(), &mut env.mem);
+        add_perform_request(env, run_loop, first, selector, nil, Some(10.0), false);
+        add_perform_request(env, run_loop, second, selector, nil, Some(10.0), false);
+        () = msg![env; run_loop cancelPerformSelectorsWithTarget:first];
+        let queued = &env
+            .objc
+            .borrow::<NSRunLoopHostObject>(run_loop)
+            .selector_objects;
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].target, second);
+    }
 }

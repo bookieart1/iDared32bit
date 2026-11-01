@@ -152,6 +152,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     decode_current_date(env, coder)
 }
 
+- (())encodeWithCoder:(id)coder {
+    let key = super::ns_string::get_static_str(env, "NS.time");
+    let time_interval = env.objc.borrow::<NSDateHostObject>(this).time_interval;
+    () = msg![env; coder encodeDouble:time_interval forKey:key];
+}
+
 - (NSTimeInterval)timeIntervalSinceDate:(id)anotherDate {
     assert!(!anotherDate.is_null());
     let host_object = env.objc.borrow::<NSDateHostObject>(this);
@@ -234,3 +240,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Environment;
+
+    #[test]
+    fn date_keyed_archive_round_trip_preserves_reference_interval() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let date: id = msg_class![env; NSDate dateWithTimeIntervalSinceReferenceDate:12345.25f64];
+        let data: id = msg_class![env; NSKeyedArchiver archivedDataWithRootObject:date];
+        let decoded: id = msg_class![env; NSKeyedUnarchiver unarchiveObjectWithData:data];
+        let actual: f64 = msg![env; decoded timeIntervalSinceReferenceDate];
+        assert_eq!(actual, 12345.25);
+    }
+}

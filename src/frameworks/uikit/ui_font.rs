@@ -9,7 +9,7 @@ use super::ui_graphics::UIGraphicsGetCurrentContext;
 use crate::font::{Font, TextAlignment, WrapMode};
 use crate::frameworks::core_graphics::cg_bitmap_context::CGBitmapContextDrawer;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
-use crate::frameworks::foundation::ns_string::to_rust_string;
+use crate::frameworks::foundation::ns_string::{from_rust_string, to_rust_string};
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
     autorelease, id, msg, msg_super, objc_classes, retain, ClassExports, HostObject,
@@ -26,7 +26,7 @@ pub(super) struct State {
     /// references. Several older apps keep system-font pointers across an
     /// autorelease-pool drain, matching the long-lived instances used by the
     /// historical UIKit implementation.
-    ui_fonts: HashMap<(id, FontKind, u32), id>,
+    ui_fonts: HashMap<(id, FontKind, u32, String), id>,
     sans_regular_ja: Option<Font>,
     sans_bold_ja: Option<Font>,
     marker_felt: Option<Font>,
@@ -88,6 +88,7 @@ struct DeallocatedFont {
 struct UIFontHostObject {
     size: CGFloat,
     kind: FontKind,
+    name: String,
 }
 impl HostObject for UIFontHostObject {}
 
@@ -136,30 +137,41 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)systemFontOfSize:(CGFloat)size {
-    cached_font(env, this, FontKind::SansRegular, size)
+    cached_font(env, this, FontKind::SansRegular, size, "Helvetica".to_owned())
 }
 + (id)boldSystemFontOfSize:(CGFloat)size {
-    cached_font(env, this, FontKind::SansBold, size)
+    cached_font(env, this, FontKind::SansBold, size, "Helvetica-Bold".to_owned())
 }
 + (id)italicSystemFontOfSize:(CGFloat)size {
-    cached_font(env, this, FontKind::SansItalic, size)
+    cached_font(env, this, FontKind::SansItalic, size, "Helvetica-Oblique".to_owned())
 }
 + (id)fontWithName:(id)fontName // NSString*
             size:(CGFloat)fontSize {
     let font_name = to_rust_string(env, fontName).to_string();
-    let kind = get_app_font(env, &font_name).or_else(|| {
+    let (kind, resolved_name) = get_app_font(env, &font_name)
+        .map(|kind| (kind, font_name.clone()))
+        .or_else(|| {
             get_equivalent_font(&font_name)
-        }).unwrap_or_else(|| {
+                .map(|kind| (kind, font_name.clone()))
+        })
+        .unwrap_or_else(|| {
             log!("No replacement found for font {}. Using system font instead.", font_name);
-            FontKind::SansRegular
+            (FontKind::SansRegular, "Helvetica".to_owned())
         });
-    cached_font(env, this, kind, fontSize)
+    cached_font(env, this, kind, fontSize, resolved_name)
 }
 
 - (id)fontWithSize:(CGFloat)size {
     let kind = env.objc.borrow::<UIFontHostObject>(this).kind;
+    let name = env.objc.borrow::<UIFontHostObject>(this).name.clone();
     let class = msg![env; this class];
-    cached_font(env, class, kind, size)
+    cached_font(env, class, kind, size, name)
+}
+
+- (id)fontName {
+    let name = env.objc.borrow::<UIFontHostObject>(this).name.clone();
+    let name = from_rust_string(env, name);
+    autorelease(env, name)
 }
 
 - (CGFloat)pointSize {
@@ -217,6 +229,23 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn font_name_and_resized_font_preserve_public_identity() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let font: id = msg_class![env; UIFont boldSystemFontOfSize:17.0f32];
+        let name: id = msg![env; font fontName];
+        assert_eq!(to_rust_string(env, name), "Helvetica-Bold");
+        let resized: id = msg![env; font fontWithSize:24.0f32];
+        let resized_name: id = msg![env; resized fontName];
+        assert_eq!(to_rust_string(env, resized_name), "Helvetica-Bold");
+    }
+}
+
 /// Return an immutable UIFont flyweight at +0 while the framework cache owns
 /// one retain. This models the long-lived system-font objects used by old
 /// UIKit without fabricating a font after a genuine use-after-free.
@@ -225,8 +254,9 @@ fn cached_font(
     class: id,
     kind: FontKind,
     size: CGFloat,
+    name: String,
 ) -> id {
-    let key = (class, kind, size.to_bits());
+    let key = (class, kind, size.to_bits(), name.clone());
     let cached = env
         .framework_state
         .uikit
@@ -242,7 +272,7 @@ fn cached_font(
         env.framework_state.uikit.ui_font.ui_fonts.remove(&key);
     }
 
-    let host_object = UIFontHostObject { size, kind };
+    let host_object = UIFontHostObject { size, kind, name };
     let font = env
         .objc
         .alloc_object(class, Box::new(host_object), &mut env.mem);
