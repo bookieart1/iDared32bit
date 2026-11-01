@@ -102,6 +102,42 @@ Predictions:
   held edge touch no longer reverses after entering a black bar.
 - Blot and Spoing retain their stated behavior.
 
+## Verified delivery
+
+- Final implementation commit:
+  `178cc5197ebc80415538d12aaa6458d3a3e47abc`. The fifth-stage runtime and
+  picker work is in parent commit `bb95d1e0147150f0784f1d0b77f3c59184adf0f4`;
+  the final commit adds the two general Dirt input contracts.
+- [Hosted tests 41294836579](https://github.com/bookieart1/iDared32bit/actions/runs/41294836579)
+  completed successfully at the job level. macOS x86_64 and Windows each ran
+  **132/132 passing library tests**; the two bounded diagnostic reproducers
+  each passed their one selected test. The allowed-to-fail lint step still
+  reports only two overlong comments (`src/libc/dlfcn.rs:61` and
+  `src/frameworks/foundation/ns_dictionary.rs:563`). The development workflow
+  skips the guest executable integration and native macOS guest sanity steps.
+  Android cross-compilation is not claimed because its allowed lint failure
+  occurs before a reliable cross-compilation result.
+- [IPA build 41294836557](https://github.com/bookieart1/iDared32bit/actions/runs/41294836557)
+  completed arm64 iOS compilation, development-identity checks, unsigned
+  packaging and artifact upload. Artifact `13078298211` is named
+  `iDared32bit-dev-unsigned-178cc5197ebc80415538d12aaa6458d3a3e47abc`.
+  Its downloaded ZIP SHA-256
+  `910b341dbc0dcb4616939aa82936474c869b3e443aa67057e32343f3cf348634`
+  matches GitHub's published digest.
+- Local `outputs/iDared-Dev-1.81.ipa` is 19,924,279 bytes with SHA-256
+  `30880c66ca5c286f8e872efcf8aa969f6e6bbc4c26805dc85e5cbc8d4e0a82f8`.
+  All 36 archive entries passed CRC validation. The package contains one
+  arm64 executable, has no Mach-O code-signature command, provisioning profile
+  or `_CodeSignature` directory, and retains bundle identity
+  `com.bookieart1.idared32bit.dev` / `iDared Dev`. Embedded markers confirm
+  source `178cc51`, workflow `41294836557`, the universal flight recorder, all
+  three fifth-stage contracts, picker page persistence, physical-orientation
+  updates and viewport touch clamping.
+
+Verification record: `outputs/iDared-Dev-1.81.verification.json`. Package and
+hosted-test verification do not establish physical-device compatibility; every
+prediction above remains pending the focused iPhone run.
+
 ## Focused device procedure
 
 Without deleting saves:

@@ -2,8 +2,8 @@
 
 Last reconciled: November 1, 2026
 Latest device-tested checkpoint: **iDared Dev 1.80** (`764d60e`; focused multi-log result; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.80** (`764d60e`; verified package and now device-tested)
-Current activity: **Dev 1.81 implements the next three shared contracts exposed by Dev 1.80—raw Objective-C ivar assignment, `dispatch_once`, and the pointer-array `NSDictionary` constructor—and improves native picker paging/last-page continuity. A later Dirt observation narrows its status from working to partial: traversal/save recovery work, but physical rotation does not change gravity and a held touch can reverse after leaving the guest viewport. Dev 1.81 therefore also implements accelerometer-derived `UIDevice` physical-orientation notifications and clamps physical touches to the original screen boundary. Hamlet is working in the observed scope; Blot and Spoing remain healthy checkpoints. Parachute Ninja is deliberately unchanged because its `UIApplication`-as-error callback argument is an origin problem, not a missing `domain` API. Compilation, package verification and physical-device behavior are pending.**
+Latest built checkpoint: **iDared Dev 1.81** (`178cc51`; verified package, device testing pending)
+Current activity: **Dev 1.81 implements the next three shared contracts exposed by Dev 1.80—raw Objective-C ivar assignment, `dispatch_once`, and the pointer-array `NSDictionary` constructor—and improves native picker paging/last-page continuity. A later Dirt observation narrows its status from working to partial: traversal/save recovery work, but physical rotation does not change gravity and a held touch can reverse after leaving the guest viewport. Dev 1.81 therefore also implements accelerometer-derived `UIDevice` physical-orientation notifications and clamps physical touches to the original screen boundary. Hamlet is working in the observed scope; Blot and Spoing remain healthy checkpoints. Parachute Ninja is deliberately unchanged because its `UIApplication`-as-error callback argument is an origin problem, not a missing `domain` API. Hosted tests, iOS compilation and package verification have passed within the qualified boundaries recorded below; physical-device behavior remains pending.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3629,7 +3629,34 @@ original touchscreen bounds; controller-synthesized points are unchanged.
 These predict working gravity rotation and no direction reversal when a held
 finger enters a black bar, but both remain unverified on the iPhone.
 
-Implementation status is **candidate** until CI and package verification pass.
-The focused retest is Blot, Dark Nebula 2, Dirt, Glowfish, Glowfish HD, Hamlet,
-Parachute Ninja and Spoing, followed by one slow picker swipe and page-return /
-process-restart continuity check. No save reset is requested.
+### Dev 1.81 verified delivery
+
+- Final implementation commit:
+  `178cc5197ebc80415538d12aaa6458d3a3e47abc`; parent `bb95d1e0` contains the
+  fifth-stage runtime and picker work, and the final commit contains the two
+  general Dirt input corrections.
+- [Hosted tests 41294836579](https://github.com/bookieart1/iDared32bit/actions/runs/41294836579):
+  **132/132 library tests passed on macOS x86_64 and 132/132 on Windows**.
+  Both selected diagnostic reproducers passed. The job-level green result is
+  qualified: lint remains allowed to fail and reports the same two overlong
+  comments at `src/libc/dlfcn.rs:61` and
+  `src/frameworks/foundation/ns_dictionary.rs:563`; guest executable and
+  native macOS guest sanity steps are skipped in development; Android
+  cross-compilation is not claimed after the allowed lint failure.
+- [IPA build 41294836557](https://github.com/bookieart1/iDared32bit/actions/runs/41294836557):
+  arm64 compilation, separate development identity, unsigned packaging and
+  upload passed. Artifact `13078298211`; downloaded ZIP SHA-256
+  `910b341dbc0dcb4616939aa82936474c869b3e443aa67057e32343f3cf348634`
+  matches GitHub's published digest.
+- Local `outputs/iDared-Dev-1.81.ipa`, 19,924,279 bytes, SHA-256
+  `30880c66ca5c286f8e872efcf8aa969f6e6bbc4c26805dc85e5cbc8d4e0a82f8`,
+  passed CRC, arm64 Mach-O, separate identity and unsigned-package checks. It
+  embeds source `178cc51`, workflow `41294836557`, the universal recorder and
+  the new contract/input markers.
+
+Verification: `outputs/iDared-Dev-1.81.verification.json`. Implementation and
+package status are verified within those boundaries; **physical-device results
+are pending**. The focused retest is Blot, Dark Nebula 2, Dirt, Glowfish,
+Glowfish HD, Hamlet, Parachute Ninja and Spoing, followed by one slow picker
+swipe and page-return/process-restart continuity check. No save reset is
+requested.
