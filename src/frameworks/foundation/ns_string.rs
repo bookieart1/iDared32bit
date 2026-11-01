@@ -1489,6 +1489,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setString:new];
 }
 
+- (())insertString:(id)a_string // NSString*
+            atIndex:(NSUInteger)index {
+    assert_ne!(a_string, nil);
+    let range = NSRange { location: index, length: 0 };
+    () = msg![env; this replaceCharactersInRange:range withString:a_string];
+}
+
 - (())deleteCharactersInRange:(NSRange)range {
     let location = range.location;
     let length = range.length;
@@ -1900,6 +1907,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     let str = to_rust_string(env, a_string);
     let host_object = StringHostObject::Utf8(str);
     *env.objc.borrow_mut(this) = host_object;
+}
+
+- (())replaceCharactersInRange:(NSRange)range
+                     withString:(id)a_string { // NSString*
+    assert_ne!(a_string, nil);
+    let replacement: Vec<u16> = to_rust_string(env, a_string).encode_utf16().collect();
+    let host_object = env.objc.borrow_mut::<StringHostObject>(this);
+    let (units, did_convert) = host_object.convert_to_utf16_inplace();
+    if did_convert {
+        log_dbg!("[{:?} replaceCharactersInRange:withString:]: converted string to UTF-16", this);
+    }
+    let start: usize = range.location.try_into().unwrap();
+    let length: usize = range.length.try_into().unwrap();
+    let end = start.checked_add(length).unwrap();
+    assert!(start <= units.len() && end <= units.len());
+    units.splice(start..end, replacement);
 }
 
 - (id)substringWithRange:(NSRange)range {
@@ -2451,6 +2474,27 @@ mod ns_string_tests {
         let mut scalar = [0; 16];
         let written = utf32.copy_diagnostic_utf8(&mut scalar);
         assert_eq!(&scalar[..written], "A🚀�".as_bytes());
+    }
+
+    #[test]
+    fn mutable_string_insertion_and_replacement_use_utf16_indices() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let string: id = msg_class![env; NSMutableString new];
+        let initial = from_rust_string(env, "A🚀B".to_owned());
+        () = msg![env; string setString:initial];
+        release(env, initial);
+
+        let snowman = from_rust_string(env, "☃".to_owned());
+        let rocket_range = NSRange { location: 1, length: 2 };
+        () = msg![env; string replaceCharactersInRange:rocket_range withString:snowman];
+        let exclamation = from_rust_string(env, "!".to_owned());
+        () = msg![env; string insertString:exclamation atIndex:3u32];
+        assert_eq!(to_rust_string(env, string), "A☃B!");
+
+        release(env, exclamation);
+        release(env, snowman);
+        release(env, string);
     }
 
     #[test]

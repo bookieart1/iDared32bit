@@ -31,8 +31,14 @@ use crate::Environment;
 type CGInterpolationQuality = i32;
 
 type CGTextDrawingMode = i32;
-const kCGTextFill: CGTextDrawingMode = 0;
+pub(super) const kCGTextFill: CGTextDrawingMode = 0;
+const kCGTextStroke: CGTextDrawingMode = 1;
 const kCGTextFillStroke: CGTextDrawingMode = 2;
+const kCGTextInvisible: CGTextDrawingMode = 3;
+const kCGTextFillClip: CGTextDrawingMode = 4;
+const kCGTextStrokeClip: CGTextDrawingMode = 5;
+const kCGTextFillStrokeClip: CGTextDrawingMode = 6;
+const kCGTextClip: CGTextDrawingMode = 7;
 
 pub type CGBlendMode = i32;
 pub const kCGBlendModeNormal: CGBlendMode = 0;
@@ -244,6 +250,7 @@ type ContextState = (
     CGLineCap,                            // line cap
     (CGFloat, CGFloat, CGFloat, CGFloat), // RGB stroke color
     Vec<ClipPath>,                        // clipping path intersections
+    CGTextDrawingMode,                    // text drawing mode
 );
 
 pub(super) struct CGContextHostObject {
@@ -256,6 +263,7 @@ pub(super) struct CGContextHostObject {
     pub(super) blend_mode: CGBlendMode,
     /// Text transform.
     pub(super) text_transform: Option<CGAffineTransform>,
+    pub(super) text_drawing_mode: CGTextDrawingMode,
     /// Line/Path data
     pub(super) line_cap: CGLineCap,
     pub(super) line_width: CGFloat,
@@ -551,6 +559,7 @@ pub fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
         host_obj.line_cap,
         host_obj.rgb_stroke_color,
         host_obj.clip_paths.clone(),
+        host_obj.text_drawing_mode,
     ));
     CGFontRetain(env, env.objc.borrow::<CGContextHostObject>(context).font);
 }
@@ -572,6 +581,7 @@ pub fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
     host_obj.line_cap = state.5;
     host_obj.rgb_stroke_color = state.6;
     host_obj.clip_paths = state.7;
+    host_obj.text_drawing_mode = state.8;
 }
 
 fn CGContextSetInterpolationQuality(
@@ -622,11 +632,21 @@ fn CGContextSetFontSize(env: &mut Environment, context: CGContextRef, size: CGFl
 }
 
 fn CGContextSetTextDrawingMode(
-    _env: &mut Environment,
-    _context: CGContextRef,
+    env: &mut Environment,
+    context: CGContextRef,
     mode: CGTextDrawingMode,
 ) {
-    assert!(mode == kCGTextFill || mode == kCGTextFillStroke); // TODO: support other modes
+    assert!((kCGTextFill..=kCGTextClip).contains(&mode));
+    env.objc
+        .borrow_mut::<CGContextHostObject>(context)
+        .text_drawing_mode = mode;
+}
+
+fn text_mode_draws_fill(mode: CGTextDrawingMode) -> bool {
+    matches!(
+        mode,
+        kCGTextFill | kCGTextFillStroke | kCGTextFillClip | kCGTextFillStrokeClip
+    )
 }
 
 fn CGContextSetTextMatrix(
@@ -640,6 +660,23 @@ fn CGContextSetTextMatrix(
         .text_transform = Some(transform);
 }
 
+#[cfg(test)]
+mod text_drawing_mode_tests {
+    use super::*;
+
+    #[test]
+    fn only_modes_with_a_fill_component_rasterize_with_current_support() {
+        assert!(text_mode_draws_fill(kCGTextFill));
+        assert!(!text_mode_draws_fill(kCGTextStroke));
+        assert!(text_mode_draws_fill(kCGTextFillStroke));
+        assert!(!text_mode_draws_fill(kCGTextInvisible));
+        assert!(text_mode_draws_fill(kCGTextFillClip));
+        assert!(!text_mode_draws_fill(kCGTextStrokeClip));
+        assert!(text_mode_draws_fill(kCGTextFillStrokeClip));
+        assert!(!text_mode_draws_fill(kCGTextClip));
+    }
+}
+
 fn CGContextShowGlyphsAtPoint(
     env: &mut Environment,
     context: CGContextRef,
@@ -648,6 +685,27 @@ fn CGContextShowGlyphsAtPoint(
     glyphs: ConstPtr<CGGlyph>,
     count: GuestUSize,
 ) {
+    let text_drawing_mode = env
+        .objc
+        .borrow::<CGContextHostObject>(context)
+        .text_drawing_mode;
+    if matches!(text_drawing_mode, kCGTextInvisible | kCGTextClip) {
+        return;
+    }
+    if !text_mode_draws_fill(text_drawing_mode) {
+        if matches!(text_drawing_mode, kCGTextStroke | kCGTextStrokeClip) {
+            log!("TODO: stroke-only Core Graphics text drawing");
+        }
+        // Stroke-only modes are valid, but touchHLE does not rasterize them.
+        return;
+    }
+    if matches!(
+        text_drawing_mode,
+        kCGTextFillClip | kCGTextFillStrokeClip
+    ) {
+        log!("TODO: Core Graphics text clipping");
+    }
+
     let mut glyph_ids = Vec::new();
     for i in 0..count {
         let glyph_id = env.mem.read(glyphs + i);

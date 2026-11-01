@@ -399,6 +399,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     dictionary
 }
 
+- (())setValuesForKeysWithDictionary:(id)keyed_values { // NSDictionary*
+    assert_ne!(keyed_values, nil);
+    // allKeys is a snapshot, so this remains well-defined even if the source
+    // and receiver are the same mutable dictionary.
+    let keys: id = msg![env; keyed_values allKeys];
+    let count: NSUInteger = msg![env; keys count];
+    for index in 0..count {
+        let key: id = msg![env; keys objectAtIndex:index];
+        let value: id = msg![env; keyed_values objectForKey:key];
+        () = msg![env; this setValue:value forKey:key];
+    }
+}
+
 - (id)valueForUndefinedKey:(id)key { // NSString*
     // TODO: Raise NSUnknownKeyException.
     let class: Class = ObjC::read_isa(this, &env.mem);
@@ -762,5 +775,25 @@ mod tests {
 
         release(env, object);
         release(env, string);
+    }
+
+    #[test]
+    fn set_values_for_keys_with_dictionary_uses_normal_kvc_setters() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let source: id = msg_class![env; NSMutableDictionary new];
+        let target: id = msg_class![env; NSMutableDictionary new];
+        let key = from_rust_string(env, "score".to_owned());
+        let value = from_rust_string(env, "100".to_owned());
+        () = msg![env; source setObject:value forKey:key];
+
+        () = msg![env; target setValuesForKeysWithDictionary:source];
+        let copied: id = msg![env; target objectForKey:key];
+        assert_eq!(copied, value);
+
+        release(env, value);
+        release(env, key);
+        release(env, target);
+        release(env, source);
     }
 }

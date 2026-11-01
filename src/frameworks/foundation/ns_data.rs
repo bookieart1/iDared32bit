@@ -19,6 +19,7 @@ use crate::{msg_class, Environment};
 pub(super) struct NSDataHostObject {
     pub(super) bytes: MutVoidPtr,
     pub(super) length: NSUInteger,
+    capacity: NSUInteger,
     free_when_done: bool,
 }
 impl HostObject for NSDataHostObject {}
@@ -83,6 +84,7 @@ fn init_with_contents_of_file(
     let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
     host_object.bytes = alloc;
     host_object.length = size;
+    host_object.capacity = size;
     this
 }
 
@@ -97,6 +99,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = Box::new(NSDataHostObject {
         bytes: Ptr::null(),
         length: 0,
+        capacity: 0,
         free_when_done: true,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
@@ -182,9 +185,10 @@ pub const CLASSES: ClassExports = objc_classes! {
                    length:(NSUInteger)length
              freeWhenDone:(bool)free_when_done {
     let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
-    assert!(host_object.bytes.is_null() && host_object.length == 0);
+    assert!(host_object.bytes.is_null() && host_object.length == 0 && host_object.capacity == 0);
     host_object.bytes = bytes;
     host_object.length = length;
+    host_object.capacity = length;
     host_object.free_when_done = free_when_done;
     this
 }
@@ -192,11 +196,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithBytes:(ConstVoidPtr)bytes
               length:(NSUInteger)length {
     let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
-    assert!(host_object.bytes.is_null() && host_object.length == 0);
+    assert!(host_object.bytes.is_null() && host_object.length == 0 && host_object.capacity == 0);
     let alloc = env.mem.alloc(length);
     env.mem.memmove(alloc, bytes, length);
     host_object.bytes = alloc;
     host_object.length = length;
+    host_object.capacity = length;
     this
 }
 
@@ -386,16 +391,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-- (id)initWithCapacity:(NSUInteger)_capacity {
-    msg![env; this init]
+- (id)initWithCapacity:(NSUInteger)capacity {
+    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
+    assert!(host_object.bytes.is_null() && host_object.length == 0 && host_object.capacity == 0);
+    if capacity != 0 {
+        host_object.bytes = env.mem.alloc(capacity);
+        host_object.capacity = capacity;
+    }
+    this
 }
 
 - (id)initWithLength:(NSUInteger)length {
     let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
-    assert!(host_object.bytes.is_null() && host_object.length == 0);
+    assert!(host_object.bytes.is_null() && host_object.length == 0 && host_object.capacity == 0);
     let alloc = env.mem.calloc(length);
     host_object.bytes = alloc;
     host_object.length = length;
+    host_object.capacity = length;
     this
 }
 
@@ -407,12 +419,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())increaseLengthBy:(NSUInteger)add_len {
-    let &NSDataHostObject { bytes, length, .. } = env.objc.borrow(this);
-    let new_len = length + add_len;
-    let new_bytes = env.mem.realloc(bytes, new_len);
+    let &NSDataHostObject { bytes, length, capacity, .. } = env.objc.borrow(this);
+    let new_len = length.checked_add(add_len).unwrap();
+    let (new_bytes, new_capacity) = if new_len > capacity {
+        (env.mem.realloc(bytes, new_len), new_len)
+    } else {
+        (bytes, capacity)
+    };
+    if new_len > length {
+        env.mem.bytes_at_mut(new_bytes.cast(), new_len)[length as usize..].fill(0);
+    }
     let host = env.objc.borrow_mut::<NSDataHostObject>(this);
     host.length = new_len;
     host.bytes = new_bytes;
+    host.capacity = new_capacity;
     log_dbg!("increaseLengthBy bytes {:?}, new_bytes {:?}; length {}, new_len {}", bytes, new_bytes, length, new_len);
 }
 
@@ -442,14 +462,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setLength:(NSUInteger)new_length {
-    let &NSDataHostObject {bytes, length, .. } = env.objc.borrow(this);
-    let new_bytes = env.mem.realloc(bytes, new_length);
+    let &NSDataHostObject {bytes, length, capacity, .. } = env.objc.borrow(this);
+    let (new_bytes, new_capacity) = if new_length > capacity {
+        (env.mem.realloc(bytes, new_length), new_length)
+    } else {
+        (bytes, capacity)
+    };
     if new_length > length {
         env.mem.bytes_at_mut(new_bytes.cast(), new_length)[length as usize..].fill(0);
     }
     let host = env.objc.borrow_mut::<NSDataHostObject>(this);
     host.length = new_length;
     host.bytes = new_bytes;
+    host.capacity = new_capacity;
     log_dbg!("setLength bytes {:?}, new_bytes {:?}; length {}, new_len {}", bytes, new_bytes, length, new_length);
 }
 
@@ -476,6 +501,23 @@ mod tests {
         let length: NSUInteger = msg![env; data length];
         let _bytes: MutVoidPtr = msg![env; data mutableBytes];
         assert_eq!(length, 0);
+    }
+
+    #[test]
+    fn mutable_data_capacity_provides_stable_writable_storage() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let data: id = msg_class![env; NSMutableData dataWithCapacity:32u32];
+        let length: NSUInteger = msg![env; data length];
+        let bytes_before: MutVoidPtr = msg![env; data mutableBytes];
+        assert_eq!(length, 0);
+        assert!(!bytes_before.is_null());
+
+        env.mem.bytes_at_mut(bytes_before.cast(), 32)[0] = 0x7f;
+        () = msg![env; data setLength:16u32];
+        let bytes_after: MutVoidPtr = msg![env; data mutableBytes];
+        assert_eq!(bytes_after, bytes_before);
+        assert!(env.mem.bytes_at(bytes_after.cast(), 16).iter().all(|&byte| byte == 0));
     }
 
     #[test]
