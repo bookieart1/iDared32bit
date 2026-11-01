@@ -66,3 +66,33 @@ result supports investigating one shared Rocketcat legacy behavior. If the
 keys or shapes differ, the next work should remain separated. Missing decoded
 context would mean this probe failed and must be corrected before attempting a
 compatibility accommodation. Existing saves must not be deleted.
+
+## Verified build
+
+- Final implementation and delivered source commit:
+  `c5005dd4bb636f211c2c49d17b564a9f728dfd10`. Earlier commits `f97b6d73`
+  and `f728c982` were superseded after hosted compilation exposed fixture-type
+  errors and then the recorder-size ceiling; neither is the delivered build.
+- [Hosted tests 41267274637](https://github.com/bookieart1/iDared32bit/actions/runs/41267274637):
+  **122/122 library tests passed on macOS and 122/122 on Windows**. The native
+  Foundation reference, decoded defaults/mutation test, recorder-size ceiling
+  and existing diagnostic reproducers passed. Guest integration remains a
+  configured skip.
+- The Android lane stopped at its allowed lint failure on the same two
+  pre-existing long comment lines in `dlfcn.rs` and `ns_dictionary.rs`.
+  Clippy, rustdoc and Android compilation were therefore not reached.
+- [IPA build 41267274701](https://github.com/bookieart1/iDared32bit/actions/runs/41267274701)
+  succeeded. Artifact `13068265913`; the downloaded artifact ZIP SHA-256
+  `ecaaff71d204daeac6af6d7c6f4197cd5215917e3f11a7742afd46dea9e9cc01`
+  matches GitHub's published digest.
+- Local `outputs/iDared-Dev-1.76.ipa`, **19,892,219 bytes**, SHA-256
+  `3ce39870c3e3ca4f23da449fe6cd1e54f23adf4cf1b5766066ff9cff822774dd`,
+  passed archive extraction/CRC and package-identity checks. Its executable is
+  arm64, embeds source `c5005dd4`, workflow `41267274701`, branch/repository,
+  the new decoded-context marker and the universal-flight default. The package
+  is unsigned under `com.bookieart1.idared32bit.dev` / `iDared Dev` and has no
+  embedded provisioning profile or `_CodeSignature` directory.
+- This remains diagnostic-only. **Physical-device validation is pending.**
+  Test existing-save Hook World and then Mage Gauntlet without deleting saves.
+
+Verification record: `outputs/iDared-Dev-1.76.verification.json`.

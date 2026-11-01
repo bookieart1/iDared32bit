@@ -2,7 +2,7 @@
 
 Last reconciled: October 31, 2026
 Latest device-tested checkpoint: **iDared Dev 1.75** (`cdcaf3d`; focused diagnostic test; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.75** (`cdcaf3d`; device diagnostic validated; Dev 1.76 diagnostic build in progress)
+Latest built checkpoint: **iDared Dev 1.76** (`c5005dd4`; verified diagnostic package; physical-device test pending)
 Current activity: **Dev 1.76 adds only bounded, non-mutating decoded context to the universal recorder: restored preference key/domain and the attempted immutable-dictionary mutation's key/value classes. It is intended to discriminate a shared Rocketcat saved-structure behavior from a broader persistence issue. No compatibility behavior or save data changes.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
@@ -3291,3 +3291,31 @@ preference structure and mutation shape. Test Hook World first, then Mage
 Gauntlet, without deleting either save. No gameplay or broad regression replay
 is required for a non-mutating diagnostic change. Engineering detail:
 `dev-docs/compatibility-1.76-restored-preferences-context.md`.
+
+### Dev 1.76 verified delivery
+
+- Final source and implementation commit:
+  `c5005dd4bb636f211c2c49d17b564a9f728dfd10`. The two earlier hosted attempts
+  were superseded after revealing fixture-type errors and then an over-budget
+  recorder; neither was delivered.
+- [Tests 41267274637](https://github.com/bookieart1/iDared32bit/actions/runs/41267274637):
+  **122/122 library tests passed on macOS and 122/122 on Windows**. The native
+  Foundation reference, decoded-context test, recorder-size ceiling and
+  diagnostic reproducers passed. Guest integration remains configured off.
+- Android stopped at the allowed lint failure on the same two pre-existing
+  long comments; clippy, rustdoc and Android compilation were not reached.
+- [IPA build 41267274701](https://github.com/bookieart1/iDared32bit/actions/runs/41267274701):
+  arm64 packaging succeeded. Artifact `13068265913`; outer artifact ZIP
+  SHA-256
+  `ecaaff71d204daeac6af6d7c6f4197cd5215917e3f11a7742afd46dea9e9cc01`
+  matches GitHub.
+- Local `outputs/iDared-Dev-1.76.ipa`, **19,892,219 bytes**, SHA-256
+  `3ce39870c3e3ca4f23da449fe6cd1e54f23adf4cf1b5766066ff9cff822774dd`,
+  passed archive/CRC and package-identity checks. The arm64 executable embeds
+  source `c5005dd4`, workflow `41267274701`, the decoded-context marker and the
+  universal-flight default. It is unsigned under the separate development
+  identity and contains no provisioning profile or `_CodeSignature` directory.
+- No compatibility behavior or save data changed. **Physical-device testing is
+  pending.** Test only existing-save Hook World followed by Mage Gauntlet and
+  preserve the complete log. Verification:
+  `outputs/iDared-Dev-1.76.verification.json`.
