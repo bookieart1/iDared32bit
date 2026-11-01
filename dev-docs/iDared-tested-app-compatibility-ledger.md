@@ -2,8 +2,8 @@
 
 Last reconciled: October 31, 2026
 Latest device-tested checkpoint: **iDared Dev 1.71 Survey** (`50ece578`; full catalog audit, functional scope qualified below)
-Latest built checkpoint: **iDared Dev 1.71 Survey** (`50ece578`)
-Current activity: **Preparing Dev 1.72: shared Foundation fixes for MageGauntlet, Infinight and Sharpshooter; bounded flight recording becomes the permanent universal default. Build and device verification pending. Historical survey audit remains preserved below.**
+Latest built checkpoint: **iDared Dev 1.72** (`05732a45`; device tests pending)
+Current activity: **Dev 1.72 built, downloaded and verified: shared Foundation fixes for MageGauntlet, Infinight and Sharpshooter, with permanent universal bounded recording. 109 library tests pass on each host platform; native reference passes. Await focused device tests; 1.71 remains the latest physical checkpoint.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -2977,3 +2977,32 @@ zero-overhead benchmark for every game.
 
 Details and primary references: `dev-docs/compatibility-1.72-foundation.md`.
 Build identity and actual validation will be appended when CI completes.
+
+
+### Dev 1.72 build verification — October 31, 2026
+
+Delivered source `05732a45f5f666d1dda508629aeabfddf908abf4` (implementation
+`9bf75cd3`; test return-type annotations corrected in `05732a45`). Superseded
+initial CI runs were cancelled; the delivered source is the fully tested revision.
+
+- [IPA build 41258098358](https://github.com/bookieart1/iDared32bit/actions/runs/41258098358): iOS arm64 archive/package succeeded.
+- [Tests 41258098543](https://github.com/bookieart1/iDared32bit/actions/runs/41258098543): **109 library tests passed on macOS and 109 on Windows**. All four new tests passed on both hosts. Native Foundation reference fixture and separate diagnostic reproducer also passed on macOS.
+- Lint still exits on pre-existing long comments in dlfcn.rs:61 and
+  ns_dictionary.rs:531 (allowed failure). Clippy/rustdoc and Android compilation
+  are not reached. Full guest integration and global format jobs are configured
+  skips; only changed Rust files were locally format-checked.
+- Artifact `13063809817`; artifact ZIP SHA256
+  `b3018202acf7b17cba00d878c41c088439b9ca1d9ba023893fd509395b1a3607` matches GitHub.
+- Local `outputs/iDared-Dev-1.72.ipa`, **19,884,758 bytes**, SHA256
+  `378ecd242137d6c83c7d90efe9dd23e010bae2ccbaca7d722dd4f0118a0761a2`
+  matches the packaging job. ZIP CRC, arm64 Mach-O, embedded source/run,
+  `com.bookieart1.idared32bit.dev`, `iDared Dev`, no profile/signature verified.
+- Universal default is permanent: source and both compiled option tests agree;
+  packaged help says default flight, and the obsolete temporary survey marker
+  is absent. The recorder implementation is byte-equivalent to the 1.71 survey
+  after line-ending normalization. No post-build default-off restoration.
+- Physical-device status: **pending**. Neither gameplay nor old-save/relaunch
+  success for this batch has been inferred from compilation or host tests.
+
+Package verification record: `outputs/iDared-Dev-1.72.verification.json`.
+Detailed job logs are retained under `work/verify-1.72/`.
