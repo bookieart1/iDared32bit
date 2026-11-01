@@ -24,6 +24,7 @@ pub struct State {
     /// [UIApplication sharedApplication]
     shared_application: Option<id>,
     pub(super) status_bar_hidden: bool,
+    is_active: bool,
 }
 
 struct UIApplicationHostObject {
@@ -428,42 +429,7 @@ pub(super) fn UIApplicationMain(
 
     // Send applicationDidBecomeActive now that the application is ready to
     // become active.
-    {
-        let pool: id = msg_class![env; NSAutoreleasePool new];
-        let delegate: id = msg![env; ui_application delegate];
-        if env
-            .objc
-            .object_has_method_named(&env.mem, delegate, "applicationDidBecomeActive:")
-        {
-            () = msg![env; delegate applicationDidBecomeActive:ui_application];
-        }
-
-        let center: id = msg_class![env; NSNotificationCenter defaultCenter];
-        let notif_name = get_static_str(env, UIApplicationDidBecomeActiveNotification);
-        () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
-
-        if env
-            .framework_state
-            .uikit
-            .ui_device
-            .is_generating_device_orientation_notifications()
-        {
-            // This is a bit hacky...
-            //
-            // Some apps (e.g. "Dead Space") setup window and views only after
-            // receiving a device orientation change notification.
-            // Setup for this is usually done by calling
-            // `[UIDevice beginGeneratingDeviceOrientationNotifications]` and
-            // registering for UIDeviceOrientationDidChangeNotification
-            // notification in `application:didFinishLaunchingWithOptions:`.
-            //
-            // Here we're helping by seeding a first device orientation change
-            // just after the application becomes active.
-            generate_device_orientation_notification(env);
-        }
-
-        let _: () = msg![env; pool drain];
-    }
+    notify_did_become_active(env);
 
     // FIXME: There are more messages we should send.
 
@@ -505,19 +471,10 @@ pub(super) fn notify_will_terminate(env: &mut Environment) {
             let _: bool = msg![env; user_defaults synchronize];
         }
 
-        let delegate: id = msg![env; ui_application delegate];
-        if env
-            .objc
-            .object_has_method_named(&env.mem, delegate, "applicationWillResignActive:")
-        {
-            () = msg![env; delegate applicationWillResignActive:ui_application];
-        }
-
-        let notif_name = get_static_str(env, UIApplicationWillResignActiveNotification);
-        () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
-
         let _: () = msg![env; pool drain];
     };
+
+    notify_will_resign_active(env);
 
     {
         let pool: id = msg_class![env; NSAutoreleasePool new];
@@ -542,6 +499,66 @@ pub(super) fn notify_will_terminate(env: &mut Environment) {
 
         let _: () = msg![env; pool drain];
     };
+}
+
+/// Tell an active guest it is becoming inactive. Unlike termination, this is
+/// reversible and must not flush or tear down the guest application.
+pub(super) fn notify_will_resign_active(env: &mut Environment) {
+    if !env.framework_state.uikit.ui_application.is_active {
+        return;
+    }
+    env.framework_state.uikit.ui_application.is_active = false;
+
+    let pool: id = msg_class![env; NSAutoreleasePool new];
+    let ui_application: id = msg_class![env; UIApplication sharedApplication];
+    let delegate: id = msg![env; ui_application delegate];
+    if env
+        .objc
+        .object_has_method_named(&env.mem, delegate, "applicationWillResignActive:")
+    {
+        () = msg![env; delegate applicationWillResignActive:ui_application];
+    }
+
+    let center: id = msg_class![env; NSNotificationCenter defaultCenter];
+    let notif_name = get_static_str(env, UIApplicationWillResignActiveNotification);
+    () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
+    let _: () = msg![env; pool drain];
+}
+
+/// Tell an inactive guest it is active again after a host interruption.
+pub(super) fn notify_did_become_active(env: &mut Environment) {
+    if env.framework_state.uikit.ui_application.is_active {
+        return;
+    }
+    env.framework_state.uikit.ui_application.is_active = true;
+
+    let pool: id = msg_class![env; NSAutoreleasePool new];
+    let ui_application: id = msg_class![env; UIApplication sharedApplication];
+    let delegate: id = msg![env; ui_application delegate];
+    if env
+        .objc
+        .object_has_method_named(&env.mem, delegate, "applicationDidBecomeActive:")
+    {
+        () = msg![env; delegate applicationDidBecomeActive:ui_application];
+    }
+
+    let center: id = msg_class![env; NSNotificationCenter defaultCenter];
+    let notif_name = get_static_str(env, UIApplicationDidBecomeActiveNotification);
+    () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
+
+    if env
+        .framework_state
+        .uikit
+        .ui_device
+        .is_generating_device_orientation_notifications()
+    {
+        // Some games wait for their first device-orientation notification
+        // before laying out the window. Seed it after every activation, as a
+        // real device can have changed orientation while inactive.
+        generate_device_orientation_notification(env);
+    }
+
+    let _: () = msg![env; pool drain];
 }
 
 /// App life-cycle notifications

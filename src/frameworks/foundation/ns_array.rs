@@ -862,6 +862,30 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, other_array_set);
 }
 
+- (())removeObjectsAtIndexes:(id)indexes { // NSIndexSet*
+    assert!(indexes != nil, "removeObjectsAtIndexes: requires a non-nil index set");
+
+    // Validate the complete set before mutating so an invalid high index does
+    // not leave the receiver partially changed. Removing in descending order
+    // then preserves the meaning of every remaining original index.
+    let last: NSUInteger = msg![env; indexes lastIndex];
+    if last == NSNotFound as NSUInteger {
+        return;
+    }
+    let count: NSUInteger = msg![env; this count];
+    assert!(last < count, "removeObjectsAtIndexes: index out of range");
+
+    let mut index = last;
+    loop {
+        () = msg![env; this removeObjectAtIndex:index];
+        let previous: NSUInteger = msg![env; indexes indexLessThanIndex:index];
+        if previous == NSNotFound as NSUInteger {
+            break;
+        }
+        index = previous;
+    }
+}
+
 @end
 
 // Special variant for use by CFArray with NULL callbacks: objects aren't
@@ -1078,6 +1102,40 @@ mod tests {
         release(env, mutable);
         release(env, first);
         release(env, second);
+    }
+
+    #[test]
+    fn remove_objects_at_indexes_uses_original_indexes_and_ownership() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let objects: Vec<id> = (0..6).map(|_| msg_class![env; NSObject new]).collect();
+        let owned_objects = objects
+            .iter()
+            .map(|&object| retain(env, object))
+            .collect();
+        let array = mutable_from_vec(env, owned_objects);
+        let indexes: id = msg_class![env; NSMutableIndexSet indexSet];
+        () = msg![env; indexes addIndex:1u32];
+        () = msg![env; indexes addIndex:3u32];
+        () = msg![env; indexes addIndex:4u32];
+
+        () = msg![env; array removeObjectsAtIndexes:indexes];
+        let count: NSUInteger = msg![env; array count];
+        assert_eq!(count, 3);
+        assert_eq!(msg![env; array objectAtIndex:0u32], objects[0]);
+        assert_eq!(msg![env; array objectAtIndex:1u32], objects[2]);
+        assert_eq!(msg![env; array objectAtIndex:2u32], objects[5]);
+        for (index, &object) in objects.iter().enumerate() {
+            let expected = if [1, 3, 4].contains(&index) { 1 } else { 2 };
+            assert_eq!(env.objc.get_refcount(object).get(), expected);
+        }
+
+        release(env, array);
+        for object in objects {
+            release(env, object);
+        }
+        release(env, pool);
     }
 
     #[test]

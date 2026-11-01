@@ -27,6 +27,8 @@ use std::env;
 use std::f32::consts::{FRAC_PI_2, PI};
 use std::num::NonZeroU32;
 use std::ptr::null_mut;
+#[cfg(target_os = "ios")]
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 #[repr(C)]
@@ -114,6 +116,22 @@ fn rotate_fullscreen_size(orientation: DeviceOrientation, screen_size: (u32, u32
         }
     }
 }
+
+#[cfg(target_os = "ios")]
+pub type HostOrientationFn = unsafe extern "C" fn(i32);
+
+#[cfg(target_os = "ios")]
+static HOST_ORIENTATION: OnceLock<HostOrientationFn> = OnceLock::new();
+
+/// Registered by the final iOS executable, whose Swift code owns the host
+/// `UIWindowScene`. The Rust crate is also linked as a standalone dylib, so it
+/// cannot reference that Swift symbol directly.
+#[cfg(target_os = "ios")]
+#[no_mangle]
+pub extern "C" fn idared_set_host_orientation(callback: HostOrientationFn) {
+    let _ = HOST_ORIENTATION.set(callback);
+}
+
 /// Tell SDL2 what orientation we want. Only useful on Android.
 fn set_sdl2_orientation(orientation: DeviceOrientation) {
     // Despite the name, this hint works on Android too.
@@ -130,21 +148,10 @@ fn set_sdl2_orientation(orientation: DeviceOrientation) {
     );
     #[cfg(target_os = "ios")]
     unsafe {
-        type OrientationRequest = unsafe extern "C" fn(i32);
-
-        // The Swift host and the Rust emulator are built as separate Xcode
-        // targets. Looking up this optional bridge at runtime keeps the Rust
-        // cdylib linkable on its own while still allowing the final iOS app to
-        // coordinate its scene and keyboard orientation with the guest.
-        let symbol = ::libc::dlsym(
-            ::libc::RTLD_DEFAULT,
-            c"idared_request_host_orientation".as_ptr(),
-        );
-        if symbol.is_null() {
+        let Some(request) = HOST_ORIENTATION.get() else {
             log!("Host orientation bridge is unavailable; leaving scene orientation unchanged");
             return;
-        }
-        let request: OrientationRequest = std::mem::transmute(symbol);
+        };
         let orientation = match orientation {
             DeviceOrientation::Portrait => 0,
             DeviceOrientation::PortraitUpsideDown => 1,
@@ -240,6 +247,13 @@ pub enum Event {
     /// iOS).
     HomeButton,
     TextInput(TextInputEvent),
+}
+
+/// Result of waiting while the host application is inactive. Guest execution
+/// is paused for the duration of this wait.
+pub enum ForegroundWaitResult {
+    Resumed,
+    Terminating,
 }
 
 pub enum BatteryState {
@@ -1241,6 +1255,34 @@ impl Window {
         self.high_priority_event
             .take()
             .or_else(|| self.event_queue.pop_front())
+    }
+
+    /// Wait for an inactive host application to return. This runs on the host
+    /// stack so SDL can continue delivering iOS lifecycle events while all
+    /// guest threads remain paused.
+    pub fn wait_until_foreground(&mut self) -> ForegroundWaitResult {
+        assert!(self.on_main_stack);
+        assert!(!self.enable_event_polling);
+
+        use sdl2::event::Event as E;
+        loop {
+            let event = self.event_pump.wait_event();
+            match event {
+                E::AppDidEnterForeground { .. } => {
+                    log!("Received app-did-become-active event.");
+                    self.enable_event_polling = true;
+                    return ForegroundWaitResult::Resumed;
+                }
+                E::AppTerminating { .. } | E::Quit { .. } => {
+                    log!("Received app-will-terminate event while inactive.");
+                    return ForegroundWaitResult::Terminating;
+                }
+                _ => {
+                    // Rendering, input, timers, and all guest threads are
+                    // deliberately paused until the host is active again.
+                }
+            }
+        }
     }
 
     fn controller_added(&mut self, joystick_idx: u32) {

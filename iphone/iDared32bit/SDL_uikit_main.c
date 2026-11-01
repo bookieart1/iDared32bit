@@ -24,12 +24,17 @@ extern char *idared_native_text_alert(const char *);
 extern void idared_set_native_text_alert(idared_text_alert_fn);
 /* Gives games opened with "Open in iDared 32bit" to the picker too. */
 extern void idared_install_open_in_hook(void);
+/* The guest selects an interface orientation before its window is shown. */
+typedef void (*idared_host_orientation_fn)(int32_t);
+extern void idared_request_host_orientation(int32_t);
+extern void idared_set_host_orientation(idared_host_orientation_fn);
 
 int
 main(int argc, char *argv[])
 {
     idared_set_swiftui_app_picker(idared_swiftui_app_picker);
     idared_set_native_text_alert(idared_native_text_alert);
+    idared_set_host_orientation(idared_request_host_orientation);
     idared_install_open_in_hook();
     return SDL_UIKitRunApp(argc, argv, SDL_main);
 }

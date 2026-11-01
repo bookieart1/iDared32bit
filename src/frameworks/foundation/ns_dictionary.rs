@@ -10,7 +10,10 @@ use super::ns_property_list_serialization::{
     deserialize_plist_from_file, NSPropertyListBinaryFormat_v1_0,
 };
 use super::ns_string::{from_rust_string, get_static_str, to_rust_string};
-use super::{_nib_archive_decoder, ns_array, ns_keyed_unarchiver, ns_string, ns_url, NSUInteger};
+use super::{
+    _nib_archive_decoder, ns_array, ns_keyed_unarchiver, ns_string, ns_url,
+    NSComparisonResult, NSUInteger,
+};
 use crate::abi::{CallFromHost, GuestFunction, VaList};
 use crate::cpu::Cpu;
 use crate::frameworks::core_foundation::{CFHashCode, CFIndex};
@@ -24,10 +27,11 @@ use crate::frameworks::foundation::ns_keyed_archiver::{
     encode_object, get_value_to_encode_for_current_key,
 };
 use crate::fs::GuestPath;
+use crate::libc::stdlib::qsort::qsort_generic;
 use crate::mem::{ConstPtr, MutPtr, Ptr, SafeRead};
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, Class, ClassExports,
-    HostObject, NSZonePtr, TrivialHostObject,
+    autorelease, id, msg, msg_class, msg_send, nil, objc_classes, release, retain, Class,
+    ClassExports, HostObject, NSZonePtr, SEL, TrivialHostObject,
 };
 use crate::{impl_HostObject_with_superclass, Environment};
 use std::collections::hash_map::Entry;
@@ -578,6 +582,44 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let immutable_values: id = msg![env; values copy];
     autorelease(env, immutable_values)
+}
+
+- (id)keysSortedByValueUsingSelector:(SEL)comparator {
+    assert!(!comparator.is_null(), "keysSortedByValueUsingSelector: requires a selector");
+
+    // Work through NSDictionary's primitive methods so this also behaves
+    // correctly for genuine guest subclasses. The returned array owns the
+    // retained keys; values remain owned by the dictionary.
+    let all_keys: id = msg![env; this allKeys];
+    let count: NSUInteger = msg![env; all_keys count];
+    let mut keys = Vec::with_capacity(count as usize);
+    for index in 0..count {
+        let key: id = msg![env; all_keys objectAtIndex:index];
+        keys.push(retain(env, key));
+    }
+
+    let mut user_data = (env, this, &mut keys);
+    qsort_generic(
+        &mut user_data,
+        count,
+        &mut |(env, dictionary, keys), left, right| {
+            let dictionary = *dictionary;
+            let left_key = keys[left as usize];
+            let right_key = keys[right as usize];
+            let left_value: id = msg![env; dictionary objectForKey:left_key];
+            let right_value: id = msg![env; dictionary objectForKey:right_key];
+            assert!(left_value != nil && right_value != nil);
+            let result: NSComparisonResult =
+                msg_send(env, (left_value, comparator, right_value));
+            result
+        },
+        &mut |(_, _, keys), left, right| {
+            keys.swap(left as usize, right as usize);
+        },
+    );
+    let (env, _, keys) = user_data;
+    let sorted_keys = ns_array::from_vec(env, std::mem::take(keys));
+    autorelease(env, sorted_keys)
 }
 
 - (NSUInteger)hash {
@@ -1303,5 +1345,34 @@ mod tests {
         release(env, pool);
         env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
         env.mem.free(stack);
+    }
+
+    #[test]
+    fn keys_sorted_by_value_using_selector_returns_keys_in_value_order() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let low_key = get_static_str(env, "low");
+        let middle_key = get_static_str(env, "middle");
+        let high_key = get_static_str(env, "high");
+        let low: id = msg_class![env; NSNumber numberWithInt:1i32];
+        let middle: id = msg_class![env; NSNumber numberWithInt:5i32];
+        let high: id = msg_class![env; NSNumber numberWithInt:9i32];
+        let dictionary = dict_from_keys_and_objects(
+            env,
+            &[(middle_key, middle), (high_key, high), (low_key, low)],
+        );
+        let compare = env
+            .objc
+            .register_host_selector("compare:".to_string(), &mut env.mem);
+
+        let sorted: id = msg![env; dictionary keysSortedByValueUsingSelector:compare];
+        assert_eq!(msg![env; sorted count], 3u32);
+        assert_eq!(msg![env; sorted objectAtIndex:0u32], low_key);
+        assert_eq!(msg![env; sorted objectAtIndex:1u32], middle_key);
+        assert_eq!(msg![env; sorted objectAtIndex:2u32], high_key);
+
+        release(env, dictionary);
+        release(env, pool);
     }
 }

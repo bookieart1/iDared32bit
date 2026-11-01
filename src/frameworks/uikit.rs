@@ -128,35 +128,23 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
                 ui_touch::handle_event(env, event)
             }
             Event::AppWillResignActive => {
-                // Getting this event means touchHLE is becoming inactive, e.g.
-                // due to switching apps. The obvious way to handle this would
-                // be to just send `applicationWillResignActive:` to the
-                // UIApplicationDelegate. However:
-                // - touchHLE's event loop can't handle an inactive app well
-                //   right now. For example, audio isn't paused.
-                // - touchHLE's event loop can't handle the subsequent
-                //   termination of an app right now: it doesn't manage to send
-                //   the `applicationWillTerminate:` message in time. This can
-                //   mean loss of data!
-                // Therefore, for the moment we will simulate the early iOS
-                // behavior where switching app usually resulted in termination.
-                // We can usually handle this in time, so there won't be data
-                // loss, nor problems with background resource usage or audio.
-                // TODO: Handle this better.
-                log!("Handling app-will-resign-active event: ending guest and preserving picker.");
-                if !env.return_to_app_picker {
-                    if !env.is_app_picker {
-                        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            ui_application::notify_will_terminate(env)
-                        }));
-                        if let Err(e) = res {
-                            if env.return_to_app_picker {
-                                std::panic::resume_unwind(e);
-                            }
-                            log!("App crashed while backgrounding, returning to app picker anyway.");
-                        }
+                // A transient host interruption (including the screenshot
+                // editor) pauses the whole guest. The host SDL loop remains
+                // alive so it can observe foregrounding or real termination.
+                log!("Handling app-will-resign-active event: pausing guest.");
+                ui_application::notify_will_resign_active(env);
+                let result = env.on_parent_stack_in_coroutine(|window, _| {
+                    window.wait_until_foreground()
+                });
+                match result {
+                    crate::window::ForegroundWaitResult::Resumed => {
+                        log!("Host became active: resuming guest.");
+                        ui_application::notify_did_become_active(env);
                     }
-                    env.return_to_app_picker = true;
+                    crate::window::ForegroundWaitResult::Terminating => {
+                        log!("Host is terminating while guest is inactive.");
+                        ui_application::exit(env);
+                    }
                 }
             }
             Event::AppWillTerminate => {
