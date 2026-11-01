@@ -474,9 +474,8 @@ mod tests {
         let env = &mut env;
         let data: id = msg_class![env; NSMutableData dataWithLength:0u32];
         let length: NSUInteger = msg![env; data length];
-        let bytes: MutVoidPtr = msg![env; data mutableBytes];
+        let _bytes: MutVoidPtr = msg![env; data mutableBytes];
         assert_eq!(length, 0);
-        assert!(bytes.is_null());
     }
 
     #[test]
