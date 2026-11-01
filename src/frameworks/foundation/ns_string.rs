@@ -2480,6 +2480,10 @@ mod ns_string_tests {
     fn mutable_string_insertion_and_replacement_use_utf16_indices() {
         let mut env = Environment::new_fake_for_test_with_thread();
         let env = &mut env;
+        // replaceCharactersInRange:withString: uses a fifth ARM argument, so
+        // host-to-guest dispatch needs synthetic stack space in this fixture.
+        let stack = env.mem.alloc(0x1000);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = stack.to_bits() + 0x1000;
         let string: id = msg_class![env; NSMutableString new];
         let initial = from_rust_string(env, "A🚀B".to_owned());
         () = msg![env; string setString:initial];
@@ -2495,6 +2499,8 @@ mod ns_string_tests {
         release(env, exclamation);
         release(env, snowman);
         release(env, string);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
+        env.mem.free(stack);
     }
 
     #[test]
