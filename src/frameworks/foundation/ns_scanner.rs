@@ -388,28 +388,29 @@ mod tests {
     #[test]
     fn floating_point_scans_update_location_and_preserve_output_on_failure() {
         let mut env = Environment::new_fake_for_test_with_thread();
-        let input = from_rust_string(&mut env, "  -1.25e+2tail".to_owned());
-        let scanner: id = msg_class![&mut env; NSScanner alloc];
-        let scanner: id = msg![&mut env; scanner initWithString:input];
+        let env = &mut env;
+        let input = from_rust_string(env, "  -1.25e+2tail".to_owned());
+        let scanner: id = msg_class![env; NSScanner alloc];
+        let scanner: id = msg![env; scanner initWithString:input];
         let output = env.mem.alloc(std::mem::size_of::<f32>() as u32).cast();
         env.mem.write(output, 99.0f32);
 
-        let did_scan: bool = msg![&mut env; scanner scanFloat:output];
+        let did_scan: bool = msg![env; scanner scanFloat:output];
         assert!(did_scan);
         assert_eq!(env.mem.read(output), -125.0f32);
-        let location: NSUInteger = msg![&mut env; scanner scanLocation];
+        let location: NSUInteger = msg![env; scanner scanLocation];
         assert_eq!(location, 10);
 
         env.mem.write(output, 77.0f32);
-        let did_scan: bool = msg![&mut env; scanner scanFloat:output];
+        let did_scan: bool = msg![env; scanner scanFloat:output];
         assert!(!did_scan);
         assert_eq!(env.mem.read(output), 77.0f32);
-        let unchanged_location: NSUInteger = msg![&mut env; scanner scanLocation];
+        let unchanged_location: NSUInteger = msg![env; scanner scanLocation];
         assert_eq!(unchanged_location, location);
 
         env.mem.free(output.cast());
-        release(&mut env, scanner);
-        release(&mut env, input);
+        release(env, scanner);
+        release(env, input);
     }
 
     #[test]

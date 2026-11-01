@@ -754,11 +754,12 @@ mod tests {
     use super::*;
     use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
     use crate::mem::guest_size_of;
-    use crate::objc::{msg, msg_class, release};
+    use crate::objc::release;
 
     #[test]
     fn super2_struct_return_preserves_hidden_pointer_and_rewrites_receiver() {
         let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
         let frame = CGRect {
             origin: CGPoint { x: 3.0, y: 4.0 },
             size: CGSize {
@@ -766,8 +767,8 @@ mod tests {
                 height: 60.0,
             },
         };
-        let label: id = msg_class![&mut env; UILabel alloc];
-        let label: id = msg![&mut env; label initWithFrame:frame];
+        let label: id = msg_class![env; UILabel alloc];
+        let label: id = msg![env; label initWithFrame:frame];
 
         let class = env.objc.get_known_class("UILabel", &mut env.mem);
         let selector = env.objc.lookup_selector("bounds").unwrap();
@@ -781,7 +782,7 @@ mod tests {
         );
 
         let bounds: CGRect =
-            msg_send_super2(&mut env, (super_ptr.cast_const(), selector));
+            msg_send_super2(env, (super_ptr.cast_const(), selector));
         let bounds_origin = bounds.origin;
         let bounds_size = bounds.size;
         let expected_size = frame.size;
@@ -789,6 +790,6 @@ mod tests {
         assert_eq!(bounds_size, expected_size);
 
         env.mem.free(super_ptr.cast());
-        release(&mut env, label);
+        release(env, label);
     }
 }
