@@ -634,6 +634,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
+// NSDictionary's convenience implementation predates subclass-aware
+// construction and always creates the immutable concrete class. Override it
+// here so callers of [NSMutableDictionary dictionaryWithObject:forKey:] get
+// the mutable class they requested.
++ (id)dictionaryWithObject:(id)object forKey:(id)key {
+    assert_ne!(key, nil); // TODO: raise proper exception
+    assert_ne!(object, nil); // TODO: raise proper exception
+
+    let new_dict = mutable_dict_from_keys_and_objects(env, &[(key, object)]);
+    autorelease(env, new_dict)
+}
+
 // These probably comes from some category related to plists.
 - (id)initWithContentsOfFile:(id)path { // NSString*
     release(env, this);
@@ -1201,4 +1213,45 @@ fn encode_with_coder_inner(env: &mut Environment, dict: id, coder: id) {
     let scope = get_value_to_encode_for_current_key(env, coder);
     scope.insert("NS.keys".to_string(), plist::Value::Array(encoded_keys));
     scope.insert("NS.objects".to_string(), plist::Value::Array(encoded_vals));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mutable_singleton_factory_and_keyed_archive_preserve_mutability() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let first_key = get_static_str(env, "first");
+        let second_key = get_static_str(env, "second");
+        let third_key = get_static_str(env, "third");
+        let first_value = get_static_str(env, "one");
+        let second_value = get_static_str(env, "two");
+        let third_value = get_static_str(env, "three");
+
+        let mutable: id =
+            msg_class![env; NSMutableDictionary dictionaryWithObject:first_value forKey:first_key];
+        let mutable_class: Class = msg_class![env; NSMutableDictionary class];
+        let is_mutable: bool = msg![env; mutable isKindOfClass:mutable_class];
+        assert!(is_mutable);
+        () = msg![env; mutable setObject:second_value forKey:second_key];
+        let count: NSUInteger = msg![env; mutable count];
+        assert_eq!(count, 2);
+
+        let data: id = msg_class![env; NSKeyedArchiver archivedDataWithRootObject:mutable];
+        let decoded: id = msg_class![env; NSKeyedUnarchiver unarchiveObjectWithData:data];
+        let decoded_is_mutable: bool = msg![env; decoded isKindOfClass:mutable_class];
+        assert!(decoded_is_mutable);
+        () = msg![env; decoded setObject:third_value forKey:third_key];
+        let count: NSUInteger = msg![env; decoded count];
+        assert_eq!(count, 3);
+
+        let immutable: id =
+            msg_class![env; NSDictionary dictionaryWithObject:first_value forKey:first_key];
+        let immutable_is_mutable: bool = msg![env; immutable isKindOfClass:mutable_class];
+        assert!(!immutable_is_mutable);
+        release(env, pool);
+    }
 }

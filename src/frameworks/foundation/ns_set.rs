@@ -303,6 +303,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     *env.objc.borrow_mut(this) = host_obj;
 }
 
+- (())addObjectsFromArray:(id)array { // NSArray *
+    let count: NSUInteger = msg![env; array count];
+    for i in 0..count {
+        let object: id = msg![env; array objectAtIndex:i];
+        () = msg![env; this addObject:object];
+    }
+}
+
 - (())removeObject:(id)object {
     let mut host_obj: SetHostObject = std::mem::take(env.objc.borrow_mut(this));
     host_obj.dict.remove(env, object);
@@ -472,5 +480,31 @@ mod tests {
         release(env, pool);
         assert_eq!(env.objc.get_refcount(element).get(), 1);
         release(env, element);
+    }
+
+    #[test]
+    fn add_objects_from_array_adds_each_unique_object() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let first: id = msg_class![env; NSObject new];
+        let second: id = msg_class![env; NSObject new];
+        let array: id = msg_class![env; NSMutableArray arrayWithObject:first];
+        () = msg![env; array addObject:second];
+        () = msg![env; array addObject:first];
+        let set: id = msg_class![env; NSMutableSet new];
+
+        () = msg![env; set addObjectsFromArray:array];
+
+        let count: NSUInteger = msg![env; set count];
+        let contains_first: bool = msg![env; set containsObject:first];
+        let contains_second: bool = msg![env; set containsObject:second];
+        assert_eq!(count, 2);
+        assert!(contains_first);
+        assert!(contains_second);
+        release(env, set);
+        release(env, first);
+        release(env, second);
+        release(env, pool);
     }
 }

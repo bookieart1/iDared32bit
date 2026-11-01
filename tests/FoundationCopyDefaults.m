@@ -86,6 +86,32 @@ int main(void) {
         assert(rejected);
     }
 
+    NSMutableDictionary *mutableDictionary =
+        [NSMutableDictionary dictionaryWithObject:@"one" forKey:@"first"];
+    NSDictionary *immutableDictionary =
+        [NSDictionary dictionaryWithObject:@"one" forKey:@"first"];
+    assert([mutableDictionary isKindOfClass:[NSMutableDictionary class]]);
+    assert(![immutableDictionary isKindOfClass:[NSMutableDictionary class]]);
+    [mutableDictionary setObject:@"two" forKey:@"second"];
+    assert(mutableDictionary.count == 2 && immutableDictionary.count == 1);
+    NSData *dictionaryArchive =
+        [NSKeyedArchiver archivedDataWithRootObject:mutableDictionary];
+    NSMutableDictionary *decodedDictionary =
+        [NSKeyedUnarchiver unarchiveObjectWithData:dictionaryArchive];
+    assert([decodedDictionary isKindOfClass:[NSMutableDictionary class]]);
+    [decodedDictionary setObject:@"three" forKey:@"third"];
+    assert(decodedDictionary.count == 3);
+
+    NSObject *setFirst = [NSObject new];
+    NSObject *setSecond = [NSObject new];
+    NSMutableSet *arraySet = [NSMutableSet set];
+    [arraySet addObjectsFromArray:@[setFirst, setSecond, setFirst]];
+    assert(arraySet.count == 2);
+    assert([arraySet containsObject:setFirst]);
+    assert([arraySet containsObject:setSecond]);
+    [setFirst release];
+    [setSecond release];
+
     CopyToken *element = [CopyToken new];
     NSMutableSet *source = [[NSMutableSet alloc] initWithObjects:element, nil];
     NSMutableSet *mutable = [source mutableCopy];
@@ -107,6 +133,6 @@ int main(void) {
     assert(liveTokens == 1 && [immutable anyObject] == element);
     [immutable release];
     assert(liveTokens == 0);
-    puts("Foundation defaults, set-copy and singleton-array reference contracts passed.");
+    puts("Foundation defaults, mutable-collection and copy reference contracts passed.");
     return 0;
 }
