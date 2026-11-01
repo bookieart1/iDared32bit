@@ -57,6 +57,8 @@ int test_AutoreleasePool(void);         // AutoReleasePoolTest.m
 int test_CGAffineTransform(void);       // CGAffineTransform.c
 int test_RespondsToSelector(void);      // RespondsToSelector.m
 int test_class_getInstanceMethod(void); // RespondsToSelector.m
+int test_object_getInstanceVariable(void); // RespondsToSelector.m
+int test_method_setImplementation(void);   // RespondsToSelector.m
 int test_Initialize(void);              // Initialize.m
 
 #ifndef DEFINE_ME_WHEN_BUILDING_ON_MACOS
@@ -64,6 +66,76 @@ int test_cpp_virtual_inheritance(void); // CppVirtualInheritance.cpp
 #endif
 
 // === Main code ===
+
+int test_CFStringConvertEncodingToIANACharSetName() {
+  CFStringRef utf8 =
+      CFStringConvertEncodingToIANACharSetName(kCFStringEncodingUTF8);
+  if (utf8 == NULL ||
+      CFStringCompare(utf8, CFSTR("utf-8"), 0) != kCFCompareEqualTo) {
+    return -1;
+  }
+  if (CFStringConvertEncodingToIANACharSetName(0xffffffff) != NULL) {
+    return -2;
+  }
+  return 0;
+}
+
+int test_pthread_cancel_configuration() {
+  int old_value = -1;
+  if (pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &old_value) != 0 ||
+      old_value != PTHREAD_CANCEL_ENABLE) {
+    return -1;
+  }
+  if (pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_value) != 0 ||
+      old_value != PTHREAD_CANCEL_DISABLE) {
+    return -2;
+  }
+  if (pthread_setcancelstate(-1, NULL) != EINVAL) {
+    return -3;
+  }
+  if (pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &old_value) != 0 ||
+      old_value != PTHREAD_CANCEL_DEFERRED) {
+    return -4;
+  }
+  if (pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, &old_value) != 0 ||
+      old_value != PTHREAD_CANCEL_ASYNCHRONOUS) {
+    return -5;
+  }
+  if (pthread_setcanceltype(-1, NULL) != EINVAL) {
+    return -6;
+  }
+  return 0;
+}
+
+int test_UIImage_drawAsPatternInRect() {
+  unsigned char source_pixel[4] = {255, 0, 0, 255};
+  unsigned char destination[4 * 4 * 4] = {0};
+  CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
+  CGContextRef source = CGBitmapContextCreate(source_pixel, 1, 1, 8, 4,
+                                               color_space,
+                                               kCGImageAlphaPremultipliedLast);
+  CGImageRef cg_image = CGBitmapContextCreateImage(source);
+  UIImage *image = [UIImage imageWithCGImage:cg_image];
+  CGContextRef target = CGBitmapContextCreate(destination, 4, 4, 8, 16,
+                                               color_space,
+                                               kCGImageAlphaPremultipliedLast);
+  UIGraphicsPushContext(target);
+  [image drawAsPatternInRect:CGRectMake(0, 0, 4, 4)];
+  UIGraphicsPopContext();
+
+  int result = 0;
+  for (int pixel = 0; pixel < 16; pixel++) {
+    if (destination[pixel * 4] == 0 || destination[pixel * 4 + 3] == 0) {
+      result = -1;
+      break;
+    }
+  }
+  CGContextRelease(target);
+  CGImageRelease(cg_image);
+  CGContextRelease(source);
+  CGColorSpaceRelease(color_space);
+  return result;
+}
 
 int test_CGGeometry() {
   CGRect testRect;
@@ -7987,6 +8059,11 @@ struct {
     FUNC_DEF(test_wcsftime),
     FUNC_DEF(test_RespondsToSelector),
     FUNC_DEF(test_class_getInstanceMethod),
+    FUNC_DEF(test_object_getInstanceVariable),
+    FUNC_DEF(test_method_setImplementation),
+    FUNC_DEF(test_CFStringConvertEncodingToIANACharSetName),
+    FUNC_DEF(test_pthread_cancel_configuration),
+    FUNC_DEF(test_UIImage_drawAsPatternInRect),
     FUNC_DEF(test_NSKeyedArchiver_encodeIntForKey),
     FUNC_DEF(test_NSKeyedArchiver_NSKeyedUnarchiver),
     FUNC_DEF(test_NSKeyedArchiver_NSDictionary_of_NSArray_of_NSStrings),

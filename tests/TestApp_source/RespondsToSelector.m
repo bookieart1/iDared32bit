@@ -1,5 +1,6 @@
 #import "system_headers.h"
 @implementation TestClass : NSObject {
+  id instanceVariable;
 }
 + (void)classSelector {
 }
@@ -7,6 +8,12 @@
 }
 - (int)answer {
   return 42;
+}
+- (int)alternateAnswer {
+  return 84;
+}
+- (void)setInstanceVariable:(id)value {
+  instanceVariable = value;
 }
 @end
 
@@ -82,6 +89,47 @@ int test_class_getInstanceMethod(void) {
   if (inherited == 0 || ((retain_count_imp)test_method_imp(inherited))(
                             instance, retain_count_sel) != 1) {
     return -5;
+  }
+  [instance release];
+  return 0;
+}
+
+int test_object_getInstanceVariable(void) {
+  TestClass *instance = [TestClass new];
+  [instance setInstanceVariable:instance];
+  void *value = 0;
+  Ivar ivar = object_getInstanceVariable(instance, "instanceVariable", &value);
+  if (ivar == 0 || value != instance) {
+    return -1;
+  }
+  value = instance;
+  if (object_getInstanceVariable(instance, "missing", &value) != 0 || value != 0) {
+    return -2;
+  }
+  if (object_getInstanceVariable(instance, "instanceVariable", 0) != ivar) {
+    return -3;
+  }
+  [instance release];
+  return 0;
+}
+
+int test_method_setImplementation(void) {
+  TestClass *instance = [TestClass new];
+  SEL answer_sel =
+      NSSelectorFromString([NSString stringWithUTF8String:"answer"]);
+  SEL alternate_sel =
+      NSSelectorFromString([NSString stringWithUTF8String:"alternateAnswer"]);
+  Method answer = class_getInstanceMethod([TestClass class], answer_sel);
+  Method alternate = class_getInstanceMethod([TestClass class], alternate_sel);
+  void (*alternate_imp)(void) = method_getImplementation(alternate);
+  void (*old_imp)(void) = method_setImplementation(answer, alternate_imp);
+  if ([instance answer] != 84 ||
+      ((int (*)(id, SEL))old_imp)(instance, answer_sel) != 42) {
+    return -1;
+  }
+  if (method_setImplementation(answer, old_imp) != alternate_imp ||
+      [instance answer] != 42) {
+    return -2;
   }
   [instance release];
   return 0;

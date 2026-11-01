@@ -25,6 +25,8 @@ pub struct IVar {
     pub type_: String,
     pub offset: ConstPtr<GuestUSize>,
     pub alignment: u32,
+    /// Stable guest pointer to the binary's `ivar_t` metadata.
+    pub(super) handle: ConstPtr<ivar_t>,
 }
 
 /// The layout of a property list in an app binary.
@@ -42,7 +44,7 @@ unsafe impl SafeRead for ivar_list_t {}
 ///
 /// The name, field names and field layout are based on what Ghidra outputs.
 #[repr(C, packed)]
-struct ivar_t {
+pub(super) struct ivar_t {
     offset: ConstPtr<GuestUSize>,
     name: ConstPtr<u8>,
     type_: ConstPtr<u8>,
@@ -78,6 +80,7 @@ impl ClassHostObject {
                     type_,
                     offset,
                     alignment,
+                    handle: ivar_ptr,
                 },
             );
         }
@@ -85,6 +88,36 @@ impl ClassHostObject {
 }
 
 impl ObjC {
+    /// Looks up an ivar by name and returns its metadata together with the
+    /// address of that ivar in `obj`.
+    pub(super) fn object_lookup_ivar_metadata(
+        &self,
+        mem: &Mem,
+        obj: id,
+        name: &str,
+    ) -> Option<(MutPtr<GuestUSize>, ConstPtr<ivar_t>)> {
+        if obj == nil {
+            return None;
+        }
+        let mut class = ObjC::read_isa(obj, mem);
+        loop {
+            let &ClassHostObject {
+                superclass,
+                ref ivars,
+                ..
+            } = self.borrow(class);
+            if let Some(ivar) = ivars.get(name) {
+                let ivar_offset = mem.read(ivar.offset);
+                let ivar_ptr = MutVoidPtr::from_bits(obj.to_bits() + ivar_offset);
+                return Some((ivar_ptr.cast(), ivar.handle));
+            } else if superclass == nil {
+                return None;
+            } else {
+                class = superclass;
+            }
+        }
+    }
+
     /// Checks if the object's class has an ivar in its class chain with the
     /// provided name and returns the pointer to the object's ivar and its type
     /// if any or None if the object's class has no ivar with that name.
@@ -132,6 +165,39 @@ impl ObjC {
         }
         ivars_strings
     }
+}
+
+/// Obtains an object-valued instance variable by name and returns the runtime
+/// metadata describing it. This API predates `object_getIvar`; its output is a
+/// pointer-sized value and is not retained.
+pub(super) fn object_getInstanceVariable(
+    env: &mut Environment,
+    obj: id,
+    name: ConstPtr<u8>,
+    out_value: MutPtr<MutVoidPtr>,
+) -> ConstPtr<ivar_t> {
+    if obj == nil || name.is_null() {
+        if !out_value.is_null() {
+            env.mem.write(out_value, Ptr::null());
+        }
+        return Ptr::null();
+    }
+
+    let name = env.mem.cstr_at_utf8(name).unwrap().to_owned();
+    let Some((ivar_ptr, ivar_handle)) =
+        env.objc.object_lookup_ivar_metadata(&env.mem, obj, &name)
+    else {
+        if !out_value.is_null() {
+            env.mem.write(out_value, Ptr::null());
+        }
+        return Ptr::null();
+    };
+
+    if !out_value.is_null() {
+        let value: GuestUSize = env.mem.read(ivar_ptr);
+        env.mem.write(out_value, MutVoidPtr::from_bits(value));
+    }
+    ivar_handle
 }
 
 /// Undocumented function (see link above) apparently used by auto-generated

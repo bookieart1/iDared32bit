@@ -59,8 +59,11 @@ static inline NSRange NSMakeRange(NSUInteger loc, NSUInteger len) {
 // id objc_msgSend(id, SEL, ...);
 
 typedef struct objc_method *Method;
+typedef struct objc_ivar *Ivar;
 Method class_getInstanceMethod(Class cls, SEL name);
 void (*method_getImplementation(Method m))(void);
+void (*method_setImplementation(Method m, void (*imp)(void)))(void);
+Ivar object_getInstanceVariable(id obj, const char *name, void **outValue);
 #ifdef DEFINE_ME_WHEN_BUILDING_ON_MACOS
 SEL method_getName(Method m);
 #endif
@@ -558,6 +561,8 @@ void CGContextShowGlyphsAtPoint(CGContextRef c, CGFloat x, CGFloat y,
 // `UIGraphics.h`
 
 CGContextRef UIGraphicsGetCurrentContext(void);
+void UIGraphicsPushContext(CGContextRef context);
+void UIGraphicsPopContext(void);
 
 // AudioToolbox
 
@@ -778,6 +783,7 @@ typedef enum {
 @end
 @interface UIImage : NSObject
 + (instancetype)imageWithCGImage:(CGImageRef)cgImage;
+- (void)drawAsPatternInRect:(CGRect)rect;
 @end
 @interface UIImageView : UIView
 - (void)setImage:(UIImage *)image;

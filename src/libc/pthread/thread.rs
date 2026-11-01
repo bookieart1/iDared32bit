@@ -71,6 +71,8 @@ struct ThreadHostObject {
     thread_id: ThreadId,
     joined_by: Option<ThreadId>,
     attr: pthread_attr_t,
+    cancel_state: i32,
+    cancel_type: i32,
 }
 
 /// Arbitrarily-chosen magic number for `pthread_attr_t` (not Apple's).
@@ -82,6 +84,11 @@ const MAGIC_THREAD: u32 = u32::from_be_bytes(*b"THRD");
 type DetachState = i32;
 const PTHREAD_CREATE_JOINABLE: DetachState = 1;
 pub const PTHREAD_CREATE_DETACHED: DetachState = 2;
+
+const PTHREAD_CANCEL_DISABLE: i32 = 0;
+const PTHREAD_CANCEL_ENABLE: i32 = 1;
+const PTHREAD_CANCEL_ASYNCHRONOUS: i32 = 0;
+const PTHREAD_CANCEL_DEFERRED: i32 = 2;
 
 /// Value taken from an iOS 2.0 simulator
 const PTHREAD_STACK_MIN: GuestUSize = 2 * PAGE_SIZE;
@@ -257,6 +264,8 @@ pub fn pthread_create(
             thread_id,
             joined_by: None,
             attr,
+            cancel_state: PTHREAD_CANCEL_ENABLE,
+            cancel_type: PTHREAD_CANCEL_DEFERRED,
         },
     );
 
@@ -300,6 +309,8 @@ pub fn pthread_for_thread_id(env: &mut Environment, thread_id: ThreadId) -> Opti
                 thread_id: 0,
                 joined_by: None,
                 attr: DEFAULT_ATTR,
+                cancel_state: PTHREAD_CANCEL_ENABLE,
+                cancel_type: PTHREAD_CANCEL_DEFERRED,
             },
         );
         log_dbg!(
@@ -390,8 +401,39 @@ fn pthread_detach(env: &mut Environment, thread: pthread_t) -> i32 {
     0
 }
 
-fn pthread_setcanceltype(_env: &mut Environment, type_: i32, oldtype: MutPtr<i32>) -> i32 {
-    log!("TODO: pthread_setcanceltype({}, {:?})", type_, oldtype);
+fn pthread_setcancelstate(env: &mut Environment, state: i32, oldstate: MutPtr<i32>) -> i32 {
+    if state != PTHREAD_CANCEL_ENABLE && state != PTHREAD_CANCEL_DISABLE {
+        return EINVAL;
+    }
+    let thread = pthread_self(env);
+    let old_state = {
+        let host_object = State::get(env).threads.get_mut(&thread).unwrap();
+        let old_state = host_object.cancel_state;
+        host_object.cancel_state = state;
+        old_state
+    };
+    if !oldstate.is_null() {
+        env.mem.write(oldstate, old_state);
+    }
+    // Cancellation delivery itself remains unsupported; retaining this state
+    // still gives callers the correct set/query contract.
+    0
+}
+
+fn pthread_setcanceltype(env: &mut Environment, type_: i32, oldtype: MutPtr<i32>) -> i32 {
+    if type_ != PTHREAD_CANCEL_DEFERRED && type_ != PTHREAD_CANCEL_ASYNCHRONOUS {
+        return EINVAL;
+    }
+    let thread = pthread_self(env);
+    let old_type = {
+        let host_object = State::get(env).threads.get_mut(&thread).unwrap();
+        let old_type = host_object.cancel_type;
+        host_object.cancel_type = type_;
+        old_type
+    };
+    if !oldtype.is_null() {
+        env.mem.write(oldtype, old_type);
+    }
     0
 }
 fn pthread_testcancel(_env: &mut Environment) {
@@ -485,6 +527,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(pthread_join(_, _)),
     export_c_func!(pthread_exit(_)),
     export_c_func!(pthread_detach(_)),
+    export_c_func!(pthread_setcancelstate(_, _)),
     export_c_func!(pthread_setcanceltype(_, _)),
     export_c_func!(pthread_testcancel()),
     export_c_func!(pthread_mach_thread_np(_)),

@@ -6,7 +6,9 @@
 //! `UIImage`.
 
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::frameworks::core_graphics::cg_context::CGContextDrawImage;
+use crate::frameworks::core_graphics::cg_context::{
+    CGContextClipToRect, CGContextDrawImage, CGContextRestoreGState, CGContextSaveGState,
+};
 use crate::frameworks::core_graphics::cg_image::{
     self, CGImageGetHeight, CGImageGetWidth, CGImageRef, CGImageRelease, CGImageRetain,
 };
@@ -195,6 +197,67 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     };
     CGContextDrawImage(env, context, rect, image);
+}
+
+- (())drawAsPatternInRect:(CGRect)rect {
+    let context = UIGraphicsGetCurrentContext(env);
+    if context == nil {
+        log!("Warning: [(UIImage*){:?} drawAsPatternInRect:{:?}] is called with nil context, ignoring.", this, rect);
+        return;
+    }
+    let image = env.objc.borrow::<UIImageHostObject>(this).cg_image;
+    let tile_width = CGImageGetWidth(env, image) as CGFloat;
+    let tile_height = CGImageGetHeight(env, image) as CGFloat;
+    if tile_width <= 0.0
+        || tile_height <= 0.0
+        || rect.size.width <= 0.0
+        || rect.size.height <= 0.0
+        || !tile_width.is_finite()
+        || !tile_height.is_finite()
+        || !rect.origin.x.is_finite()
+        || !rect.origin.y.is_finite()
+        || !rect.size.width.is_finite()
+        || !rect.size.height.is_finite()
+    {
+        return;
+    }
+
+    let max_x = rect.origin.x + rect.size.width;
+    let max_y = rect.origin.y + rect.size.height;
+    if !max_x.is_finite() || !max_y.is_finite() {
+        return;
+    }
+    CGContextSaveGState(env, context);
+    CGContextClipToRect(env, context, rect);
+    let mut y = rect.origin.y;
+    while y < max_y {
+        let mut x = rect.origin.x;
+        while x < max_x {
+            CGContextDrawImage(
+                env,
+                context,
+                CGRect {
+                    origin: CGPoint { x, y },
+                    size: CGSize {
+                        width: tile_width,
+                        height: tile_height,
+                    },
+                },
+                image,
+            );
+            let next_x = x + tile_width;
+            if next_x <= x {
+                break;
+            }
+            x = next_x;
+        }
+        let next_y = y + tile_height;
+        if next_y <= y {
+            break;
+        }
+        y = next_y;
+    }
+    CGContextRestoreGState(env, context);
 }
 
 @end

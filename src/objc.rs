@@ -49,14 +49,16 @@ use crate::Environment;
 use classes::{
     class_addMethod, class_copyPropertyList, class_getInstanceMethod, class_getInstanceSize,
     class_getMethodImplementation, class_getProperty, class_getSuperclass, class_replaceMethod,
-    method_getImplementation, method_getTypeEncoding, objc_getClass, ClassHostObject, FakeClass,
-    UnimplementedClass,
+    method_getImplementation, method_getTypeEncoding, method_setImplementation, objc_getClass,
+    ClassHostObject, FakeClass, UnimplementedClass,
 };
 pub(crate) use messages::objc_msgSend;
 use messages::{objc_msgSendSuper2, objc_msgSend_stret, MsgSendSignature, MsgSendSuperSignature};
 use methods::{method_list_t, method_t};
 use objects::{objc_object, object_getClass, HostObjectEntry};
-use properties::{ivar_list_t, objc_copyStruct, objc_getProperty, objc_setProperty};
+use properties::{
+    ivar_list_t, objc_copyStruct, objc_getProperty, objc_setProperty, object_getInstanceVariable,
+};
 use selectors::{sel_getUid, sel_registerName};
 use synchronization::{objc_sync_enter, objc_sync_exit};
 
@@ -275,6 +277,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_getInstanceMethod(_, _)),
     export_c_func!(class_addMethod(_, _, _, _)),
     export_c_func!(method_getImplementation(_)),
+    export_c_func!(method_setImplementation(_, _)),
     export_c_func!(method_getTypeEncoding(_)),
     export_c_func!(class_getMethodImplementation(_, _)),
     export_c_func!(class_replaceMethod(_, _, _, _)),
@@ -288,6 +291,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_sync_enter(_)),
     export_c_func!(objc_sync_exit(_)),
     export_c_func!(object_getClass(_)),
+    export_c_func!(object_getInstanceVariable(_, _, _)),
     export_c_func!(object_getClassName(_)),
     export_c_func!(sel_getUid(_)),
     export_c_func!(sel_registerName(_)),

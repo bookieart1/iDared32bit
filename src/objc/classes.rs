@@ -1242,10 +1242,11 @@ pub(super) fn class_getInstanceMethod(
     };
     let imp = match imp {
         Some(imp) => imp,
-        None => env
-            .dyld
-            .create_proc_address(&mut env.mem, &mut env.cpu, "_objc_msgSend")
-            .unwrap(),
+        // Expose a direct trampoline to the current host implementation. This
+        // matters when an app saves the old IMP before swizzling the method:
+        // an objc_msgSend trampoline would look the method up again and recurse
+        // into the replacement instead of calling the original implementation.
+        None => ObjC::class_get_method_guest_function(env, class, name),
     };
     let method = method_t {
         name: name.as_ptr(),
@@ -1270,6 +1271,46 @@ pub(super) fn method_getImplementation(
         return GuestIMP::from_addr_with_thumb_bit(0);
     }
     env.mem.read(method).imp
+}
+
+/// Replaces the implementation represented by a runtime `Method` handle and
+/// returns the previous implementation. `class_getInstanceMethod` canonicalizes
+/// handles, so updating both the handle and the owning class keeps subsequent
+/// message dispatch and runtime inspection consistent.
+pub(super) fn method_setImplementation(
+    env: &mut Environment,
+    method: MutPtr<method_t>,
+    new_imp: GuestIMP,
+) -> GuestIMP {
+    if method.is_null() {
+        return GuestIMP::from_addr_with_thumb_bit(0);
+    }
+
+    let owner = env
+        .objc
+        .method_handles
+        .iter()
+        .find_map(|(&(class, name), &handle)| (handle == method).then_some((class, name)))
+        .unwrap_or_else(|| panic!("method_setImplementation called with unknown Method {:?}", method));
+
+    let old_imp = env.mem.read(method).imp;
+    let (class, name) = owner;
+    let class_host = env.objc.borrow_mut::<ClassHostObject>(class);
+    let runtime_method = class_host
+        .methods
+        .get_mut(&name)
+        .expect("canonical Method owner no longer has the method");
+    runtime_method.imp = IMP::Guest(new_imp);
+
+    // Future methodForSelector-style queries must see the replacement. A
+    // previously returned trampoline remains valid and continues to represent
+    // the old implementation, as Objective-C's IMP contract requires.
+    env.objc.cached_guest_functions.remove(&(class, name));
+
+    let mut handle = env.mem.read(method);
+    handle.imp = new_imp;
+    env.mem.write(method, handle);
+    old_imp
 }
 
 #[allow(non_snake_case)]

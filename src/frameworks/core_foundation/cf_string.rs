@@ -17,7 +17,7 @@ use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::foundation::{ns_string, unichar, NSNotFound, NSRange, NSUInteger};
 use crate::libc::string::strlen;
 use crate::mem::{ConstPtr, GuestUSize, MutPtr};
-use crate::objc::{id, msg, msg_class};
+use crate::objc::{id, msg, msg_class, nil};
 use crate::Environment;
 
 pub type CFStringRef = super::CFTypeRef;
@@ -104,6 +104,34 @@ fn CFStringConvertNSStringEncodingToEncoding(
         ns_string::NSUTF32LittleEndianStringEncoding => kCFStringEncodingUTF32LE,
         _ => unimplemented!("Unhandled: NSStringEncoding {:#x}", encoding),
     }
+}
+
+/// Returns Core Foundation's canonical IANA charset name for the encodings we
+/// currently support. Unknown encodings have no mapping and return NULL.
+fn iana_charset_name(encoding: CFStringEncoding) -> Option<&'static str> {
+    Some(match encoding {
+        kCFStringEncodingMacRoman => "macintosh",
+        kCFStringEncodingASCII => "us-ascii",
+        kCFStringEncodingUTF8 => "utf-8",
+        kCFStringEncodingUTF16 => "utf-16",
+        kCFStringEncodingUTF16BE => "utf-16be",
+        kCFStringEncodingUTF16LE => "utf-16le",
+        kCFStringEncodingISOLatin1 => "iso-8859-1",
+        kCFStringEncodingUTF32 => "utf-32",
+        kCFStringEncodingUTF32BE => "utf-32be",
+        kCFStringEncodingUTF32LE => "utf-32le",
+        _ => return None,
+    })
+}
+
+fn CFStringConvertEncodingToIANACharSetName(
+    env: &mut Environment,
+    encoding: CFStringEncoding,
+) -> CFStringRef {
+    let Some(name) = iana_charset_name(encoding) else {
+        return nil;
+    };
+    ns_string::get_static_str(env, name)
 }
 
 fn CFStringCreateCopy(
@@ -474,6 +502,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringAppendCString(_, _, _)),
     export_c_func!(CFStringAppendFormat(_, _, _, _)),
     export_c_func!(CFStringConvertEncodingToNSStringEncoding(_)),
+    export_c_func!(CFStringConvertEncodingToIANACharSetName(_)),
     export_c_func!(CFStringConvertNSStringEncodingToEncoding(_)),
     export_c_func!(CFStringCreateCopy(_, _)),
     export_c_func!(CFStringCreateMutable(_, _)),
@@ -505,3 +534,27 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringGetPascalString(_, _, _, _)),
     export_c_func!(CFStringNormalize(_, _)),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supported_iana_charset_names_are_canonical() {
+        assert_eq!(
+            iana_charset_name(kCFStringEncodingMacRoman),
+            Some("macintosh")
+        );
+        assert_eq!(
+            iana_charset_name(kCFStringEncodingASCII),
+            Some("us-ascii")
+        );
+        assert_eq!(iana_charset_name(kCFStringEncodingUTF8), Some("utf-8"));
+        assert_eq!(iana_charset_name(kCFStringEncodingUTF16), Some("utf-16"));
+        assert_eq!(
+            iana_charset_name(kCFStringEncodingISOLatin1),
+            Some("iso-8859-1")
+        );
+        assert_eq!(iana_charset_name(u32::MAX), None);
+    }
+}
