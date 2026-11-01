@@ -130,16 +130,28 @@ fn set_sdl2_orientation(orientation: DeviceOrientation) {
     );
     #[cfg(target_os = "ios")]
     unsafe {
-        extern "C" {
-            fn idared_request_host_orientation(orientation: i32);
+        type OrientationRequest = unsafe extern "C" fn(i32);
+
+        // The Swift host and the Rust emulator are built as separate Xcode
+        // targets. Looking up this optional bridge at runtime keeps the Rust
+        // cdylib linkable on its own while still allowing the final iOS app to
+        // coordinate its scene and keyboard orientation with the guest.
+        let symbol = ::libc::dlsym(
+            ::libc::RTLD_DEFAULT,
+            c"idared_request_host_orientation".as_ptr(),
+        );
+        if symbol.is_null() {
+            log!("Host orientation bridge is unavailable; leaving scene orientation unchanged");
+            return;
         }
+        let request: OrientationRequest = std::mem::transmute(symbol);
         let orientation = match orientation {
             DeviceOrientation::Portrait => 0,
             DeviceOrientation::PortraitUpsideDown => 1,
             DeviceOrientation::LandscapeLeft => 2,
             DeviceOrientation::LandscapeRight => 3,
         };
-        idared_request_host_orientation(orientation);
+        request(orientation);
     }
 }
 

@@ -7,7 +7,7 @@
 
 use super::{NSNotFound, NSRange, NSUInteger};
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, retain, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, nil, objc_classes, retain, ClassExports, HostObject, NSZonePtr,
 };
 
 /// Sorted, non-overlapping half-open ranges. This reflects the real class's
@@ -328,6 +328,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::objc::msg_class;
     use crate::objc::release;
     use crate::Environment;
 
