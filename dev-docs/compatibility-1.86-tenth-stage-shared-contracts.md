@@ -85,3 +85,27 @@ is general and contains no bundle-identifier checks.
   fixed.
 - Blot, Dark Nebula 2, Dirt, and Spoing are focused regressions. No save reset is
   requested.
+
+## Verified delivery
+
+- Final implementation commit:
+  `9b9e2df984d7390b2e39ca90e55fc3f8e59e2696`.
+- [Hosted tests 41313333552](https://github.com/bookieart1/iDared32bit/actions/runs/41313333552):
+  **145/145 development-library tests passed on macOS and 145/145 on
+  Windows**. The native Foundation reference and both bounded recorder
+  reproducers passed. Full guest-executable tests were skipped on the
+  development branch. The separately allowed-to-fail macOS, Windows and
+  Android lint stages each emitted exit code 1; overall workflow success is
+  therefore not a clean-lint claim.
+- [IPA build 41313333541](https://github.com/bookieart1/iDared32bit/actions/runs/41313333541):
+  arm64 compilation and unsigned packaging completed successfully. Artifact ID
+  `13086208966`; ZIP SHA-256
+  `ba577815a30bb7cd19697969866a4743140ee7540b243067b0db7890ae35cf40`,
+  matching GitHub's published digest.
+- Local `outputs/iDared-Dev-1.86.ipa`, 20,003,299 bytes, SHA-256
+  `fd736c918b714499ad4889001ff51a36c5dc91c1447ed17faf583c4684077909`,
+  passed arm64, development identity, unsigned/no-provisioning, embedded
+  commit/workflow, universal-recorder and new-contract marker checks.
+
+Verification: `outputs/iDared-Dev-1.86.verification.json`. Device results remain
+pending; passing a recorded missing contract is not yet a gameplay claim.
