@@ -95,7 +95,7 @@ impl Font {
         let scale = self.scale(font_size);
         let mut previous = None;
         let mut advance = 0.0;
-        for glyph in self.font.glyphs_for(glyphs) {
+        for glyph in self.font.glyphs_for(glyphs.into_iter()) {
             let glyph = glyph.scaled(scale);
             if let Some(previous) = previous {
                 advance += self.font.pair_kerning(scale, previous, glyph.id());
