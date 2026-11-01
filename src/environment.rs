@@ -1459,8 +1459,9 @@ impl Environment {
         if self.diagnostics.is_some() {
             echo!(
                 concat!(
-                    "flight recorder v1 enabled: bounded API/ObjC history and dictionary ",
-                    "provenance; 5s progress reports (first 12); dump on panic/Home. ",
+                    "flight recorder v1 enabled: bounded API/ObjC history, dictionary ",
+                    "provenance, and decoded defaults/mutation context; 5s progress ",
+                    "reports (first 12); dump on panic/Home. ",
                     "No instruction tracing."
                 )
             );

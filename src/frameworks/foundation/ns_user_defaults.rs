@@ -161,15 +161,28 @@ pub const CLASSES: ClassExports = objc_classes! {
     let app_domain_dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
     let res: id = msg![env; app_domain_dict objectForKey:key];
     if res != nil {
+        env.diagnostic_user_defaults_lookup(
+            this.to_bits(), key.to_bits(), res.to_bits(), "application"
+        );
         return res;
     }
     let global_domain_dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).global_domain_dict;
     let res = msg![env; global_domain_dict objectForKey:key];
     if res != nil {
+        env.diagnostic_user_defaults_lookup(
+            this.to_bits(), key.to_bits(), res.to_bits(), "global"
+        );
         return res;
     }
     let registration_domain_dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).registration_domain_dict;
-    msg![env; registration_domain_dict objectForKey:key]
+    let res: id = msg![env; registration_domain_dict objectForKey:key];
+    env.diagnostic_user_defaults_lookup(
+        this.to_bits(),
+        key.to_bits(),
+        res.to_bits(),
+        if res == nil { "missing" } else { "registration" },
+    );
+    res
 }
 
 - (())registerDefaults:(id)registration_dictionary {

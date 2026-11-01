@@ -8,7 +8,9 @@
 //! boundaries, not instructions, and is not proof that a nil return is an
 //! error.
 
+use crate::frameworks::foundation::ns_string;
 use crate::mem::{ConstVoidPtr, Mem};
+use crate::objc::{id, ObjC};
 use crate::Environment;
 use std::time::{Duration, Instant};
 
@@ -18,6 +20,7 @@ const SIGNALS: usize = 24;
 const PROGRESS: usize = 24;
 const CRASH_CALLERS: usize = 8;
 const PROVENANCE: usize = 128;
+const BOUNDARY_DETAILS: usize = 32;
 const HEALTHY_PRESENT_INTERVAL: Duration = Duration::from_millis(100);
 const SLOW_PRESENT_INTERVAL: Duration = Duration::from_millis(180);
 const HEALTHY_PRESENT_STREAK: u16 = 30;
@@ -62,6 +65,12 @@ impl Text {
     }
     fn bytes(&self) -> &[u8] {
         &self.bytes[..self.len]
+    }
+    fn append(&mut self, bytes: &[u8]) {
+        let remaining = self.bytes.len().saturating_sub(self.len);
+        let copy = bytes.len().min(remaining);
+        self.bytes[self.len..self.len + copy].copy_from_slice(&bytes[..copy]);
+        self.len += copy;
     }
 }
 impl std::fmt::Display for Text {
@@ -112,6 +121,23 @@ struct Event {
 struct Provenance {
     object: u32,
     event: Event,
+    context: &'static str,
+    source_argument: Text,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct BoundaryDetail {
+    call_sequence: u64,
+    context: &'static str,
+    arguments: [Text; 2],
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct DefaultsLookup {
+    receiver: u32,
+    key: u32,
+    result: u32,
+    domain: &'static str,
 }
 
 struct Ring<T: Copy + Default, const N: usize> {
@@ -176,6 +202,8 @@ pub struct Recorder {
     /// trace: it exists to retain collection/coder provenance after the main
     /// event ring wraps.
     provenance: [Provenance; PROVENANCE],
+    boundary_details: Ring<BoundaryDetail, BOUNDARY_DETAILS>,
+    defaults_lookup: DefaultsLookup,
     slow_capture: Option<SlowCapture>,
     pending_slow_capture: Option<PendingSlowCapture>,
     sequence: u64,
@@ -202,6 +230,8 @@ impl Recorder {
             signals: Ring::default(),
             progress: Ring::default(),
             provenance: [Provenance::default(); PROVENANCE],
+            boundary_details: Ring::default(),
+            defaults_lookup: DefaultsLookup::default(),
             slow_capture: None,
             pending_slow_capture: None,
             sequence: 0,
@@ -245,6 +275,14 @@ impl Recorder {
         object_result: bool,
         dictionary_result: bool,
     ) {
+        if call.detail.bytes() == b"NSUserDefaults"
+            && matches!(call.name.bytes(), b"objectForKey:" | b"dictionaryForKey:")
+            && self.defaults_lookup.receiver == call.receiver
+            && self.defaults_lookup.key == call.args[2]
+            && self.defaults_lookup.result == result[0]
+        {
+            self.set_boundary_context(call.sequence, self.defaults_lookup.domain);
+        }
         self.sequence += 1;
         let signal = (object_result && result[0] == 0)
             || (call.name.bytes() == b"_dlsym" && result[0] == 0)
@@ -291,12 +329,22 @@ impl Recorder {
             && (name.starts_with(b"initWith") || name.starts_with(b"dictionaryWith")))
     }
     fn remember_provenance(&mut self, object: u32, event: Event) {
+        let detail = self
+            .boundary_detail_for(event.call.sequence)
+            .copied()
+            .unwrap_or_default();
+        let provenance = Provenance {
+            object,
+            event,
+            context: detail.context,
+            source_argument: detail.arguments[0],
+        };
         if let Some(slot) = self
             .provenance
             .iter_mut()
             .find(|slot| slot.object == object)
         {
-            *slot = Provenance { object, event };
+            *slot = provenance;
             return;
         }
         let slot = self
@@ -304,7 +352,26 @@ impl Recorder {
             .iter_mut()
             .min_by_key(|slot| slot.event.sequence)
             .unwrap();
-        *slot = Provenance { object, event };
+        *slot = provenance;
+    }
+    fn remember_boundary_detail(&mut self, detail: BoundaryDetail) {
+        self.boundary_details.push(detail);
+    }
+    fn boundary_detail_for(&self, call_sequence: u64) -> Option<&BoundaryDetail> {
+        self.boundary_details
+            .iter()
+            .rev()
+            .find(|detail| detail.call_sequence == call_sequence)
+    }
+    fn set_boundary_context(&mut self, call_sequence: u64, context: &'static str) {
+        if let Some(detail) = self
+            .boundary_details
+            .items
+            .iter_mut()
+            .find(|detail| detail.call_sequence == call_sequence)
+        {
+            detail.context = context;
+        }
     }
     fn forget_provenance(&mut self, object: u32) {
         if object == 0 {
@@ -318,14 +385,13 @@ impl Recorder {
             *slot = Provenance::default();
         }
     }
-    fn provenance_for(&self, object: u32) -> Option<&Event> {
+    fn provenance_for(&self, object: u32) -> Option<&Provenance> {
         if object == 0 {
             return None;
         }
         self.provenance
             .iter()
             .find(|slot| slot.object == object)
-            .map(|slot| &slot.event)
     }
     fn note_present(&mut self) {
         self.note_present_at(Instant::now());
@@ -406,11 +472,20 @@ impl Recorder {
         echo_no_panic!("flight progress ms={} tid={} pc={:#x} lr={:#x} thread-slots={} runnable={} api={} objc={} main-loops={} EAGL-returns={} yields={} main-sources[timer,selector,queue,unit]={:?}",
             p.ms, p.thread, p.pc, p.lr, p.threads, p.runnable, p.api, p.objc, p.run_loops, p.presents, p.yields, p.sources);
     }
-    fn print_event(e: &Event) {
+    fn print_event(&self, e: &Event) {
         let c = &e.call;
         echo_no_panic!("flight #{} call={} tid={} {} {} {} pc={:#x} lr={:#x} sp={:#x} args={:08x?} stack={:08x?} receiver={:#x} isa={:#x} result={:08x?} text=\"{}\" mib={:?}",
             e.sequence, c.sequence, c.thread, c.kind, c.name, e.note, c.pc, c.lr, c.sp,
             c.args, &c.stack[..c.stack_len], c.receiver, c.isa, e.result, c.detail, &c.mib[..c.mib_len]);
+        if let Some(detail) = self.boundary_detail_for(c.sequence) {
+            echo_no_panic!(
+                "flight #{} decoded context=\"{}\" arguments=[\"{}\", \"{}\"]",
+                e.sequence,
+                detail.context,
+                detail.arguments[0],
+                detail.arguments[1]
+            );
+        }
     }
     pub fn dump(&mut self, reason: &str) {
         if self.dumped {
@@ -435,7 +510,7 @@ impl Recorder {
                 capture.recent.written
             );
             for event in capture.recent.iter() {
-                Self::print_event(event);
+                self.print_event(event);
             }
         } else {
             echo_no_panic!("flight first sustained slow-present transition: not observed");
@@ -445,7 +520,7 @@ impl Recorder {
             self.signals.written
         );
         for e in self.signals.iter() {
-            Self::print_event(e);
+            self.print_event(e);
         }
         if let Some(last) = self
             .recent
@@ -455,7 +530,12 @@ impl Recorder {
         {
             if let Some(origin) = self.provenance_for(last.call.receiver) {
                 echo_no_panic!("flight receiver provenance: most recent tracked object-producing boundary for receiver {:#x}; this may be a transfer, not the original allocation", last.call.receiver);
-                Self::print_event(origin);
+                self.print_event(&origin.event);
+                echo_no_panic!(
+                    "flight receiver provenance decoded: context=\"{}\" source-argument=\"{}\"",
+                    origin.context,
+                    origin.source_argument
+                );
             } else {
                 echo_no_panic!(
                     "flight receiver provenance: no retained tracked boundary for receiver {:#x}",
@@ -465,7 +545,7 @@ impl Recorder {
         }
         echo_no_panic!("flight recent boundaries: newest {RECENT}; total={} (older events overwritten; absent return does not prove a stall)", self.recent.written);
         for e in self.recent.iter() {
-            Self::print_event(e);
+            self.print_event(e);
         }
         echo_no_panic!("flight recorder end");
     }
@@ -501,6 +581,33 @@ impl Recorder {
 fn read_word(mem: &Mem, addr: u32) -> Option<u32> {
     let bytes = mem.get_bytes_fallible(ConstVoidPtr::from_bits(addr), 4)?;
     Some(u32::from_le_bytes(bytes.try_into().ok()?))
+}
+
+fn describe_object(objc: &ObjC, mem: &Mem, address: u32, include_string: bool) -> Text {
+    if address == 0 {
+        return Text::from_bytes(b"nil");
+    }
+    let Some(isa) = read_word(mem, address) else {
+        return Text::from_bytes(b"<invalid-object>");
+    };
+    let class_name = objc
+        .try_get_class_name(id::from_bits(isa))
+        .unwrap_or("<unknown-class>");
+    if !include_string {
+        return Text::from_bytes(class_name.as_bytes());
+    }
+    let mut string = [0; 80];
+    let Some(written) =
+        ns_string::copy_diagnostic_utf8(objc, id::from_bits(address), &mut string)
+    else {
+        return Text::from_bytes(class_name.as_bytes());
+    };
+    let mut result = Text::default();
+    result.append(b"\"");
+    result.append(&string[..written]);
+    result.append(b"\" class=");
+    result.append(class_name.as_bytes());
+    result
 }
 
 impl Environment {
@@ -586,7 +693,7 @@ impl Environment {
             .objc
             .try_get_class_name(crate::objc::id::from_bits(isa))
             .unwrap_or("<unknown-class>");
-        Some(recorder.begin(Call {
+        let call = recorder.begin(Call {
             thread: self.current_thread,
             kind: if host_internal { "ObjC(host)" } else { "ObjC" },
             name,
@@ -598,7 +705,51 @@ impl Environment {
             sp: regs[13],
             args: regs[..4].try_into().unwrap(),
             ..Call::default()
-        }))
+        });
+        let is_defaults_lookup = class_name == "NSUserDefaults"
+            && matches!(name.bytes(), b"objectForKey:" | b"dictionaryForKey:");
+        let is_immutable_dictionary_mutation = class_name == "_touchHLE_NSDictionary"
+            && name.bytes() == b"setObject:forKey:";
+        if is_defaults_lookup || is_immutable_dictionary_mutation {
+            let arguments = if is_defaults_lookup {
+                [
+                    describe_object(&self.objc, &self.mem, regs[2], true),
+                    Text::default(),
+                ]
+            } else {
+                [
+                    describe_object(&self.objc, &self.mem, regs[2], false),
+                    describe_object(&self.objc, &self.mem, regs[3], true),
+                ]
+            };
+            recorder.remember_boundary_detail(BoundaryDetail {
+                call_sequence: call.sequence,
+                arguments,
+                ..BoundaryDetail::default()
+            });
+            if is_defaults_lookup {
+                recorder.defaults_lookup = DefaultsLookup::default();
+            }
+        }
+        Some(call)
+    }
+    /// Associate the host-side domain decision with the already-recorded
+    /// NSUserDefaults boundary. No guest calls or ownership changes are made.
+    pub fn diagnostic_user_defaults_lookup(
+        &mut self,
+        receiver: u32,
+        key: u32,
+        result: u32,
+        domain: &'static str,
+    ) {
+        if let Some(recorder) = &mut self.diagnostics {
+            recorder.defaults_lookup = DefaultsLookup {
+                receiver,
+                key,
+                result,
+                domain,
+            };
+        }
     }
     pub fn diagnostic_end(&mut self, call: Option<Call>, object_result: bool) {
         if let Some(call) = call {
@@ -836,8 +987,8 @@ mod tests {
             });
         }
         let provenance = recorder.provenance_for(0x2000).unwrap();
-        assert_eq!(provenance.call.name.bytes(), b"objectForKey:");
-        assert_eq!(provenance.call.receiver, 0x1000);
+        assert_eq!(provenance.event.call.name.bytes(), b"objectForKey:");
+        assert_eq!(provenance.event.call.receiver, 0x1000);
 
         recorder.begin(Call {
             name: Text::from_bytes(b"dealloc"),
@@ -865,8 +1016,91 @@ mod tests {
         source.detail = Text::from_bytes(b"_touchHLE_NSDictionary");
         recorder.finish(source, [0x3000, 0], true, true);
         let provenance = recorder.provenance_for(0x3000).unwrap();
-        assert_eq!(provenance.call.name.bytes(), b"mutableCopy");
-        assert_eq!(provenance.call.receiver, 0x3000);
+        assert_eq!(provenance.event.call.name.bytes(), b"mutableCopy");
+        assert_eq!(provenance.event.call.receiver, 0x3000);
+    }
+
+    #[test]
+    fn decoded_defaults_domain_and_immutable_mutation_are_bounded() {
+        use crate::frameworks::foundation::ns_string::from_rust_string;
+        use crate::objc::{id, msg_class};
+
+        let mut env = Environment::new_fake_for_test();
+        let env = &mut env;
+        let defaults: id = msg_class![env; NSUserDefaults alloc];
+        let preference_key = from_rust_string(env, "settings/items".to_owned());
+        let mutation_key = from_rust_string(env, "playerchar/gramps".to_owned());
+        let value = from_rust_string(env, "owned".to_owned());
+        let result: id = msg_class![env; NSDictionary new];
+        env.diagnostics = Some(Recorder::new());
+
+        let object_for_key = env
+            .objc
+            .register_host_selector("objectForKey:".to_owned(), &mut env.mem);
+        env.cpu.regs_mut()[0..4].copy_from_slice(&[
+            defaults.to_bits(),
+            object_for_key.as_ptr().to_bits(),
+            preference_key.to_bits(),
+            0,
+        ]);
+        let call = env
+            .diagnostic_objc_begin(
+                defaults.to_bits(),
+                object_for_key.as_ptr().to_bits(),
+                false,
+            )
+            .unwrap();
+        env.diagnostic_user_defaults_lookup(
+            defaults.to_bits(),
+            preference_key.to_bits(),
+            result.to_bits(),
+            "application",
+        );
+        env.cpu.regs_mut()[0] = result.to_bits();
+        env.diagnostic_end(Some(call), true);
+
+        let provenance = env
+            .diagnostics
+            .as_ref()
+            .unwrap()
+            .provenance_for(result.to_bits())
+            .unwrap();
+        assert_eq!(provenance.context, "application");
+        assert!(provenance
+            .source_argument
+            .bytes()
+            .starts_with(b"\"settings/items\""));
+
+        let set_object = env
+            .objc
+            .register_host_selector("setObject:forKey:".to_owned(), &mut env.mem);
+        env.cpu.regs_mut()[0..4].copy_from_slice(&[
+            result.to_bits(),
+            set_object.as_ptr().to_bits(),
+            value.to_bits(),
+            mutation_key.to_bits(),
+        ]);
+        let call = env
+            .diagnostic_objc_begin(
+                result.to_bits(),
+                set_object.as_ptr().to_bits(),
+                false,
+            )
+            .unwrap();
+        let detail = env
+            .diagnostics
+            .as_ref()
+            .unwrap()
+            .boundary_detail_for(call.sequence)
+            .unwrap();
+        assert!(detail.arguments[0]
+            .bytes()
+            .windows(b"NSString".len())
+            .any(|window| window == b"NSString"));
+        assert!(detail.arguments[1]
+            .bytes()
+            .starts_with(b"\"playerchar/gramps\""));
+        assert!(std::mem::size_of::<Recorder>() < 128 * 1024);
     }
     #[test]
     fn first_slow_present_freezes_the_transition_history() {

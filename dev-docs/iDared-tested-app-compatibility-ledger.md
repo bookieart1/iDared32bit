@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: October 31, 2026
-Latest device-tested checkpoint: **iDared Dev 1.73** (`452a8571`; focused test; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.74** (`27825333`; device tests pending)
-Current activity: **Dev 1.74 is built, downloaded and verified. It adds Sharpshooter's standard mutable-set bulk insertion and corrects mutable singleton dictionary construction, a plausible but not yet proven cause of the Mage Gauntlet/HookWorld saved-state failures. 118 library tests pass on each host; the native reference passes. Universal bounded recording remains the default.**
+Latest device-tested checkpoint: **iDared Dev 1.75** (`cdcaf3d`; focused diagnostic test; Dev 1.71 remains the latest full-catalog survey)
+Latest built checkpoint: **iDared Dev 1.75** (`cdcaf3d`; device diagnostic validated; Dev 1.76 diagnostic build in progress)
+Current activity: **Dev 1.76 adds only bounded, non-mutating decoded context to the universal recorder: restored preference key/domain and the attempted immutable-dictionary mutation's key/value classes. It is intended to discriminate a shared Rocketcat saved-structure behavior from a broader persistence issue. No compatibility behavior or save data changes.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3222,3 +3222,69 @@ detail: `dev-docs/compatibility-1.75-collection-provenance.md`.
   complete log. Do not delete either save.
 
 Verification: `outputs/iDared-Dev-1.75.verification.json`.
+
+
+## Dev 1.75 device result — direct restored-preferences origin
+
+The focused log embeds source `cdcaf3d` and workflow `41263773139`; its
+SHA-256 is
+`19ead50def28badef62777dc67253a929022f0205762215069ef59da9a591a4c`.
+The unmodified 116,002-byte file is preserved as
+`outputs/device-logs/iDared-Dev-1.75-device-results.txt`. Both requested
+launches have the universal recorder enabled, a complete terminal dump and a
+retained provenance event.
+
+| App | Dev 1.75 evidence | Revised interpretation |
+|---|---|---|
+| Hook World 1.10 | Saved version 1.10 loads. Immutable dictionary `0x3647e150` receives `setObject:forKey:` at caller `0x74460`. The retained producer is `NSUserDefaults objectForKey:` sequence 65248, returning that exact pointer. | **Direct application-preferences value; blocked during restored-state startup.** No intervening mutable copy, dictionary factory or decoder produced the receiver. The earlier Dev 1.72 playable path was a first launch with version `(null)` and mutable in-memory settings. |
+| Mage Gauntlet 1.30 | Saved version/player/firstPlay load. Immutable dictionary `0x3646d700` receives `setObject:forKey:` at caller `0x1504d`. The retained producer is `NSUserDefaults objectForKey:` sequence 3778, returning that exact pointer. | **The same direct application-preferences pattern; blocked during restored-state startup.** The shared Rocketcat Settings code is the likely common consumer, but the log does not identify the preference key or establish why the shipped games avoided this path on historical iPhone OS. |
+
+This validates the provenance mechanism and falsifies the remaining broad
+producer hypotheses for these two concrete receivers. It does **not** justify
+making every `NSDictionary` or every value returned by `NSUserDefaults`
+mutable. Apple's documented preferences contract says returned property-list
+values are immutable. The contemporary open-source CF-550 implementation also
+loads the plist with `kCFPropertyListImmutable` and deep-copies values into the
+preferences cache with that option specifically to exclude mutable objects.
+
+There is a separate correctness gap in the emulator: its current
+`NSUserDefaults setObject:forKey:` retains the supplied object instead of
+making the historical immutable property-list snapshot. Correcting that gap
+would prevent later mutations of the caller's original object from silently
+changing the cached preference. It cannot by itself repair these already
+persisted saves or make the games' direct mutation valid, so it must not be
+presented as the current crash fix.
+
+The next discriminating evidence, before any accommodation, is bounded decoded
+context for the direct defaults lookup: preference key, selected domain and the
+failing dictionary key/value classes. That can identify whether both games are
+mutating the same Rocketcat settings structure and allow an explicit choice
+between a general persistence correction and a narrowly labeled legacy
+compatibility mode. Do not delete the preserved saves, globally weaken
+collection immutability, or treat the two first-run successes as proof that
+the restored-state behavior is correct.
+
+
+## Dev 1.76 engineering checkpoint — restored-preferences context
+
+Dev 1.76 is diagnostic-only. The universal recorder retains at most 32 decoded
+details for `NSUserDefaults objectForKey:`/`dictionaryForKey:` and immutable
+dictionary `setObject:forKey:` boundaries. A bounded, allocation-free NSString
+reader records the defaults key, selected domain, mutation key and value class
+without guest calls, ownership changes or return-value changes. The producer's
+key/domain also travels with the existing bounded dictionary provenance entry,
+so ordinary event-ring wrap does not erase it.
+
+This deliberately does **not** make defaults values mutable, alter preference
+serialization, tolerate an invalid mutation, migrate/delete saves or branch on
+either app. Unit coverage exercises UTF-8/UTF-16/UTF-32 bounds, real host
+objects, provenance association and the recorder-size ceiling. Local whitespace
+checking passes; the local environment has no Rust toolchain, so hosted library
+tests and iOS compilation remain pending and separate.
+
+Prediction: existing-save Hook World and Mage Gauntlet should retain their same
+strict failures, but their terminal dumps should now expose the exact restored
+preference structure and mutation shape. Test Hook World first, then Mage
+Gauntlet, without deleting either save. No gameplay or broad regression replay
+is required for a non-mutating diagnostic change. Engineering detail:
+`dev-docs/compatibility-1.76-restored-preferences-context.md`.

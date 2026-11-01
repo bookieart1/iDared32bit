@@ -233,6 +233,57 @@ impl StringHostObject {
             StringHostObject::Utf32(utf32) => Ok(Cow::Owned(Self::string_from_utf32(utf32))),
         }
     }
+
+    /// Copy a bounded UTF-8 representation without allocating or changing the
+    /// backing representation. This is for the flight recorder, which must not
+    /// call guest methods or perturb the object it is observing.
+    fn copy_diagnostic_utf8(&self, output: &mut [u8]) -> usize {
+        fn append_character(output: &mut [u8], written: &mut usize, character: char) -> bool {
+            let mut encoded = [0; 4];
+            let encoded = character.encode_utf8(&mut encoded).as_bytes();
+            let Some(end) = written.checked_add(encoded.len()) else {
+                return false;
+            };
+            if end > output.len() {
+                return false;
+            }
+            output[*written..end].copy_from_slice(encoded);
+            *written = end;
+            true
+        }
+
+        match self {
+            Self::Utf8(value) => {
+                let mut written = value.len().min(output.len());
+                while !value.is_char_boundary(written) {
+                    written -= 1;
+                }
+                output[..written].copy_from_slice(&value.as_bytes()[..written]);
+                written
+            }
+            Self::Utf16(value) => {
+                let mut written = 0;
+                for character in char::decode_utf16(value.iter().copied()) {
+                    let character = character.unwrap_or(char::REPLACEMENT_CHARACTER);
+                    if !append_character(output, &mut written, character) {
+                        break;
+                    }
+                }
+                written
+            }
+            Self::Utf32(value) => {
+                let mut written = 0;
+                for &character in value {
+                    let character =
+                        char::from_u32(character).unwrap_or(char::REPLACEMENT_CHARACTER);
+                    if !append_character(output, &mut written, character) {
+                        break;
+                    }
+                }
+                written
+            }
+        }
+    }
     /// Mutate the object, converting to UTF-16 if the string was not already
     /// UTF-16. Returns a reference to the UTF-16 content and a boolean that is
     /// [true] if a conversion happened.
@@ -2040,6 +2091,22 @@ pub fn to_rust_string(env: &mut Environment, string: id) -> Cow<'static, str> {
         .unwrap()
 }
 
+/// Copy an NSString's contents for bounded diagnostics without guest calls,
+/// allocation, mutation or a panic for an unrelated/invalid object.
+pub(crate) fn copy_diagnostic_utf8(
+    objc: &ObjC,
+    string: id,
+    output: &mut [u8],
+) -> Option<usize> {
+    let mut host_object = objc.get_host_object(string)?;
+    loop {
+        if let Some(string) = host_object.as_any().downcast_ref::<StringHostObject>() {
+            return Some(string.copy_diagnostic_utf8(output));
+        }
+        host_object = host_object.as_superclass()?;
+    }
+}
+
 /// Shortcut for host code, calls a callback once for each UTF-16 code-unit in a
 /// string. This is equivalent to a for loop using the `length` and
 /// `characterAtIndex:` methods, but much more efficient.
@@ -2365,6 +2432,25 @@ mod ns_string_tests {
             NSUTF8StringEncoding,
         )
         .is_none());
+    }
+
+    #[test]
+    fn diagnostic_utf8_copy_is_bounded_and_non_mutating() {
+        let utf8 = StringHostObject::Utf8(Cow::Borrowed("settings/items"));
+        let utf16 = StringHostObject::Utf16("snowman: ☃".encode_utf16().collect());
+        let utf32 = StringHostObject::Utf32(vec!['A' as u32, 0x1f680, 0x11_0000]);
+
+        let mut full = [0; 32];
+        let written = utf8.copy_diagnostic_utf8(&mut full);
+        assert_eq!(&full[..written], b"settings/items");
+
+        let mut bounded = [0; 10];
+        let written = utf16.copy_diagnostic_utf8(&mut bounded);
+        assert_eq!(&bounded[..written], "snowman: ".as_bytes());
+
+        let mut scalar = [0; 16];
+        let written = utf32.copy_diagnostic_utf8(&mut scalar);
+        assert_eq!(&scalar[..written], "A🚀�".as_bytes());
     }
 
     #[test]

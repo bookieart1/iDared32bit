@@ -126,3 +126,32 @@ separately. No physical-device result may be inferred from either.
   identity, lack of a signature/profile, provenance marker and universal-flight
   default were verified from the package.
 - This remains a diagnostic-only build. Physical-device validation is pending.
+
+## Physical-device result
+
+The requested focused test passed the diagnostic objective. The supplied log
+embeds source `cdcaf3d`, workflow `41263773139` and universal provenance
+recording. Its SHA-256 is
+`19ead50def28badef62777dc67253a929022f0205762215069ef59da9a591a4c`;
+the unmodified 116,002-byte file is retained as
+`outputs/device-logs/iDared-Dev-1.75-device-results.txt`.
+
+- Hook World: the terminal immutable dictionary was returned directly by
+  `NSUserDefaults objectForKey:` (provenance sequence 65248), then received
+  `setObject:forKey:` at guest caller `0x74460`.
+- Mage Gauntlet: the terminal immutable dictionary was likewise returned
+  directly by `NSUserDefaults objectForKey:` (provenance sequence 3778), then
+  received `setObject:forKey:` at guest caller `0x1504d`.
+
+The mutable-copy, mutable-factory and decoder/unarchiver origins are therefore
+rejected for both concrete receivers. The recorder added useful causal evidence
+without changing the visible failure, which is the intended outcome of this
+diagnostic build.
+
+The result does not authorize globally mutable defaults values. Foundation's
+contract and Apple's contemporary CF-550 preferences implementation both use
+immutable property-list values. The next bounded probe, if these games remain
+the active target, should decode the direct preference key/domain and the
+failing dictionary key/value classes. That is the minimum evidence needed to
+distinguish a shared Rocketcat saved-structure accommodation from a general
+preference-persistence correction. Existing saves must remain intact.
