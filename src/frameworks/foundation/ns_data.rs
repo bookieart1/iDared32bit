@@ -436,7 +436,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (MutVoidPtr)mutableBytes {
     let host_obj = env.objc.borrow_mut::<NSDataHostObject>(this);
-    assert!(host_obj.length != 0);
+    // Empty NSMutableData is valid. Cocoa permits asking it for mutableBytes;
+    // callers must still respect its zero length, and the pointer may be null.
     host_obj.bytes
 }
 
@@ -466,6 +467,16 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn empty_mutable_data_allows_mutable_bytes_query() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let data: id = msg_class![&mut env; NSMutableData dataWithLength:0];
+        let length: NSUInteger = msg![&mut env; data length];
+        let bytes: MutVoidPtr = msg![&mut env; data mutableBytes];
+        assert_eq!(length, 0);
+        assert!(bytes.is_null());
+    }
 
     #[test]
     fn options_url_reader_reports_a_missing_file() {

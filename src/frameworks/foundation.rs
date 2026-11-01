@@ -47,6 +47,7 @@ pub mod ns_method_signature;
 pub mod ns_notification;
 pub mod ns_notification_center;
 pub mod ns_null;
+pub mod ns_number_formatter;
 pub mod ns_objc_runtime;
 pub mod ns_object;
 pub mod ns_operation;
@@ -105,6 +106,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_notification::CLASSES,
         ns_notification_center::CLASSES,
         ns_null::CLASSES,
+        ns_number_formatter::CLASSES,
         ns_method_signature::CLASSES,
         ns_object::CLASSES,
         ns_operation::CLASSES,

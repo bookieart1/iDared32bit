@@ -131,6 +131,138 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
+// NSCountedSet stores one NSNumber count per distinct member. Its inherited
+// `count` is the number of distinct members; `countForObject:` exposes the
+// multiplicity.
+@implementation NSCountedSet: NSMutableSet
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::new(SetHostObject {
+        dict: Default::default(),
+    });
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (id)initWithCapacity:(NSUInteger)_capacity {
+    this
+}
+
+- (id)initWithArray:(id)array {
+    let count: NSUInteger = msg![env; array count];
+    for idx in 0..count {
+        let object: id = msg![env; array objectAtIndex:idx];
+        () = msg![env; this addObject:object];
+    }
+    this
+}
+
+- (())dealloc {
+    std::mem::take(&mut env.objc.borrow_mut::<SetHostObject>(this).dict).release(env);
+    env.objc.dealloc_object(this, &mut env.mem)
+}
+
+- (NSUInteger)count {
+    env.objc.borrow::<SetHostObject>(this).dict.count
+}
+
+- (NSUInteger)countForObject:(id)object {
+    let host = std::mem::take(env.objc.borrow_mut::<SetHostObject>(this));
+    let number = host.dict.lookup(env, object);
+    let count = if number == nil {
+        0
+    } else {
+        msg![env; number unsignedIntegerValue]
+    };
+    *env.objc.borrow_mut(this) = host;
+    count
+}
+
+- (id)member:(id)object {
+    if object == nil {
+        return nil;
+    }
+    let host = std::mem::take(env.objc.borrow_mut::<SetHostObject>(this));
+    let member = host
+        .dict
+        .iter_keys()
+        .find(|&candidate| candidate == object || msg![env; candidate isEqual:object])
+        .unwrap_or(nil);
+    *env.objc.borrow_mut(this) = host;
+    member
+}
+
+- (())addObject:(id)object {
+    assert!(object != nil);
+    let mut host = std::mem::take(env.objc.borrow_mut::<SetHostObject>(this));
+    let old_number = host.dict.lookup(env, object);
+    let old_count: NSUInteger = if old_number == nil {
+        0
+    } else {
+        msg![env; old_number unsignedIntegerValue]
+    };
+    if old_number != nil {
+        host.dict.remove(env, object);
+    }
+    let new_number: id = msg_class![env; NSNumber numberWithUnsignedInteger:(old_count + 1)];
+    host.dict.insert(env, object, new_number, /* copy_key: */ false);
+    *env.objc.borrow_mut(this) = host;
+}
+
+- (())removeObject:(id)object {
+    let mut host = std::mem::take(env.objc.borrow_mut::<SetHostObject>(this));
+    let old_number = host.dict.lookup(env, object);
+    if old_number != nil {
+        let old_count: NSUInteger = msg![env; old_number unsignedIntegerValue];
+        if old_count <= 1 {
+            host.dict.remove(env, object);
+        } else {
+            host.dict.remove(env, object);
+            let new_number: id = msg_class![env; NSNumber numberWithUnsignedInteger:(old_count - 1)];
+            host.dict.insert(env, object, new_number, /* copy_key: */ false);
+        }
+    }
+    *env.objc.borrow_mut(this) = host;
+}
+
+- (())removeAllObjects {
+    let mut old = std::mem::take(env.objc.borrow_mut::<SetHostObject>(this));
+    old.dict.release(env);
+}
+
+- (id)anyObject {
+    env.objc
+        .borrow::<SetHostObject>(this)
+        .dict
+        .iter_keys()
+        .next()
+        .unwrap_or(nil)
+}
+
+- (id)allObjects {
+    all_objects(env, this)
+}
+
+- (id)objectEnumerator {
+    let array: id = msg![env; this allObjects];
+    msg![env; array objectEnumerator]
+}
+
+- (NSUInteger)countByEnumeratingWithState:(MutPtr<NSFastEnumerationState>)state
+                                  objects:(MutPtr<id>)stackbuf
+                                    count:(NSUInteger)len {
+    let objects: id = msg![env; this allObjects];
+    let count: NSUInteger = msg![env; objects count];
+    fast_enumeration_helper(env, this, |env, idx| {
+        if idx < count {
+            msg![env; objects objectAtIndex:idx]
+        } else {
+            nil
+        }
+    }, state, stackbuf, len)
+}
+
+@end
+
 // Our private subclass that is the single implementation of NSSet for the
 // time being.
 @implementation _touchHLE_NSSet: NSSet
@@ -356,6 +488,31 @@ fn all_objects(env: &mut Environment, set: id) -> id {
     }
     let array = ns_array::from_vec(env, objects);
     autorelease(env, array)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frameworks::foundation::ns_string;
+    use crate::objc::release;
+
+    #[test]
+    fn counted_set_tracks_multiplicity_and_distinct_count() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let object = ns_string::from_rust_string(&mut env, "rolando".to_owned());
+        let set: id = msg_class![&mut env; NSCountedSet new];
+        () = msg![&mut env; set addObject:object];
+        () = msg![&mut env; set addObject:object];
+        let distinct: NSUInteger = msg![&mut env; set count];
+        let multiplicity: NSUInteger = msg![&mut env; set countForObject:object];
+        assert_eq!(distinct, 1);
+        assert_eq!(multiplicity, 2);
+        () = msg![&mut env; set removeObject:object];
+        let multiplicity: NSUInteger = msg![&mut env; set countForObject:object];
+        assert_eq!(multiplicity, 1);
+        release(&mut env, object);
+        release(&mut env, set);
+    }
 }
 
 /// Helper method shared between `initWithObjects:` of `_touchHLE_NSSet` and

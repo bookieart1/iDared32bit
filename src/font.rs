@@ -259,6 +259,15 @@ impl Font {
         self.as_face_ref().italic_angle()
     }
 
+    /// The font's PostScript name, when its name table provides one.
+    pub fn post_script_name(&self) -> Option<String> {
+        use owned_ttf_parser::name_id::POST_SCRIPT_NAME;
+        self.as_face_ref()
+            .names()
+            .find(|name| name.name_id == POST_SCRIPT_NAME)
+            .and_then(|name| name.to_string())
+    }
+
     pub fn table_data(&self, tag: u32) -> Option<&[u8]> {
         self.as_face_ref().table_data(owned_ttf_parser::Tag(tag))
     }

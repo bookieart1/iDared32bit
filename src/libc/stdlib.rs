@@ -172,6 +172,26 @@ fn atol(env: &mut Environment, s: ConstPtr<u8>) -> i32 {
     atoi(env, s)
 }
 
+fn atoll(env: &mut Environment, s: ConstPtr<u8>) -> i64 {
+    // Darwin's `long` is 32-bit for these guests, while `long long` is 64-bit.
+    // Keep the same bounded decimal parsing rules as atoi/atol without
+    // truncating persisted values to 32 bits.
+    set_errno(env, 0);
+    str_to_int_inner_generic(
+        env,
+        |env, string, idx| Ok(env.mem.read(string + idx)),
+        |_, _, _| (),
+        s.cast_mut(),
+        0,
+        10,
+        u32::MAX,
+        |digits, base| i64::from_str_radix(digits, base).unwrap_or(i64::MAX),
+        |number| number.checked_neg().unwrap_or(i64::MIN),
+    )
+    .map(|(number, _)| number)
+    .unwrap_or(0)
+}
+
 fn atof(env: &mut Environment, s: ConstPtr<u8>) -> f64 {
     strtod(env, s, Ptr::null())
 }
@@ -729,6 +749,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(atexit(_)),
     export_c_func!(atoi(_)),
     export_c_func!(atol(_)),
+    export_c_func!(atoll(_)),
     export_c_func!(atof(_)),
     export_c_func!(strtod(_, _)),
     export_c_func!(strtod_l(_, _, _)),
@@ -763,6 +784,19 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(system(_)),
     export_c_func!(fcvt(_, _, _, _)),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn atoll_preserves_values_wider_than_guest_long() {
+        let mut env = Environment::new_fake_for_test();
+        let string = env.mem.alloc_and_write_cstr(b"  -4294967297suffix");
+        assert_eq!(atoll(&mut env, string.cast_const()), -4_294_967_297);
+        env.mem.free(string.cast());
+    }
+}
 
 /// A simple wrapper around [atof_inner_generic] for the case of C string.
 pub fn atof_inner(

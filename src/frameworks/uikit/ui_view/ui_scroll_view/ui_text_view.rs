@@ -36,6 +36,7 @@ pub struct UITextViewHostObject {
     text_color: id,
     text_alignment: UITextAlignment,
     keyboard_type: NSInteger,
+    keyboard_appearance: NSInteger,
 }
 impl_HostObject_with_superclass!(UITextViewHostObject);
 impl Default for UITextViewHostObject {
@@ -48,6 +49,7 @@ impl Default for UITextViewHostObject {
             text_color: nil,
             text_alignment: UITextAlignmentLeft,
             keyboard_type: 0,
+            keyboard_appearance: 0,
         }
     }
 }
@@ -110,6 +112,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         text_color,
         text_alignment: _,
         keyboard_type: _,
+        keyboard_appearance: _,
     } = std::mem::take(env.objc.borrow_mut(this));
 
     release(env, font);
@@ -255,6 +258,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UITextViewHostObject>(this).keyboard_type = keyboard_type;
 }
 
+- (NSInteger)keyboardAppearance {
+    env.objc.borrow::<UITextViewHostObject>(this).keyboard_appearance
+}
+
+- (())setKeyboardAppearance:(NSInteger)keyboard_appearance {
+    env.objc.borrow_mut::<UITextViewHostObject>(this).keyboard_appearance = keyboard_appearance;
+}
+
 - (())setDataDetectorTypes:(UIDataDetectorTypes)types {
     todo_objc_setter!(this, types);
 }
@@ -271,6 +282,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         text_color,
         text_alignment,
         keyboard_type: _,
+        keyboard_appearance: _,
     } = env.objc.borrow_mut(this);
 
     let (r, g, b, a) = ui_color::get_rgba(&env.objc, text_color);
@@ -297,3 +309,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frameworks::core_graphics::cg_geometry::CGRectZero;
+    use crate::objc::release;
+
+    #[test]
+    fn keyboard_traits_keep_their_guest_visible_state() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let text_view: id = msg_class![&mut env; UITextView alloc];
+        let text_view: id = msg![&mut env; text_view initWithFrame:CGRectZero];
+        () = msg![&mut env; text_view setKeyboardType:7i32];
+        () = msg![&mut env; text_view setKeyboardAppearance:1i32];
+        let keyboard_type: NSInteger = msg![&mut env; text_view keyboardType];
+        let keyboard_appearance: NSInteger = msg![&mut env; text_view keyboardAppearance];
+        assert_eq!(keyboard_type, 7);
+        assert_eq!(keyboard_appearance, 1);
+        release(&mut env, text_view);
+    }
+}

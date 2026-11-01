@@ -27,6 +27,7 @@ pub(super) type CGGlyph = CGFontIndex;
 
 pub struct CGFontHostObject {
     pub font: Font,
+    post_script_name: Option<String>,
 }
 impl HostObject for CGFontHostObject {}
 
@@ -42,7 +43,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 fn CGFontCreateWithDataProvider(env: &mut Environment, provider: CGDataProviderRef) -> CGFontRef {
     let bytes = cg_data_provider::borrow_bytes(env, provider);
     let font = Font::from_vec(bytes.to_vec());
-    let host_obj = Box::new(CGFontHostObject { font });
+    let post_script_name = font.post_script_name();
+    let host_obj = Box::new(CGFontHostObject {
+        font,
+        post_script_name,
+    });
     let class = env.objc.get_known_class("_touchHLE_CGFont", &mut env.mem);
     env.objc.alloc_object(class, host_obj, &mut env.mem)
 }
@@ -56,7 +61,12 @@ fn CGFontCreateWithFontName(env: &mut Environment, name: CFStringRef) -> CGFontR
         log!("CGFontCreateWithFontName: no font named {name:?}");
         return CFTypeRef::null();
     };
-    let host_obj = Box::new(CGFontHostObject { font });
+    let host_obj = Box::new(CGFontHostObject {
+        font,
+        // Preserve the guest-visible name rather than exposing the name of a
+        // substitute host font such as Liberation Sans for Helvetica.
+        post_script_name: Some(name),
+    });
     let class = env.objc.get_known_class("_touchHLE_CGFont", &mut env.mem);
     env.objc.alloc_object(class, host_obj, &mut env.mem)
 }
@@ -72,6 +82,20 @@ pub fn CGFontRelease(env: &mut Environment, font: CGFontRef) {
     if !font.is_null() {
         CFRelease(env, font);
     }
+}
+
+fn CGFontCopyPostScriptName(env: &mut Environment, font: CGFontRef) -> CFStringRef {
+    if font.is_null() {
+        return CFStringRef::null();
+    }
+    let name = env
+        .objc
+        .borrow::<CGFontHostObject>(font)
+        .post_script_name
+        .clone();
+    name.map_or_else(CFStringRef::null, |name| {
+        ns_string::from_rust_string(env, name)
+    })
 }
 
 // This is an undocumented API! But some apps still may call it
@@ -204,6 +228,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGFontCreateWithFontName(_)),
     export_c_func!(CGFontRetain(_)),
     export_c_func!(CGFontRelease(_)),
+    export_c_func!(CGFontCopyPostScriptName(_)),
     export_c_func!(CGFontGetGlyphsForUnichars(_, _, _, _)),
     export_c_func!(CGFontGetUnitsPerEm(_)),
     export_c_func!(CGFontGetAscent(_)),
@@ -230,6 +255,9 @@ mod tests {
         let font = CGFontCreateWithFontName(&mut env, name);
         assert!(!font.is_null());
         assert!(CGFontGetNumberOfGlyphs(&mut env, font) > 0);
+        let copied_name = CGFontCopyPostScriptName(&mut env, font);
+        assert_eq!(ns_string::to_rust_string(&mut env, copied_name), "Helvetica");
+        CFRelease(&mut env, copied_name);
         CGFontRelease(&mut env, font);
         release(&mut env, name);
     }
