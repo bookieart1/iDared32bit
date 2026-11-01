@@ -352,16 +352,22 @@ mod tests {
         () = msg![env; registered setObject:fallback forKey:key];
         () = msg![env; defaults setObject:value forKey:key];
         () = msg![env; defaults setObject:value forKey:unrelated];
-        assert_eq!(msg![env; defaults objectForKey:key], value);
+        let actual: id = msg![env; defaults objectForKey:key];
+        assert_eq!(actual, value);
         () = msg![env; defaults setObject:nil forKey:key];
-        assert_eq!(msg![env; app objectForKey:key], nil);
-        assert_eq!(msg![env; defaults objectForKey:key], fallback);
+        let actual: id = msg![env; app objectForKey:key];
+        assert_eq!(actual, nil);
+        let actual: id = msg![env; defaults objectForKey:key];
+        assert_eq!(actual, fallback);
         () = msg![env; global setObject:value forKey:key];
         () = msg![env; defaults setObject:nil forKey:key];
-        assert_eq!(msg![env; defaults objectForKey:key], value);
+        let actual: id = msg![env; defaults objectForKey:key];
+        assert_eq!(actual, value);
         () = msg![env; defaults setObject:nil forKey:missing];
-        assert_eq!(msg![env; defaults objectForKey:missing], nil);
-        assert_eq!(msg![env; defaults objectForKey:unrelated], value);
+        let actual: id = msg![env; defaults objectForKey:missing];
+        assert_eq!(actual, nil);
+        let actual: id = msg![env; defaults objectForKey:unrelated];
+        assert_eq!(actual, value);
         // The same nil remains invalid in NSMutableDictionary itself.
         let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             () = msg![env; app setObject:nil forKey:key];

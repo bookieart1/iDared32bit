@@ -406,10 +406,13 @@ mod tests {
         assert_ne!(mutable, source);
         assert_ne!(another, immutable);
         let mutable_class: Class = msg_class![env; NSMutableSet class];
-        assert!(msg![env; mutable isKindOfClass:mutable_class]);
-        assert!(!msg![env; immutable isKindOfClass:mutable_class]);
+        let is_mutable: bool = msg![env; mutable isKindOfClass:mutable_class];
+        let is_immutable_mutable: bool = msg![env; immutable isKindOfClass:mutable_class];
+        assert!(is_mutable);
+        assert!(!is_immutable_mutable);
         for set in [source, mutable, immutable, another] {
-            assert_eq!(msg![env; set anyObject], element);
+            let actual: id = msg![env; set anyObject];
+            assert_eq!(actual, element);
             let count: NSUInteger = msg![env; set count];
             assert_eq!(count, 1);
         }
@@ -420,14 +423,17 @@ mod tests {
         let count: NSUInteger = msg![env; immutable count];
         assert_eq!(count, 1);
         let enumerator: id = msg![env; immutable objectEnumerator];
-        assert_eq!(msg![env; enumerator nextObject], element);
-        assert_eq!(msg![env; enumerator nextObject], nil);
+        let actual: id = msg![env; enumerator nextObject];
+        assert_eq!(actual, element);
+        let actual: id = msg![env; enumerator nextObject];
+        assert_eq!(actual, nil);
         release(env, source);
         release(env, mutable);
         release(env, another);
         release(env, pool); // Temporary arrays/enumerators must balance.
         assert_eq!(env.objc.get_refcount(element).get(), 2);
-        assert_eq!(msg![env; immutable anyObject], element);
+        let actual: id = msg![env; immutable anyObject];
+        assert_eq!(actual, element);
         release(env, immutable);
         assert_eq!(env.objc.get_refcount(element).get(), 1);
         release(env, element);
@@ -448,7 +454,8 @@ mod tests {
         release(env, source);
         release(env, pool);
         assert_eq!(env.objc.get_refcount(element).get(), 2);
-        assert_eq!(msg![env; snapshot objectAtIndex:0u32], element);
+        let actual: id = msg![env; snapshot objectAtIndex:0u32];
+        assert_eq!(actual, element);
         release(env, snapshot);
         assert_eq!(env.objc.get_refcount(element).get(), 1);
 
@@ -458,7 +465,8 @@ mod tests {
         () = msg![env; copy addObject:element];
         let count: NSUInteger = msg![env; empty count];
         assert_eq!(count, 0);
-        assert_eq!(msg![env; copy anyObject], element);
+        let actual: id = msg![env; copy anyObject];
+        assert_eq!(actual, element);
         release(env, copy);
         release(env, empty);
         release(env, pool);
