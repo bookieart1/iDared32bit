@@ -3159,3 +3159,39 @@ tracing, not broader mutation tolerance.
 Verification: `outputs/iDared-Dev-1.74.verification.json`; exact job logs are
 retained in `work/verify-1.74/`. Engineering detail:
 `dev-docs/compatibility-1.74-foundation.md`.
+
+
+## Dev 1.74 device result and Dev 1.75 provenance checkpoint — October 31, 2026
+
+The supplied log embeds source `27825333` and workflow `41261997478`; its
+SHA-256 is `ee94bad4c631c3898d98e197397f5341718e8ef8a73b47d41bfe8fadaa245849`.
+The unmodified 228,943-byte file is preserved as
+`outputs/device-logs/iDared-Dev-1.74-device-results.txt`. All four launches
+have universal recorder coverage and terminal dumps.
+
+| App | Dev 1.74 device result | Status and interpretation |
+|---|---|---|
+| Sharpshooter 1.8.1 | User reports that the previously failing zoom interaction now works. Run exits normally after 56.367 s, 4,991 loops and 3,243 presentations. | **Blocker removed; partial compatibility.** `NSMutableSet addObjectsFromArray:` is device-validated for this path. Later gameplay remains outside this test. |
+| Infinight 1.05 | Existing completed-level progress is present; run exits normally after 9.623 s, 561 loops and 560 presentations. | **Working in the stated scope; regression pass**, including old-save persistence. |
+| Mage Gauntlet 1.30 | Saved version 1.30/player state loads, then immutable `_touchHLE_NSDictionary` receives `setObject:forKey:` at caller `0x1504d`; 163 ms, no loop/presentation. | **Still blocked during restored-state startup.** The 1.74 mutable singleton-factory origin hypothesis is falsified. |
+| Hook World 1.10 | Saved version 1.10 loads, then Settings mutates immutable `_touchHLE_NSDictionary` at caller `0x74460`; 144 ms, one presentation. | **Still blocked during restored-state startup.** Earlier playable 1.72 launch loaded version `(null)`, so current evidence is a first-run/save-relaunch stage change, not proof of a source regression. |
+
+Apple's documented preferences/property-list contract does not justify making
+all restored dictionaries mutable. Competing origins remain direct immutable
+defaults retrieval, an incorrect copy/mutable-copy path, and decoder/unarchiver
+mutability. The current event ring loses the producing boundary before failure.
+
+Dev 1.75 is therefore **diagnostic-only**: retain at most 128 live dictionary
+pointers and each pointer's latest selected preferences/copy/decoder/factory
+boundary. Concrete non-dictionary results are excluded; deallocation clears
+the pointer; only one match for the terminal receiver is printed at dump time.
+No guest calls, ownership changes, fabricated returns, memory-fault tolerance,
+save migration, app-specific behavior or per-frame logging is added. Tests cover
+ring-wrap survival, deallocation, filtering and newest-transfer replacement.
+
+Local changed-file formatting/whitespace checks pass. Local compilation is
+blocked by the host's missing MSVC linker; hosted tests, iOS compilation,
+package verification and physical-device behavior remain separate pending
+stages. Focused device test after packaging: launch existing-save Hook World
+and Mage Gauntlet in that order and preserve both terminal dumps. Engineering
+detail: `dev-docs/compatibility-1.75-collection-provenance.md`.

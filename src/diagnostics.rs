@@ -17,6 +17,7 @@ const SLOW_RECENT: usize = 32;
 const SIGNALS: usize = 24;
 const PROGRESS: usize = 24;
 const CRASH_CALLERS: usize = 8;
+const PROVENANCE: usize = 128;
 const HEALTHY_PRESENT_INTERVAL: Duration = Duration::from_millis(100);
 const SLOW_PRESENT_INTERVAL: Duration = Duration::from_millis(180);
 const HEALTHY_PRESENT_STREAK: u16 = 30;
@@ -107,6 +108,12 @@ struct Event {
     note: &'static str,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct Provenance {
+    object: u32,
+    event: Event,
+}
+
 struct Ring<T: Copy + Default, const N: usize> {
     items: [T; N],
     written: u64,
@@ -164,6 +171,11 @@ pub struct Recorder {
     recent: Ring<Event, RECENT>,
     signals: Ring<Event, SIGNALS>,
     progress: Ring<Progress, PROGRESS>,
+    /// Most recent selected object-producing boundary for a bounded set of
+    /// live object pointers. This is deliberately not a general allocation
+    /// trace: it exists to retain collection/coder provenance after the main
+    /// event ring wraps.
+    provenance: [Provenance; PROVENANCE],
     slow_capture: Option<SlowCapture>,
     pending_slow_capture: Option<PendingSlowCapture>,
     sequence: u64,
@@ -189,6 +201,7 @@ impl Recorder {
             recent: Ring::default(),
             signals: Ring::default(),
             progress: Ring::default(),
+            provenance: [Provenance::default(); PROVENANCE],
             slow_capture: None,
             pending_slow_capture: None,
             sequence: 0,
@@ -217,12 +230,21 @@ impl Recorder {
             note: "enter",
         };
         self.recent.push(event);
+        if call.name.bytes() == b"dealloc" {
+            self.forget_provenance(call.receiver);
+        }
         if call.name.bytes() == b"raise" {
             self.signals.push(event);
         }
         call
     }
-    fn finish(&mut self, call: Call, result: [u32; 2], object_result: bool) {
+    fn finish(
+        &mut self,
+        call: Call,
+        result: [u32; 2],
+        object_result: bool,
+        dictionary_result: bool,
+    ) {
         self.sequence += 1;
         let signal = (object_result && result[0] == 0)
             || (call.name.bytes() == b"_dlsym" && result[0] == 0)
@@ -241,9 +263,69 @@ impl Recorder {
             },
         };
         self.recent.push(event);
+        if dictionary_result && Self::tracks_provenance(&call) {
+            self.remember_provenance(result[0], event);
+        }
         if signal {
             self.signals.push(event);
         }
+    }
+    fn tracks_provenance(call: &Call) -> bool {
+        let name = call.name.bytes();
+        matches!(
+            name,
+            b"objectForKey:"
+                | b"dictionaryForKey:"
+                | b"decodeObjectForKey:"
+                | b"unarchiveObjectWithData:"
+                | b"propertyListFromData:mutabilityOption:format:errorDescription:"
+                | b"mutableCopy"
+                | b"mutableCopyWithZone:"
+                | b"copy"
+                | b"copyWithZone:"
+        ) || (call
+            .detail
+            .bytes()
+            .windows(b"Dictionary".len())
+            .any(|window| window == b"Dictionary")
+            && (name.starts_with(b"initWith") || name.starts_with(b"dictionaryWith")))
+    }
+    fn remember_provenance(&mut self, object: u32, event: Event) {
+        if let Some(slot) = self
+            .provenance
+            .iter_mut()
+            .find(|slot| slot.object == object)
+        {
+            *slot = Provenance { object, event };
+            return;
+        }
+        let slot = self
+            .provenance
+            .iter_mut()
+            .min_by_key(|slot| slot.event.sequence)
+            .unwrap();
+        *slot = Provenance { object, event };
+    }
+    fn forget_provenance(&mut self, object: u32) {
+        if object == 0 {
+            return;
+        }
+        if let Some(slot) = self
+            .provenance
+            .iter_mut()
+            .find(|slot| slot.object == object)
+        {
+            *slot = Provenance::default();
+        }
+    }
+    fn provenance_for(&self, object: u32) -> Option<&Event> {
+        if object == 0 {
+            return None;
+        }
+        self.provenance
+            .iter()
+            .find(|slot| slot.object == object)
+            .map(|slot| &slot.event)
     }
     fn note_present(&mut self) {
         self.note_present_at(Instant::now());
@@ -364,6 +446,22 @@ impl Recorder {
         );
         for e in self.signals.iter() {
             Self::print_event(e);
+        }
+        if let Some(last) = self
+            .recent
+            .iter()
+            .rev()
+            .find(|event| event.result.is_none())
+        {
+            if let Some(origin) = self.provenance_for(last.call.receiver) {
+                echo_no_panic!("flight receiver provenance: most recent tracked object-producing boundary for receiver {:#x}; this may be a transfer, not the original allocation", last.call.receiver);
+                Self::print_event(origin);
+            } else {
+                echo_no_panic!(
+                    "flight receiver provenance: no retained tracked boundary for receiver {:#x}",
+                    last.call.receiver
+                );
+            }
         }
         echo_no_panic!("flight recent boundaries: newest {RECENT}; total={} (older events overwritten; absent return does not prove a stall)", self.recent.written);
         for e in self.recent.iter() {
@@ -503,12 +601,24 @@ impl Environment {
         }))
     }
     pub fn diagnostic_end(&mut self, call: Option<Call>, object_result: bool) {
-        if let (Some(recorder), Some(call)) = (&mut self.diagnostics, call) {
+        if let Some(call) = call {
             let regs = self.cpu.regs();
+            let result = [regs[0], regs[1]];
+            let dictionary_result = object_result
+                && result[0] != 0
+                && Recorder::tracks_provenance(&call)
+                && read_word(&self.mem, result[0])
+                    .and_then(|isa| {
+                        self.objc
+                            .try_get_class_name(crate::objc::id::from_bits(isa))
+                    })
+                    .is_some_and(|class_name| class_name.contains("Dictionary"));
             let did_present = call.name.bytes() == b"presentRenderbuffer:" && regs[0] != 0;
-            recorder.finish(call, [regs[0], regs[1]], object_result);
-            if did_present {
-                recorder.note_present();
+            if let Some(recorder) = &mut self.diagnostics {
+                recorder.finish(call, result, object_result, dictionary_result);
+                if did_present {
+                    recorder.note_present();
+                }
             }
         }
     }
@@ -703,9 +813,60 @@ mod tests {
         }
         assert_eq!(recorder.progress.iter().count(), PROGRESS);
         assert_eq!(recorder.progress.written, 40);
-        assert!(std::mem::size_of::<Recorder>() < 80 * 1024);
+        assert!(std::mem::size_of::<Recorder>() < 128 * 1024);
         let text = Text::from_bytes(b"name\nforged line");
         assert_eq!(format!("{text}"), "name\\x0aforged line");
+    }
+    #[test]
+    fn collection_provenance_survives_history_wrap_and_deallocation_clears_it() {
+        let mut recorder = Recorder::new();
+        let source = Call {
+            sequence: 7,
+            kind: "ObjC",
+            name: Text::from_bytes(b"objectForKey:"),
+            receiver: 0x1000,
+            detail: Text::from_bytes(b"NSUserDefaults"),
+            ..Call::default()
+        };
+        recorder.finish(source, [0x2000, 0], true, true);
+        for sequence in 0..(RECENT * 3) {
+            recorder.recent.push(Event {
+                sequence: sequence as u64 + 100,
+                ..Event::default()
+            });
+        }
+        let provenance = recorder.provenance_for(0x2000).unwrap();
+        assert_eq!(provenance.call.name.bytes(), b"objectForKey:");
+        assert_eq!(provenance.call.receiver, 0x1000);
+
+        recorder.begin(Call {
+            name: Text::from_bytes(b"dealloc"),
+            receiver: 0x2000,
+            ..Call::default()
+        });
+        assert!(recorder.provenance_for(0x2000).is_none());
+    }
+    #[test]
+    fn collection_provenance_ignores_non_dictionary_results_and_keeps_latest_transfer() {
+        let mut recorder = Recorder::new();
+        let mut source = Call {
+            kind: "ObjC",
+            name: Text::from_bytes(b"objectForKey:"),
+            receiver: 0x1000,
+            detail: Text::from_bytes(b"NSUserDefaults"),
+            ..Call::default()
+        };
+        recorder.finish(source, [0x2000, 0], true, false);
+        assert!(recorder.provenance_for(0x2000).is_none());
+
+        recorder.finish(source, [0x3000, 0], true, true);
+        source.name = Text::from_bytes(b"mutableCopy");
+        source.receiver = 0x3000;
+        source.detail = Text::from_bytes(b"_touchHLE_NSDictionary");
+        recorder.finish(source, [0x3000, 0], true, true);
+        let provenance = recorder.provenance_for(0x3000).unwrap();
+        assert_eq!(provenance.call.name.bytes(), b"mutableCopy");
+        assert_eq!(provenance.call.receiver, 0x3000);
     }
     #[test]
     fn first_slow_present_freezes_the_transition_history() {
