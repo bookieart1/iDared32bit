@@ -8,10 +8,11 @@
 use super::{NSTimeInterval, NSUInteger};
 use crate::frameworks::foundation::ns_string;
 use crate::libc::mach::host::PHYSICAL_MEMORY;
-use crate::objc::{id, msg, msg_class, objc_classes, ClassExports};
+use crate::objc::{autorelease, id, msg, msg_class, objc_classes, ClassExports};
 use crate::window::DeviceFamily;
 use crate::Environment;
 use std::time::Instant;
+use uuid::Uuid;
 
 #[derive(Default)]
 pub struct State {
@@ -79,6 +80,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     let main_bundle: id = msg_class![env; NSBundle mainBundle];
     let name_key: id = ns_string::get_static_str(env, "CFBundleName");
     msg![env; main_bundle objectForInfoDictionaryKey:name_key]
+}
+
+- (id)globallyUniqueString {
+    assert_process_info_singleton(env, this);
+    // NSProcessInfo promises a different, globally unique value for each
+    // request, not a stable device identifier. A fresh RFC 4122 v4 value
+    // supplies those semantics without exposing host or device identity.
+    let value = Uuid::new_v4().hyphenated().to_string().to_uppercase();
+    let value = ns_string::from_rust_string(env, value);
+    autorelease(env, value)
 }
 
 @end

@@ -36,6 +36,22 @@ static unsigned liveTokens;
 
 int main(void) {
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
+
+    NSDateFormatter *formatter = [NSDateFormatter new];
+    formatter.locale = [[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"] autorelease];
+    formatter.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:-19800];
+    formatter.dateFormat = @"yyyy-MM-dd HH:mm:ss";
+    NSDate *parsed = [formatter dateFromString:@"2009-07-04 15:05:09"];
+    assert(parsed != nil);
+    assert([[formatter stringFromDate:parsed] isEqual:@"2009-07-04 15:05:09"]);
+    assert([formatter dateFromString:@"2009-02-29 15:05:09"] == nil);
+    [formatter release];
+
+    NSString *uniqueFirst = [[NSProcessInfo processInfo] globallyUniqueString];
+    NSString *uniqueSecond = [[NSProcessInfo processInfo] globallyUniqueString];
+    assert(uniqueFirst.length > 0 && uniqueSecond.length > 0);
+    assert(![uniqueFirst isEqual:uniqueSecond]);
+
     NSString *suite = [@"org.touchhle.foundation-fixture."
         stringByAppendingString:[[NSUUID UUID] UUIDString]];
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:suite];
@@ -133,6 +149,6 @@ int main(void) {
     assert(liveTokens == 1 && [immutable anyObject] == element);
     [immutable release];
     assert(liveTokens == 0);
-    puts("Foundation defaults, mutable-collection and copy reference contracts passed.");
+    puts("Foundation date, process-info, defaults, mutable-collection and copy contracts passed.");
     return 0;
 }

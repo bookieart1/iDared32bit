@@ -3795,3 +3795,32 @@ Engineering detail and the focused no-save-reset procedure are in
 
 Verification: `outputs/iDared-Dev-1.83.verification.json`. Device results
 remain pending and separate from these build and host-test checkpoints.
+
+## Dev 1.83 device result and Dev 1.84 eighth-stage contracts
+
+The complete Dev 1.83 log is preserved as
+`outputs/device-logs/iDared-Dev-1.83-device-results.txt`: 874,547 bytes,
+SHA-256
+`4f0c7442591e142bde9777e92f5ee01fab552b231ea30e720e0c4cfff6a9c147`.
+It embeds source `7d6a55ebba55488762bc890452d0768b0740ad0b`, workflow
+`41300999509`, and the unchanged universal bounded recorder.
+
+| App / surface | Dev 1.83 result | Current classification / Dev 1.84 action |
+|---|---|---|
+| Blot | Smooth play and clean Home return after 70.900 s / 3,814 loops / 3,204 EAGL returns. | **Regression pass in stated scope.** |
+| Dark Nebula 2 | Completed a level and accepted name entry. After **No** at automatic score submission, local leaderboard bookkeeping sent missing `dateFromString:` to a valid `NSDateFormatter` after 196.587 s / 11,660 loops / 5,717 returns. | **Major advance; partial post-level blocker.** Add bounded, validating Unicode-pattern parsing with formatter time-zone semantics. This is not evidence of a network crash. |
+| Dirt | Continues to work; clean Home return after 58.001 s / 3,945 loops / 3,441 returns. | **Regression pass in expanded scope.** |
+| Glowfish | Valid `NSProcessInfo` receives missing `globallyUniqueString` after 1.308 s, before a main loop. | **Startup-blocked.** Return a fresh autoreleased RFC 4122 v4 string per call, without stable host identity. |
+| Glowfish HD | Name/menu/intro/selection remain reachable. Missing bundled `Level_01.gfl` causes the guest's deliberate `abort` after 29.425 s / 1,352 loops / 1,261 returns. Keyboard remains portrait. | **Partial with genuine package/resource failure.** Preserve strict abort; correct separate host-orientation request ordering. |
+| Hamlet | Runs and exits cleanly, but its initial presentation remains rotated/cropped. | **Working checkpoint with orientation defect.** Defer scene geometry update until SDL's game root controller exists. |
+| Parachute Ninja | Guest again sends `domain` to a supplied `UIApplication`. | **Blocked at unchanged invalid callback origin.** No invalid-object accommodation. |
+| Spoing / screenshot | After screenshot interruption, the log records resign-active, guest pause, did-become-active, resume and later presented frames; it ends mid-session without panic. | **Immediate suspend/resume pass.** Preserve current code; later host termination is not established by this log. |
+
+Dev 1.84 is limited to `NSDateFormatter dateFromString:`,
+`NSProcessInfo globallyUniqueString`, and host scene-request ordering with
+bounded orientation evidence. The universal recorder remains unchanged. No
+game identifier, resource fabrication, network-success fabrication, abort
+suppression, save mutation or permissive invalid-object behavior is included.
+
+Engineering detail and focused no-save-reset procedure:
+`dev-docs/compatibility-1.84-eighth-stage-contracts-and-orientation-ordering.md`.

@@ -273,7 +273,19 @@ public func idaredRequestHostOrientation(_ rawOrientation: Int32) {
     }
 
     let update = {
-        guard let scene = activeWindowScene() else { return }
+        guard let scene = activeWindowScene() else {
+            NSLog("iDared host orientation deferred without an active window scene: %d", rawOrientation)
+            return
+        }
+        let roots = scene.windows.compactMap { window in
+            window.rootViewController.map { String(describing: type(of: $0)) }
+        }.joined(separator: ",")
+        NSLog(
+            "iDared host orientation apply raw=%d current=%ld roots=%@",
+            rawOrientation,
+            scene.interfaceOrientation.rawValue,
+            roots
+        )
         for window in scene.windows {
             window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
         }
@@ -287,12 +299,19 @@ public func idaredRequestHostOrientation(_ rawOrientation: Int32) {
         } else {
             UIViewController.attemptRotationToDeviceOrientation()
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSLog(
+                "iDared host orientation result raw=%d current=%ld",
+                rawOrientation,
+                scene.interfaceOrientation.rawValue
+            )
+        }
     }
-    if Thread.isMainThread {
-        update()
-    } else {
-        DispatchQueue.main.async(execute: update)
-    }
+    // Rust sets SDL's orientation hint immediately before constructing the
+    // game window. Even on the main thread, defer the scene request one turn
+    // so it sees SDL's newly installed root view controller instead of the
+    // picker that has just been dismissed.
+    DispatchQueue.main.async(execute: update)
 }
 
 /// Rust's images are premultiplied RGBA, top row first.
