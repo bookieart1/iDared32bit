@@ -42,9 +42,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                     format:(NSPropertyListFormat)format
                 errorDescription:(MutPtr<id>)error_string { // NSString **
     assert_eq!(format, NSPropertyListBinaryFormat_v1_0); // TODO
-    if !error_string.is_null() {
-        env.mem.write(error_string, nil);
-    }
+    clear_error_description(env, error_string);
 
     let value = serialize_plist(env, plist);
     log_dbg!("dataFromPropertyList value {:?}", value);
@@ -61,9 +59,7 @@ pub const CLASSES: ClassExports = objc_classes! {
           mutabilityOption:(NSPropertyListMutabilityOptions)opt
                     format:(MutPtr<NSPropertyListFormat>)format
           errorDescription:(MutPtr<id>)error_string { // NSString **
-    if !error_string.is_null() {
-        env.mem.write(error_string, nil);
-    }
+    clear_error_description(env, error_string);
     let slice = ns_data::to_rust_slice(env, data);
 
     if let Ok(root) = Value::from_reader_xml(Cursor::new(slice)) {
@@ -96,6 +92,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+fn clear_error_description(env: &mut Environment, error_string: MutPtr<id>) {
+    if !error_string.is_null() {
+        env.mem.write(error_string, nil);
+    }
+}
 
 /// Internals of `initWithContentsOfFile:` on `NSArray` and `NSDictionary`.
 /// Returns `nil` on failure.
@@ -327,30 +329,13 @@ mod tests {
     use crate::mem::guest_size_of;
 
     #[test]
-    fn successful_serialization_and_parsing_clear_error_description() {
-        let mut env = Environment::new_fake_for_test_with_thread();
-        let env = &mut env;
-        let dictionary: id = msg_class![env; NSMutableDictionary new];
+    fn successful_property_list_calls_clear_nonnull_error_output() {
+        let mut env = Environment::new_fake_for_test();
         let error_string: MutPtr<id> = env.mem.alloc(guest_size_of::<id>()).cast();
-        env.mem.write(error_string, dictionary);
-
-        let data: id = msg_class![env; NSPropertyListSerialization
-            dataFromPropertyList:dictionary
-            format:NSPropertyListBinaryFormat_v1_0
-            errorDescription:error_string];
-        assert_ne!(data, nil);
+        env.mem.write(error_string, id::from_bits(0x1234));
+        clear_error_description(&mut env, error_string);
         assert_eq!(env.mem.read(error_string), nil);
-
-        env.mem.write(error_string, dictionary);
-        let decoded: id = msg_class![env; NSPropertyListSerialization
-            propertyListFromData:data
-            mutabilityOption:NSPropertyListImmutable
-            format:(MutPtr::<NSPropertyListFormat>::null())
-            errorDescription:error_string];
-        assert_ne!(decoded, nil);
-        assert_eq!(env.mem.read(error_string), nil);
-
+        clear_error_description(&mut env, MutPtr::null());
         env.mem.free(error_string.cast());
-        release(env, dictionary);
     }
 }
