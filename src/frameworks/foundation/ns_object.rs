@@ -819,7 +819,7 @@ mod tests {
             .objc
             .get_known_class("NSMutableDictionary", &mut env.mem);
 
-        let copied: id = msg![env; class copyWithZone:(MutVoidPtr::null())];
+        let copied: id = msg![&mut env; class copyWithZone:(MutVoidPtr::null())];
         assert_eq!(copied, class);
     }
 }
