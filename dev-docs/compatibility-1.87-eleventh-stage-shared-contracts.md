@@ -47,3 +47,12 @@ The next failure, if any, is evidence for another contract and not proof that a 
 ## Validation boundaries
 
 Local Rust compilation is unavailable in the current Windows host environment. The pushed implementation must therefore pass the repository's macOS and Windows development-library jobs, focused guest ABI tests where available, and the separate arm64 iOS packaging workflow before an IPA is delivered. A green overall badge is not sufficient: skipped and allowed-to-fail steps must be inspected separately.
+
+## Verified delivery
+
+- Final implementation/source commit: `58fd8badf1eb210f2a697a7402266af4d3a8a3f0`.
+- Hosted validation workflow [41319727065](https://github.com/bookieart1/iDared32bit/actions/runs/41319727065) passed. The development library ran **150/150 tests** on both macOS and Windows; the native Foundation reference and both bounded diagnostic reproducers also passed. Lint passed on macOS, Windows, and Android. Formatting and the full release/guest-executable test steps were branch-gated and skipped, so this is not a claim that those steps ran.
+- IPA workflow [41319727039](https://github.com/bookieart1/iDared32bit/actions/runs/41319727039) built and packaged the unsigned arm64 development app successfully. Artifact ID `13089165858`; artifact ZIP SHA-256 `807f6a0e2f71bd8e73c5b2ba0c7c17daf02ff09e869b70168ee11b135d668e0d`, matching GitHub's published digest.
+- Local `outputs/iDared-Dev-1.87.ipa`: 20,024,826 bytes, SHA-256 `dc12f760b18aa2f8e5b3c07e4534428f8fafea3608060125b802657c369004a9`. Verification confirmed arm64 Mach-O, `com.bookieart1.idared32bit.dev`, `iDared Dev`, no provisioning profile or code-signature directory, embedded git describe `58fd8ba`, workflow `41319727039`, the universal recorder default, and all new contract markers.
+
+Verification record: `outputs/iDared-Dev-1.87.verification.json`. Physical-device results remain pending and are separate from these host/build checks.
