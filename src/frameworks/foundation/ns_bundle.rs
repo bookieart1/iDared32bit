@@ -122,6 +122,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, bundle)
 }
 
++ (id)preferredLocalizationsFromArray:(id)localizations_array { // NSArray<NSString *> *
+    let preferredLocalizations = CFBundleCopyPreferredLocalizationsFromArray(env, localizations_array);
+    autorelease(env, preferredLocalizations)
+}
+
 - (id)initWithPath:(id)path { // NSString*
     if path == nil {
         release(env, this);
@@ -171,11 +176,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         release(env, old_info);
     }
     this
-}
-
-+ (id)preferredLocalizationsFromArray:(id)localizations_array { // NSArray<NSString *> *
-    let preferredLocalizations = CFBundleCopyPreferredLocalizationsFromArray(env, localizations_array);
-    autorelease(env, preferredLocalizations)
 }
 
 - (())dealloc {
