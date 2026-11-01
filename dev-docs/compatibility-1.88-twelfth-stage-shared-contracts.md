@@ -83,3 +83,27 @@ Local Rust tooling is unavailable in the current Windows environment. Hosted
 macOS and Windows development-library tests and the separate arm64 iOS
 packaging workflow must pass before delivery. Skipped and allowed-to-fail
 workflow stages must be reported separately from actual tests.
+
+## Verified delivery
+
+- Final implementation/source commit:
+  `d147f4fa707f4bdde98eea92f91c3bf981ada22f` (the compatibility contracts
+  are in `e0c18280f63e9908d51f1ea5e58744750d80136e`; the final commit corrects
+  only the synthetic guest-stack setup in the mutable-string unit test).
+- Hosted test run `41352259787` passed: 155/155 development-library tests on
+  macOS and 155/155 on Windows. The native Foundation reference, the two
+  bounded diagnostic reproducers, and macOS/Windows/Android lint all passed.
+  Formatting and the full release/guest-executable test steps were
+  branch-gated and skipped.
+- IPA workflow `41352259786` compiled and packaged the arm64 unsigned Dev app.
+  Artifact ID `13102006128`; artifact ZIP SHA-256
+  `553f24039296f28c9b0a02470091cb35c1d8c075f75ddfa4291f60f6d6fba787`,
+  matching GitHub's published digest.
+- Local `outputs/iDared-Dev-1.88.ipa`, 20,040,603 bytes, SHA-256
+  `1cec5c66aea5276ee7496696d015f580df51849081e1a4a6dd3e02e21b6f9fe8`,
+  passed arm64, development-bundle identity, unsigned/no-provisioning,
+  embedded source/workflow, unchanged universal-recorder and new-contract
+  marker checks.
+
+Physical-device results remain pending and distinct from these build and
+host-test checkpoints.
