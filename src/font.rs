@@ -84,6 +84,28 @@ impl Font {
         self.font.glyph(char::from_u32(c as u32).unwrap()).id()
     }
 
+    /// Return the horizontal advance for a sequence of glyphs at the given
+    /// point size. This deliberately uses the same scaling and pair-kerning
+    /// rules as [`Self::draw_glyphs`] so legacy Core Graphics measurement and
+    /// rendering cannot drift apart.
+    pub fn glyphs_horizontal_advance<I>(&self, font_size: f32, glyphs: I) -> f32
+    where
+        I: IntoIterator<Item = GlyphId>,
+    {
+        let scale = self.scale(font_size);
+        let mut previous = None;
+        let mut advance = 0.0;
+        for glyph in self.font.glyphs_for(glyphs) {
+            let glyph = glyph.scaled(scale);
+            if let Some(previous) = previous {
+                advance += self.font.pair_kerning(scale, previous, glyph.id());
+            }
+            advance += glyph.h_metrics().advance_width;
+            previous = Some(glyph.id());
+        }
+        advance
+    }
+
     fn from_resource_file(filename: &str) -> Font {
         let mut bytes = Vec::new();
         let path = format!("{}/{}", paths::FONTS_DIR, filename);

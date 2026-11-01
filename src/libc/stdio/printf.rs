@@ -182,10 +182,11 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             )
         }
 
-        // The alternative form makes no difference to %d and %i.
-        // TODO: the other specifiers it changes.
+        // The alternative form makes no difference to %d and %i. For the
+        // implemented floating-point conversions it retains a decimal point
+        // even when the requested precision has no fractional digits.
         assert!(
-            !alternative_form || matches!(specifier, b'd' | b'i' | b'g'),
+            !alternative_form || matches!(specifier, b'd' | b'i' | b'e' | b'f' | b'g'),
             "TODO: '#' with %{}",
             specifier as char,
         );
@@ -419,7 +420,14 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 let pad_width = pad_width as usize;
                 let precision = precision.unwrap_or(6);
 
-                let formatted = f_format(float, pad_width, pad_char, precision, prepend_sign);
+                let formatted = f_format(
+                    float,
+                    pad_width,
+                    pad_char,
+                    precision,
+                    prepend_sign,
+                    alternative_form,
+                );
                 res.extend_from_slice(formatted.as_bytes());
             }
             b'e' => {
@@ -427,7 +435,14 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 let pad_width = pad_width as usize;
                 let precision = precision.unwrap_or(6);
 
-                let formatted = e_format(float, pad_width, pad_char, precision, prepend_sign);
+                let formatted = e_format(
+                    float,
+                    pad_width,
+                    pad_char,
+                    precision,
+                    prepend_sign,
+                    alternative_form,
+                );
                 res.extend_from_slice(formatted.as_bytes());
             }
             b'g' => {
@@ -460,12 +475,14 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 if P > X && X >= -4 {
                     let precision: usize = (P - X - 1).try_into().unwrap();
 
-                    let mut result = f_format(float, pad_width, pad_char, precision, prepend_sign);
-
-                    // The alternative form keeps trailing zeros, and the point.
-                    if alternative_form && !result.contains('.') {
-                        result.push('.');
-                    }
+                    let result = f_format(
+                        float,
+                        pad_width,
+                        pad_char,
+                        precision,
+                        prepend_sign,
+                        alternative_form,
+                    );
                     let trimmed_result = if result.contains('.') && !alternative_form {
                         result.trim_end_matches('0').trim_end_matches('.')
                     } else {
@@ -478,7 +495,14 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 } else {
                     let precision: usize = (P - 1).try_into().unwrap();
 
-                    let formatted = e_format(float, pad_width, pad_char, precision, prepend_sign);
+                    let formatted = e_format(
+                        float,
+                        pad_width,
+                        pad_char,
+                        precision,
+                        prepend_sign,
+                        alternative_form,
+                    );
                     res.extend_from_slice(formatted.as_bytes());
                 }
             }
@@ -548,8 +572,12 @@ fn f_format(
     pad_char: char,
     precision: usize,
     prepend_sign: bool,
+    alternative_form: bool,
 ) -> String {
-    let magnitude = format!("{:.*}", precision, float.abs());
+    let mut magnitude = format!("{:.*}", precision, float.abs());
+    if alternative_form && !magnitude.contains('.') {
+        magnitude.push('.');
+    }
     pad_float(
         magnitude,
         float.is_sign_negative(),
@@ -565,6 +593,7 @@ fn e_format(
     pad_char: char,
     precision: usize,
     prepend_sign: bool,
+    alternative_form: bool,
 ) -> String {
     let exponent = if float == 0.0 {
         0.0
@@ -572,7 +601,11 @@ fn e_format(
         float.abs().log10().floor()
     };
     let mantissa = float.abs() / 10f64.powf(exponent);
-    let magnitude = format!("{mantissa:.precision$}e{exponent:+03}");
+    let mut mantissa = format!("{mantissa:.precision$}");
+    if alternative_form && !mantissa.contains('.') {
+        mantissa.push('.');
+    }
+    let magnitude = format!("{mantissa}e{exponent:+03}");
     pad_float(
         magnitude,
         float.is_sign_negative(),
@@ -588,22 +621,25 @@ mod tests {
 
     #[test]
     fn float_plus_flag_preserves_sign_and_width() {
-        assert_eq!(f_format(1.25, 0, ' ', 2, true), "+1.25");
-        assert_eq!(f_format(-1.25, 0, ' ', 2, true), "-1.25");
-        assert_eq!(f_format(1.25, 8, ' ', 2, true), "   +1.25");
-        assert_eq!(f_format(1.25, 8, '0', 2, true), "+0001.25");
-        assert_eq!(f_format(-1.25, 8, '0', 2, true), "-0001.25");
-        assert_eq!(f_format(1.25, 8, '0', 2, false), "00001.25");
+        assert_eq!(f_format(1.25, 0, ' ', 2, true, false), "+1.25");
+        assert_eq!(f_format(-1.25, 0, ' ', 2, true, false), "-1.25");
+        assert_eq!(f_format(1.25, 8, ' ', 2, true, false), "   +1.25");
+        assert_eq!(f_format(1.25, 8, '0', 2, true, false), "+0001.25");
+        assert_eq!(f_format(-1.25, 8, '0', 2, true, false), "-0001.25");
+        assert_eq!(f_format(1.25, 8, '0', 2, false, false), "00001.25");
+        assert_eq!(f_format(10.0, 0, ' ', 0, false, true), "10.");
         assert_eq!(repad_float("+1.25", 8, '0'), "+0001.25");
         assert_eq!(repad_float("-1.25", 8, '0'), "-0001.25");
     }
 
     #[test]
     fn exponential_plus_flag_preserves_sign_and_width() {
-        assert_eq!(e_format(12.5, 0, ' ', 1, true), "+1.2e+01");
-        assert_eq!(e_format(-12.5, 0, ' ', 1, true), "-1.2e+01");
-        assert_eq!(e_format(12.5, 11, ' ', 1, true), "   +1.2e+01");
-        assert_eq!(e_format(12.5, 11, '0', 1, true), "+0001.2e+01");
+        assert_eq!(e_format(12.5, 0, ' ', 1, true, false), "+1.2e+01");
+        assert_eq!(e_format(-12.5, 0, ' ', 1, true, false), "-1.2e+01");
+        assert_eq!(e_format(12.5, 11, ' ', 1, true, false), "   +1.2e+01");
+        assert_eq!(e_format(12.5, 11, '0', 1, true, false), "+0001.2e+01");
+        assert_eq!(e_format(12.5, 0, ' ', 0, false, true), "1.e+01");
+        assert_eq!(e_format(12.5, 9, '0', 0, true, true), "+001.e+01");
     }
 }
 

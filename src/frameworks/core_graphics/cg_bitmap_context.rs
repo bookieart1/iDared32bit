@@ -97,6 +97,7 @@ pub fn CGBitmapContextCreate(
         transform: CGAffineTransformIdentity,
         blend_mode: kCGBlendModeNormal,
         text_transform: None,
+        text_position: CGPoint { x: 0.0, y: 0.0 },
         text_drawing_mode: super::cg_context::kCGTextFill,
         text_encoding: 0,
         state_stack: Vec::new(),

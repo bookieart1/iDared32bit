@@ -106,6 +106,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     // classes are not refcounted
 }
 
+// Class objects are immutable singleton objects. Foundation collections copy
+// keys through NSCopying, so NSObject supplies this class-side implementation.
++ (id)copyWithZone:(NSZonePtr)_zone {
+    this
+}
+
 + (bool)instancesRespondToSelector:(SEL)selector {
     env.objc.class_has_method(this, selector)
 }
@@ -804,5 +810,16 @@ mod tests {
         release(env, key);
         release(env, target);
         release(env, source);
+    }
+
+    #[test]
+    fn class_objects_inherit_copy_with_zone_and_return_themselves() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let class = env
+            .objc
+            .get_known_class("NSMutableDictionary", &mut env.mem);
+
+        let copied: id = msg![env; class copyWithZone:(MutVoidPtr::null())];
+        assert_eq!(copied, class);
     }
 }

@@ -358,6 +358,13 @@ int test_vsnprintf() {
     return -11;
   }
   free(str);
+  // Alternative form retains the decimal point even at zero precision.
+  str = str_format("%#.0e|%#.0f", 10.0, 10.0);
+  if (strcmp(str, "1.e+01|10.") != 0) {
+    free(str);
+    return -102;
+  }
+  free(str);
   // Test %g
   str = str_format("%g|%8g|%08g|%.g|%8.g|%.3g|%8.3g|%08.3g|%*g|%0*g", 10.12345,
                    10.12345, 10.12345, 10.12345, 10.12345, 10.12345, 10.12345,

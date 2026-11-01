@@ -272,6 +272,9 @@ pub(super) struct CGContextHostObject {
     pub(super) blend_mode: CGBlendMode,
     /// Text transform.
     pub(super) text_transform: Option<CGAffineTransform>,
+    /// Current text position in user-space coordinates. The text matrix and
+    /// position are context attributes rather than saved graphics state.
+    pub(super) text_position: CGPoint,
     pub(super) text_drawing_mode: CGTextDrawingMode,
     pub(super) text_encoding: CGTextEncoding,
     /// Line/Path data
@@ -691,6 +694,33 @@ fn CGContextSetTextMatrix(
         .text_transform = Some(transform);
 }
 
+fn CGContextSetTextPosition(env: &mut Environment, context: CGContextRef, x: CGFloat, y: CGFloat) {
+    env.objc
+        .borrow_mut::<CGContextHostObject>(context)
+        .text_position = CGPoint { x, y };
+}
+
+fn CGContextGetTextPosition(env: &mut Environment, context: CGContextRef) -> CGPoint {
+    env.objc
+        .borrow::<CGContextHostObject>(context)
+        .text_position
+}
+
+fn advanced_text_position(
+    origin: CGPoint,
+    horizontal_advance: CGFloat,
+    text_transform: CGAffineTransform,
+) -> CGPoint {
+    let transformed_advance = text_transform.apply_to_size(CGSize {
+        width: horizontal_advance,
+        height: 0.0,
+    });
+    CGPoint {
+        x: origin.x + transformed_advance.width,
+        y: origin.y + transformed_advance.height,
+    }
+}
+
 #[cfg(test)]
 mod text_drawing_mode_tests {
     use super::*;
@@ -712,6 +742,23 @@ mod text_drawing_mode_tests {
         assert_eq!(
             decode_mac_roman(b"Cube"),
             vec![b'C' as u16, b'u' as u16, b'b' as u16, b'e' as u16]
+        );
+    }
+
+    #[test]
+    fn text_advance_follows_the_linear_text_transform() {
+        let origin = CGPoint { x: 3.0, y: 5.0 };
+        let transform = CGAffineTransform {
+            a: 0.0,
+            b: 2.0,
+            c: -1.0,
+            d: 0.0,
+            tx: 99.0,
+            ty: 101.0,
+        };
+        assert_eq!(
+            advanced_text_position(origin, 4.0, transform),
+            CGPoint { x: 3.0, y: 13.0 }
         );
     }
 }
@@ -740,14 +787,6 @@ fn CGContextShowTextAtPoint(
     text: ConstPtr<u8>,
     length: GuestUSize,
 ) {
-    let text_drawing_mode = env
-        .objc
-        .borrow::<CGContextHostObject>(context)
-        .text_drawing_mode;
-    if matches!(text_drawing_mode, kCGTextInvisible | kCGTextClip) {
-        return;
-    }
-
     let encoding = env
         .objc
         .borrow::<CGContextHostObject>(context)
@@ -787,10 +826,31 @@ fn CGContextShowGlyphIdsAtPoint(
     y: CGFloat,
     glyph_ids: Vec<rusttype::GlyphId>,
 ) {
-    let text_drawing_mode = env
+    let (text_drawing_mode, font_ref, font_size, text_transform) = {
+        let host = env.objc.borrow::<CGContextHostObject>(context);
+        (
+            host.text_drawing_mode,
+            host.font,
+            host.font_size,
+            host.text_transform.unwrap_or(CGAffineTransformIdentity),
+        )
+    };
+    if font_ref.is_null() {
+        log!("CGContext text drawing called without a selected font");
+        return;
+    }
+
+    let horizontal_advance = env
         .objc
-        .borrow::<CGContextHostObject>(context)
-        .text_drawing_mode;
+        .borrow::<CGFontHostObject>(font_ref)
+        .font
+        .glyphs_horizontal_advance(font_size, glyph_ids.iter().copied());
+    let origin = CGPoint { x, y };
+    let text_position = advanced_text_position(origin, horizontal_advance, text_transform);
+    env.objc
+        .borrow_mut::<CGContextHostObject>(context)
+        .text_position = text_position;
+
     if matches!(text_drawing_mode, kCGTextInvisible | kCGTextClip) {
         return;
     }
@@ -808,15 +868,7 @@ fn CGContextShowGlyphIdsAtPoint(
         log!("TODO: Core Graphics text clipping");
     }
 
-    let font = env.objc.borrow::<CGContextHostObject>(context).font;
-    let font_size = env.objc.borrow::<CGContextHostObject>(context).font_size;
-    let text_transform = env
-        .objc
-        .borrow::<CGContextHostObject>(context)
-        .text_transform
-        .unwrap_or(CGAffineTransformIdentity);
-
-    let font = &env.objc.borrow::<CGFontHostObject>(font).font;
+    let font = &env.objc.borrow::<CGFontHostObject>(font_ref).font;
 
     let mut drawer = CGBitmapContextDrawer::new(&env.objc, &mut env.mem, context);
     let fill_color = drawer.rgb_fill_color();
@@ -1152,6 +1204,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextSetFontSize(_, _)),
     export_c_func!(CGContextSetTextDrawingMode(_, _)),
     export_c_func!(CGContextSetTextMatrix(_, _)),
+    export_c_func!(CGContextSetTextPosition(_, _, _)),
+    export_c_func!(CGContextGetTextPosition(_)),
     export_c_func!(CGContextShowGlyphsAtPoint(_, _, _, _, _)),
     export_c_func!(CGContextShowGlyphsAtPositions(_, _, _, _)),
     export_c_func!(CGContextShowTextAtPoint(_, _, _, _, _)),

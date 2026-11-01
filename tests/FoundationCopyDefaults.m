@@ -88,6 +88,16 @@ int main(void) {
     [kvcTarget setValuesForKeysWithDictionary:nil];
     assert([[kvcTarget objectForKey:@"value"] isEqual:@"kept"]);
 
+    id dictionaryClass = [NSMutableDictionary class];
+    assert([dictionaryClass copyWithZone:NULL] == dictionaryClass);
+
+    NSString *plistError = @"sentinel";
+    NSData *emptyDictionaryData = [NSPropertyListSerialization
+        dataFromPropertyList:[NSDictionary dictionary]
+        format:NSPropertyListBinaryFormat_v1_0
+        errorDescription:&plistError];
+    assert(emptyDictionaryData != nil && plistError == nil);
+
     NSScanner *floatScanner = [NSScanner scannerWithString:@"  -1.25e+2tail"];
     float scannedFloat = 0.0f;
     assert([floatScanner scanFloat:&scannedFloat]);
