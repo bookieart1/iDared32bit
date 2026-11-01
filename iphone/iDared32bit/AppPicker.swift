@@ -257,6 +257,44 @@ private func activeWindowScene() -> UIWindowScene? {
         ?? scenes.first
 }
 
+/// SDL's orientation hint controls the SDL view controller, but after the
+/// portrait-only SwiftUI picker has owned the scene, recent iOS versions also
+/// require an explicit scene geometry request. Keeping the host scene aligned
+/// makes native UI such as the software keyboard match landscape guest apps.
+@_cdecl("idared_request_host_orientation")
+public func idaredRequestHostOrientation(_ rawOrientation: Int32) {
+    let mask: UIInterfaceOrientationMask
+    switch rawOrientation {
+    case 0: mask = .portrait
+    case 1: mask = .portraitUpsideDown
+    case 2: mask = .landscapeRight
+    case 3: mask = .landscapeLeft
+    default: return
+    }
+
+    let update = {
+        guard let scene = activeWindowScene() else { return }
+        for window in scene.windows {
+            window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+        }
+        if #available(iOS 16.0, *) {
+            let preferences = UIWindowScene.GeometryPreferences.iOS(
+                interfaceOrientations: mask
+            )
+            scene.requestGeometryUpdate(preferences) { error in
+                NSLog("iDared host orientation request failed: %@", error.localizedDescription)
+            }
+        } else {
+            UIViewController.attemptRotationToDeviceOrientation()
+        }
+    }
+    if Thread.isMainThread {
+        update()
+    } else {
+        DispatchQueue.main.async(execute: update)
+    }
+}
+
 /// Rust's images are premultiplied RGBA, top row first.
 private func makeImage(_ pixels: UnsafePointer<UInt8>, _ width: Int, _ height: Int) -> UIImage? {
     let data = Data(bytes: pixels, count: width * height * 4)

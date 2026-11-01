@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
 Last reconciled: November 1, 2026
-Latest device-tested checkpoint: **iDared Dev 1.80** (`764d60e`; focused multi-log result; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.81** (`178cc51`; verified package, device testing pending)
-Current activity: **Dev 1.81 implements the next three shared contracts exposed by Dev 1.80—raw Objective-C ivar assignment, `dispatch_once`, and the pointer-array `NSDictionary` constructor—and improves native picker paging/last-page continuity. A later Dirt observation narrows its status from working to partial: traversal/save recovery work, but physical rotation does not change gravity and a held touch can reverse after leaving the guest viewport. Dev 1.81 therefore also implements accelerometer-derived `UIDevice` physical-orientation notifications and clamps physical touches to the original screen boundary. Hamlet is working in the observed scope; Blot and Spoing remain healthy checkpoints. Parachute Ninja is deliberately unchanged because its `UIApplication`-as-error callback argument is an origin problem, not a missing `domain` API. Hosted tests, iOS compilation and package verification have passed within the qualified boundaries recorded below; physical-device behavior remains pending.**
+Latest device-tested checkpoint: **iDared Dev 1.81** (`178cc51`; focused device result; Dev 1.71 remains the latest full-catalog survey)
+Latest built checkpoint: **iDared Dev 1.81** (`178cc51`; Dev 1.82 is the current unbuilt candidate)
+Current activity: **Dev 1.81 device testing verifies the new picker paging/page continuity and Dirt's physical gravity; Blot remains healthy. Dark Nebula 2 now reaches a missing mutable index-set factory, and Glowfish reaches the named-pasteboard contract. Glowfish HD advances through intro and level selection but reports a missing bundled level file before a genuine abort. Hamlet works after a verified incorrect first host orientation; Parachute Ninja remains at its invalid callback-argument origin. Spoing produced one early null-page crash followed by two working launches, so it remains a regression watch rather than a patch target. Dev 1.82 implements general Foundation index sets, bounded named pasteboards, explicit host-scene orientation, safer direct-touch capture at letterbox bars, and guest-only background termination so screenshot review cannot close the entire host. The universal recorder is unchanged. Hosted tests, iOS compilation, package verification and physical validation remain pending.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3660,3 +3660,50 @@ are pending**. The focused retest is Blot, Dark Nebula 2, Dirt, Glowfish,
 Glowfish HD, Hamlet, Parachute Ninja and Spoing, followed by one slow picker
 swipe and page-return/process-restart continuity check. No save reset is
 requested.
+
+## Dev 1.81 device result and Dev 1.82 sixth-stage contracts
+
+The complete Dev 1.81 log is preserved as
+`outputs/device-logs/iDared-Dev-1.81-device-results.txt`: 1,318,957 bytes,
+SHA-256
+`8a4407fd9473b898d0d14e72a0cf030446ffbc0747f0eb1cdeb841eb2773a48b`.
+It embeds source `178cc5197ebc80415538d12aaa6458d3a3e47abc`, workflow
+`41294836557`, and the universal bounded recorder. Three supplied screenshots
+preserve Glowfish HD's portrait keyboard and Hamlet before/after its host scene
+corrects to landscape; their hashes and exact classifications are recorded in
+`dev-docs/compatibility-1.82-sixth-stage-contracts-and-host-lifecycle.md`.
+
+| App / surface | Dev 1.81 device result | Current classification / Dev 1.82 action |
+|---|---|---|
+| Native picker | Interactive page movement and same-page return worked across normal exits and crashes. | **Verified in requested scope.** Retain unchanged. |
+| Blot | Smooth play and clean Home return after 53.941 s / 2,132 loops / 2,101 EAGL returns. | **Regression pass in stated scope.** |
+| Dark Nebula 2 | Level loading progresses to missing `+[NSMutableIndexSet indexSet]` after 18.949 s / 1,041 loops / 525 EAGL returns. | **Partial; later stage.** Implement general range-backed `NSIndexSet` / `NSMutableIndexSet`, including construction, queries, copying and mutation. |
+| Dirt | Device rotation changes gravity. A drag started inside the game keeps its intended edge direction when crossing a black bar. | **Working checkpoint in expanded scope.** Refine the broad input rule: only touches beginning inside the guest are captured; already-captured drags remain clamped at the guest edge. |
+| Glowfish | Missing `+[UIPasteboard pasteboardWithName:create:]` after 1.259 s; recorded `create:NO`. | **Startup-blocked at a shared UIKit contract.** Add a bounded named-board registry with genuine nil-on-absent semantics. |
+| Glowfish HD | Intro, level selection and controls work; level start reports missing bundled `GameData/Levels/Level_01.gfl`, then deliberately aborts after 46.976 s / 3,117 loops / 2,268 EAGL returns. | **Partial; major visible advance.** Preserve strict abort and do not invent the resource. Host scene orientation is addressed separately for the native keyboard. |
+| Hamlet | Runs after a first presentation that is visibly rotated/cropped; later menu is correctly landscape. | **Working checkpoint with verified orientation defect.** Synchronize the active host scene to the guest's existing orientation request. |
+| Parachute Ninja | Unchanged: guest sends `domain` to a supplied `UIApplication`. | **Blocked at invalid callback-argument origin.** No invalid-object tolerance. |
+| Spoing | One early null-page crash at PC `0x000c2c70`, followed by two working launches and clean Home returns. | **Working regression watch with intermittent failure.** Reproduce before patching. |
+
+The user also established that accepting the system screenshot review/save flow
+closes the whole iDared process while a guest is running. The event is absent
+from this log, but source inspection strongly identifies the current
+background handler's explicit `std::process::exit(0)`. Dev 1.82 keeps the
+existing bounded guest save/termination notification but returns to the picker
+instead of terminating the host. This is not full suspend/resume support.
+
+Dev 1.82 is therefore a coherent shared-contract and host-boundary candidate:
+
+- range-backed Foundation index sets;
+- named UIKit pasteboards with stable identity and correct creation semantics;
+- modern host `UIWindowScene` orientation synchronized to the guest request;
+- direct-touch capture only when a touch begins inside the displayed guest,
+  while preserving edge capture for an active drag; and
+- background/screenshot transitions that end only the guest and preserve the
+  host picker.
+
+The universal recorder remains unchanged. No game identifier, save reset,
+fabricated resource, swallowed abort, invalid-object accommodation or unrelated
+compatibility patch is included. Hosted tests and iOS compilation remain
+pending at this candidate stage. The focused device procedure is recorded in
+the Dev 1.82 engineering note; no save deletion is requested.

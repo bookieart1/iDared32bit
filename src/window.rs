@@ -22,7 +22,7 @@ use sdl2::mouse::MouseButton;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::surface::Surface;
 use sdl2_sys::SDL_PowerState;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 use std::f32::consts::{FRAC_PI_2, PI};
 use std::num::NonZeroU32;
@@ -128,6 +128,19 @@ fn set_sdl2_orientation(orientation: DeviceOrientation) {
             DeviceOrientation::LandscapeRight => "LandscapeLeft",
         },
     );
+    #[cfg(target_os = "ios")]
+    unsafe {
+        extern "C" {
+            fn idared_request_host_orientation(orientation: i32);
+        }
+        let orientation = match orientation {
+            DeviceOrientation::Portrait => 0,
+            DeviceOrientation::PortraitUpsideDown => 1,
+            DeviceOrientation::LandscapeLeft => 2,
+            DeviceOrientation::LandscapeRight => 3,
+        };
+        idared_request_host_orientation(orientation);
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
@@ -154,6 +167,14 @@ fn clamp_to_viewport((x, y): Coords, (vx, vy, vw, vh): (u32, u32, u32, u32)) -> 
     let max_x = vx.saturating_add(vw) as f32;
     let max_y = vy.saturating_add(vh) as f32;
     (x.clamp(min_x, max_x), y.clamp(min_y, max_y))
+}
+
+fn point_is_in_viewport((x, y): Coords, (vx, vy, vw, vh): (u32, u32, u32, u32)) -> bool {
+    let min_x = vx as f32;
+    let min_y = vy as f32;
+    let max_x = vx.saturating_add(vw) as f32;
+    let max_y = vy.saturating_add(vh) as f32;
+    x >= min_x && x < max_x && y >= min_y && y < max_y
 }
 
 /// A touch on the on-screen Home button (see [Window::home_button_overlay]).
@@ -302,6 +323,10 @@ pub struct Window {
     /// [Self::enable_on_screen_home_button].
     on_screen_home_button: bool,
     home_button_press: Option<HomeButtonPress>,
+    /// Direct host touches which began on the emulated touchscreen. A touch
+    /// may subsequently move into a letterbox bar and remains captured at the
+    /// guest edge, just like a finger reaching an original device's edge.
+    active_direct_touches: HashSet<FingerId>,
     /// Whether or not we are on the "main" environment stack (rather than
     /// a coroutine stack). Checked in various functions to make sure that
     /// certain SDL functions (that call JNI functions) are on the main
@@ -481,6 +506,7 @@ impl Window {
             controller_back_held_since: None,
             on_screen_home_button: false,
             home_button_press: None,
+            active_direct_touches: HashSet::new(),
             on_main_stack: true,
         };
 
@@ -650,6 +676,10 @@ impl Window {
                     mouse_btn: MouseButton::Left,
                     ..
                 } => {
+                    if !point_is_in_viewport((x as f32, y as f32), self.viewport()) {
+                        continue;
+                    }
+                    self.active_direct_touches.insert(FingerId::Mouse);
                     let coords = transform_input_coords(self, (x as f32, y as f32), false);
                     log_dbg!("MouseButtonDown x {}, y {}, coords {:?}", x, y, coords);
                     Event::TouchesDown(HashMap::from([(FingerId::Mouse, coords)]))
@@ -657,6 +687,9 @@ impl Window {
                 E::MouseMotion {
                     x, y, mousestate, ..
                 } if mousestate.left() => {
+                    if !self.active_direct_touches.contains(&FingerId::Mouse) {
+                        continue;
+                    }
                     let coords = transform_input_coords(self, (x as f32, y as f32), false);
                     log_dbg!("MouseMotion x {}, y {}, coords {:?}", x, y, coords);
                     Event::TouchesMove(HashMap::from([(FingerId::Mouse, coords)]))
@@ -667,6 +700,9 @@ impl Window {
                     mouse_btn: MouseButton::Left,
                     ..
                 } => {
+                    if !self.active_direct_touches.remove(&FingerId::Mouse) {
+                        continue;
+                    }
                     let coords = transform_input_coords(self, (x as f32, y as f32), false);
                     log_dbg!("MouseButtonUp x {}, y {}, coords {:?}", x, y, coords);
                     Event::TouchesUp(HashMap::from([(FingerId::Mouse, coords)]))
@@ -873,6 +909,25 @@ impl Window {
                     ) {
                         continue;
                     }
+                    let direct_id = FingerId::Touch(finger_id);
+                    match kind {
+                        TouchKind::Down => {
+                            if !point_is_in_viewport(abs_coords, self.viewport()) {
+                                continue;
+                            }
+                            self.active_direct_touches.insert(direct_id);
+                        }
+                        TouchKind::Move => {
+                            if !self.active_direct_touches.contains(&direct_id) {
+                                continue;
+                            }
+                        }
+                        TouchKind::Up => {
+                            if !self.active_direct_touches.remove(&direct_id) {
+                                continue;
+                            }
+                        }
+                    }
                     log_dbg!("Starting multi-touch for {:?}", event);
                     // To implement multi-touch we accumulate here same touch
                     // events at the same timestamp. This is consistent with
@@ -920,6 +975,25 @@ impl Window {
                                     abs_coords,
                                 ) {
                                     continue;
+                                }
+                                let direct_id = FingerId::Touch(finger_id);
+                                match kind {
+                                    TouchKind::Down => {
+                                        if !point_is_in_viewport(abs_coords, self.viewport()) {
+                                            continue;
+                                        }
+                                        self.active_direct_touches.insert(direct_id);
+                                    }
+                                    TouchKind::Move => {
+                                        if !self.active_direct_touches.contains(&direct_id) {
+                                            continue;
+                                        }
+                                    }
+                                    TouchKind::Up => {
+                                        if !self.active_direct_touches.remove(&direct_id) {
+                                            continue;
+                                        }
+                                    }
                                 }
                                 let coords = transform_input_coords(self, abs_coords, false);
                                 map.insert(FingerId::Touch(finger_id), coords);
@@ -2272,7 +2346,7 @@ pub fn get_preferred_country_codes(env: &mut Environment) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::clamp_to_viewport;
+    use super::{clamp_to_viewport, point_is_in_viewport};
 
     #[test]
     fn physical_input_is_clamped_to_the_visible_guest_viewport() {
@@ -2282,5 +2356,15 @@ mod tests {
         assert_eq!(clamp_to_viewport((400.0, 19.0), viewport), (400.0, 20.0));
         assert_eq!(clamp_to_viewport((400.0, 501.0), viewport), (400.0, 500.0));
         assert_eq!(clamp_to_viewport((450.0, 250.0), viewport), (450.0, 250.0));
+    }
+
+    #[test]
+    fn only_touches_which_begin_inside_the_viewport_are_captured() {
+        let viewport = (100, 20, 800, 480);
+        assert!(point_is_in_viewport((100.0, 20.0), viewport));
+        assert!(point_is_in_viewport((899.9, 499.9), viewport));
+        assert!(!point_is_in_viewport((99.9, 250.0), viewport));
+        assert!(!point_is_in_viewport((900.0, 250.0), viewport));
+        assert!(!point_is_in_viewport((450.0, 500.0), viewport));
     }
 }

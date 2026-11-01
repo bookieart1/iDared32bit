@@ -81,6 +81,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     constant_exports: &[
         ui_application::CONSTANTS,
         ui_device::CONSTANTS,
+        ui_pasteboard::CONSTANTS,
         ui_view::ui_control::ui_text_field::CONSTANTS,
         ui_view::ui_window::CONSTANTS,
     ],
@@ -101,6 +102,7 @@ pub struct State {
     ui_font: ui_font::State,
     ui_graphics: ui_graphics::State,
     ui_image: ui_image::State,
+    ui_pasteboard: ui_pasteboard::State,
     ui_screen: ui_screen::State,
     ui_touch: ui_touch::State,
     pub ui_view: ui_view::State,
@@ -141,8 +143,21 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
                 // We can usually handle this in time, so there won't be data
                 // loss, nor problems with background resource usage or audio.
                 // TODO: Handle this better.
-                log!("Handling app-will-resign-active event: exiting.");
-                ui_application::exit(env);
+                log!("Handling app-will-resign-active event: ending guest and preserving picker.");
+                if !env.return_to_app_picker {
+                    if !env.is_app_picker {
+                        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            ui_application::notify_will_terminate(env)
+                        }));
+                        if let Err(e) = res {
+                            if env.return_to_app_picker {
+                                std::panic::resume_unwind(e);
+                            }
+                            log!("App crashed while backgrounding, returning to app picker anyway.");
+                        }
+                    }
+                    env.return_to_app_picker = true;
+                }
             }
             Event::AppWillTerminate => {
                 log!("Handling app-will-terminate event.");
