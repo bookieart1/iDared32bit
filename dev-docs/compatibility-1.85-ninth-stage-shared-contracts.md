@@ -74,6 +74,34 @@ The two recent survey samples also establish three exact shared contracts:
 Focused unit tests cover date archive round-trip, slider default/mutation,
 font identity across resize, and target-specific run-loop cancellation.
 
+## Verified delivery
+
+- Final implementation/source commit:
+  `84c7ca2b15962b7d73f8de6d33130e018ef2d6b3`. The principal implementation is
+  in `ed4c0c32`; the two later commits correct only the new test imports and
+  synthetic guest-stack fixtures discovered by the first hosted runs.
+- [Hosted tests 41307145921](https://github.com/bookieart1/iDared32bit/actions/runs/41307145921):
+  **142/142 library tests passed on macOS and 142/142 on Windows**. The native
+  Foundation reference and the two selected recorder reproducers passed.
+  Development-branch full guest-executable tests were skipped. The separately
+  allowed-to-fail macOS, Windows and Android lint steps each emitted an
+  exit-code-1 annotation, so the green workflow is not a clean-lint claim.
+- [IPA build 41307145898](https://github.com/bookieart1/iDared32bit/actions/runs/41307145898):
+  arm64 compilation, separate development identity verification, unsigned
+  packaging and artifact upload passed. Artifact ID `13083642786`; downloaded
+  ZIP SHA-256
+  `5ce6ecef17d15faae07760b6336c6dda413be0c738b84ae3b51e572ffce2ebd8`
+  matches GitHub's published digest.
+- Local `outputs/iDared-Dev-1.85.ipa`, 19,967,511 bytes, SHA-256
+  `76fd30f74e0028e37d7676df7df7dff9e084407b3bc0d64f042a1ce5ec6c0251`,
+  passed archive extraction, arm64 Mach-O, unsigned/no-provisioning, separate
+  `com.bookieart1.idared32bit.dev` identity, embedded source/workflow,
+  universal-recorder and new-contract marker checks.
+
+Verification: `outputs/iDared-Dev-1.85.verification.json`. Physical-device
+compatibility remains pending and separate from these build and host-test
+checkpoints.
+
 ## Device predictions
 
 - Dark Nebula 2 and Glowfish HD should once again show usable name-entry UI
