@@ -250,10 +250,18 @@ mod tests {
     fn date_keyed_archive_round_trip_preserves_reference_interval() {
         let mut env = Environment::new_fake_for_test_with_thread();
         let env = &mut env;
+        // Keyed archiving forwards Objective-C arguments through the guest ABI,
+        // so the synthetic thread needs stack space for those nested calls.
+        let stack = env.mem.alloc(0x1000);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = stack.to_bits() + 0x1000;
+        let pool: id = msg_class![env; NSAutoreleasePool new];
         let date: id = msg_class![env; NSDate dateWithTimeIntervalSinceReferenceDate:12345.25f64];
         let data: id = msg_class![env; NSKeyedArchiver archivedDataWithRootObject:date];
         let decoded: id = msg_class![env; NSKeyedUnarchiver unarchiveObjectWithData:data];
         let actual: f64 = msg![env; decoded timeIntervalSinceReferenceDate];
         assert_eq!(actual, 12345.25);
+        release(env, pool);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
+        env.mem.free(stack);
     }
 }

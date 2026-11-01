@@ -122,15 +122,23 @@ pub const CLASSES: ClassExports = objc_classes! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::objc::release;
     use crate::{msg_class, Environment};
 
     #[test]
     fn slider_continuous_state_defaults_true_and_round_trips() {
         let mut env = Environment::new_fake_for_test_with_thread();
         let env = &mut env;
+        // NSObject's +new path performs nested guest ABI calls, so this
+        // synthetic thread needs a small stack just like a real guest thread.
+        let stack = env.mem.alloc(0x1000);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = stack.to_bits() + 0x1000;
         let slider: id = msg_class![env; UISlider new];
         assert!(msg![env; slider isContinuous]);
         () = msg![env; slider setContinuous:false];
         assert!(!msg![env; slider isContinuous]);
+        release(env, slider);
+        env.cpu.regs_mut()[crate::cpu::Cpu::SP] = 0;
+        env.mem.free(stack);
     }
 }
