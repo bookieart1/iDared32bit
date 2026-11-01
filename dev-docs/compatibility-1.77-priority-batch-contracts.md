@@ -75,3 +75,33 @@ the focused regressions: Spoing covers Unity/VM behavior and Blot covers
 Foundation/UI transitions. Glowfish HD is an optional direct corroborator for
 the VM-tag contract.
 
+## Verified delivery
+
+The first hosted attempt exposed two Rust fixture/borrow-order compilation
+errors. The second compiled and ran all 128 library tests, with 127 passing and
+only the new five-argument `NSData` guest-ABI fixture failing because its
+synthetic thread had no guest stack. That fixture was corrected without
+changing shipped emulator behavior. Neither superseded IPA was delivered.
+
+- Final implementation/source commit:
+  `7640156cc0c421c2d44259fcb4ffc2e8787744ac`.
+- [Tests 41284825026](https://github.com/bookieart1/iDared32bit/actions/runs/41284825026):
+  **128/128 library tests passed on macOS and 128/128 on Windows**. The native
+  Foundation reference, bounded diagnostic reproducers and final lint jobs
+  passed. Guest executable integration remains a configured skip and is not
+  evidence about these five physical ARM game binaries.
+- [IPA build 41284825031](https://github.com/bookieart1/iDared32bit/actions/runs/41284825031):
+  the iOS arm64 archive and unsigned package completed. Artifact
+  `13073919356`; the downloaded artifact ZIP is 19,852,503 bytes with SHA-256
+  `2e239a702ae061fdf75c7bd4f0e474d4128981aa3f77a82dc5baed82980e7e66`,
+  matching GitHub's artifact digest.
+- Local `outputs/iDared-Dev-1.77.ipa` is 19,898,256 bytes with SHA-256
+  `559f5d979985475b92294a563a01aa678b5c76c377fe118696316a386dafbf3b`.
+  Its archive CRC, arm64 Mach-O, embedded source/workflow, universal-flight
+  default and new contract symbols were verified. It is unsigned, contains no
+  provisioning profile or code-signature load command, and uses the separate
+  `com.bookieart1.idared32bit.dev` / `iDared Dev` identity.
+
+Physical-device compatibility is pending. This delivery establishes that the
+recorded first blockers are implemented and packaged; it does not establish
+that any title reaches its menu, gameplay, save path or clean exit.

@@ -3378,3 +3378,34 @@ Glowfish, followed by Spoing and Blot as narrow VM/Foundation regressions.
 Glowfish HD can directly corroborate the tagged-mapping path. Preserve existing
 saves; a removed first blocker, menu reached, gameplay observed and functional
 compatibility must be reported separately.
+
+### Dev 1.77 verified delivery
+
+- Final implementation/source commit:
+  `7640156cc0c421c2d44259fcb4ffc2e8787744ac`. Two earlier hosted attempts
+  exposed test-source compilation errors and then a missing synthetic guest
+  stack in the new five-argument `NSData` fixture; neither superseded package
+  was delivered.
+- [Tests 41284825026](https://github.com/bookieart1/iDared32bit/actions/runs/41284825026):
+  **128/128 library tests passed on macOS and 128/128 on Windows**. Native
+  Foundation reference, bounded diagnostic reproducers and final lint jobs
+  passed. Guest executable integration is still skipped by configuration.
+- [IPA build 41284825031](https://github.com/bookieart1/iDared32bit/actions/runs/41284825031):
+  arm64 archive/package and artifact upload passed. Artifact `13073919356`;
+  downloaded outer ZIP SHA-256
+  `2e239a702ae061fdf75c7bd4f0e474d4128981aa3f77a82dc5baed82980e7e66`
+  matches GitHub's digest.
+- Local `outputs/iDared-Dev-1.77.ipa`, **19,898,256 bytes**, SHA-256
+  `559f5d979985475b92294a563a01aa678b5c76c377fe118696316a386dafbf3b`,
+  passed archive/CRC and identity checks. The arm64 executable embeds source
+  `7640156`, workflow `41284825031`, all five new contract symbols and the
+  permanent universal-flight default. It is unsigned, has no provisioning
+  profile or code-signature load command, and uses the separate development
+  identity `com.bookieart1.idared32bit.dev` / `iDared Dev`.
+- No save migration/deletion, app-specific branch, permissive memory handling,
+  diagnostic expansion or unrelated compatibility change is included.
+  **Physical-device testing is pending.** A removed first blocker, menu reached,
+  gameplay observed and functional compatibility remain separate claims.
+
+Verification: `outputs/iDared-Dev-1.77.verification.json`. Engineering detail:
+`dev-docs/compatibility-1.77-priority-batch-contracts.md`.
