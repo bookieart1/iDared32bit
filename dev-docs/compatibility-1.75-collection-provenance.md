@@ -104,3 +104,25 @@ Local formatting and whitespace checks pass for the changed files. Local Rust
 compilation cannot complete because the available Windows environment lacks
 the MSVC linker; hosted macOS/Windows tests and iOS packaging must be recorded
 separately. No physical-device result may be inferred from either.
+
+## Verified build
+
+- Implementation and delivered source commit:
+  `cdcaf3d189cd5bc556ab1565d421afe8172810b5`.
+- [Hosted tests 41263772973](https://github.com/bookieart1/iDared32bit/actions/runs/41263772973):
+  120/120 library tests passed on macOS and 120/120 on Windows. The two new
+  provenance tests, both bounded-diagnostic reproducers and the native
+  Foundation reference fixture passed. Guest integration remains a configured
+  skip. Lint retains its allowed failure on two pre-existing long comment
+  lines, so later clippy/rustdoc and Android compilation were not reached.
+- [IPA build 41263773139](https://github.com/bookieart1/iDared32bit/actions/runs/41263773139):
+  the arm64 archive/package job succeeded. Artifact `13066091948`; downloaded
+  artifact ZIP SHA-256
+  `10cbec05825cbe836395032e1a56e7c8cdd65b58574a3a14f4100755e6ac1f86`
+  matches GitHub.
+- Local `outputs/iDared-Dev-1.75.ipa` is 19,888,352 bytes with SHA-256
+  `b1ca67723600757d022d5f7fc192ccc88bf95af33516b64810ed6da5cb0e8a8b`.
+  ZIP CRC, arm64 executable, embedded source/workflow, development bundle
+  identity, lack of a signature/profile, provenance marker and universal-flight
+  default were verified from the package.
+- This remains a diagnostic-only build. Physical-device validation is pending.

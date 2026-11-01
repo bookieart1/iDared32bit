@@ -3195,3 +3195,30 @@ package verification and physical-device behavior remain separate pending
 stages. Focused device test after packaging: launch existing-save Hook World
 and Mage Gauntlet in that order and preserve both terminal dumps. Engineering
 detail: `dev-docs/compatibility-1.75-collection-provenance.md`.
+
+### Dev 1.75 verified delivery
+
+- Source and implementation commit:
+  `cdcaf3d189cd5bc556ab1565d421afe8172810b5`.
+- [Tests 41263772973](https://github.com/bookieart1/iDared32bit/actions/runs/41263772973):
+  **120/120 library tests passed on macOS and 120/120 on Windows**. Both new
+  provenance tests, both existing bounded-diagnostic reproducers and the native
+  Foundation reference fixture passed. Guest integration is skipped by
+  configuration. Lint's allowed failure remains two pre-existing long comments;
+  later clippy/rustdoc and Android compilation were not reached.
+- [IPA build 41263773139](https://github.com/bookieart1/iDared32bit/actions/runs/41263773139):
+  arm64 packaging succeeded. Artifact `13066091948`; downloaded artifact ZIP
+  SHA-256
+  `10cbec05825cbe836395032e1a56e7c8cdd65b58574a3a14f4100755e6ac1f86`
+  matches GitHub.
+- Local `outputs/iDared-Dev-1.75.ipa`, **19,888,352 bytes**, SHA-256
+  `b1ca67723600757d022d5f7fc192ccc88bf95af33516b64810ed6da5cb0e8a8b`,
+  passed ZIP CRC and package-identity checks. The executable is arm64, embeds
+  source `cdcaf3d` and workflow `41263773139`, retains the universal recorder,
+  and is unsigned under `com.bookieart1.idared32bit.dev` / `iDared Dev`.
+- No compatibility behavior, save data, app-specific branch, ownership rule or
+  strict failure check changed. **Physical-device validation is pending.** Test
+  only existing-save Hook World followed by Mage Gauntlet, then preserve the
+  complete log. Do not delete either save.
+
+Verification: `outputs/iDared-Dev-1.75.verification.json`.
