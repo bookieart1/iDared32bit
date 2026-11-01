@@ -264,6 +264,7 @@ impl Font {
         use owned_ttf_parser::name_id::POST_SCRIPT_NAME;
         self.as_face_ref()
             .names()
+            .into_iter()
             .find(|name| name.name_id == POST_SCRIPT_NAME)
             .and_then(|name| name.to_string())
     }

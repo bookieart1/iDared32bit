@@ -215,16 +215,17 @@ mod tests {
     #[test]
     fn decimal_formatter_round_trips_bounded_number_state() {
         let mut env = Environment::new_fake_for_test_with_thread();
-        let formatter: id = msg_class![&mut env; NSNumberFormatter new];
-        () = msg![&mut env; formatter setNumberStyle:NSNumberFormatterDecimalStyle];
-        () = msg![&mut env; formatter setMaximumFractionDigits:2];
-        () = msg![&mut env; formatter setUsesGroupingSeparator:true];
-        let number: id = msg_class![&mut env; NSNumber numberWithDouble:1234.5f64];
-        let string: id = msg![&mut env; formatter stringFromNumber:number];
-        assert_eq!(ns_string::to_rust_string(&mut env, string), "1,234.5");
-        let parsed: id = msg![&mut env; formatter numberFromString:string];
-        let value: f64 = msg![&mut env; parsed doubleValue];
+        let env = &mut env;
+        let formatter: id = msg_class![env; NSNumberFormatter new];
+        () = msg![env; formatter setNumberStyle:NSNumberFormatterDecimalStyle];
+        () = msg![env; formatter setMaximumFractionDigits:2];
+        () = msg![env; formatter setUsesGroupingSeparator:true];
+        let number: id = msg_class![env; NSNumber numberWithDouble:1234.5f64];
+        let string: id = msg![env; formatter stringFromNumber:number];
+        assert_eq!(ns_string::to_rust_string(env, string), "1,234.5");
+        let parsed: id = msg![env; formatter numberFromString:string];
+        let value: f64 = msg![env; parsed doubleValue];
         assert_eq!(value, 1234.5);
-        release(&mut env, formatter);
+        release(env, formatter);
     }
 }

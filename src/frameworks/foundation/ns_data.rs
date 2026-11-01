@@ -471,9 +471,10 @@ mod tests {
     #[test]
     fn empty_mutable_data_allows_mutable_bytes_query() {
         let mut env = Environment::new_fake_for_test_with_thread();
-        let data: id = msg_class![&mut env; NSMutableData dataWithLength:0];
-        let length: NSUInteger = msg![&mut env; data length];
-        let bytes: MutVoidPtr = msg![&mut env; data mutableBytes];
+        let env = &mut env;
+        let data: id = msg_class![env; NSMutableData dataWithLength:0];
+        let length: NSUInteger = msg![env; data length];
+        let bytes: MutVoidPtr = msg![env; data mutableBytes];
         assert_eq!(length, 0);
         assert!(bytes.is_null());
     }

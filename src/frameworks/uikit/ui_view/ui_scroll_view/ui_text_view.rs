@@ -319,14 +319,15 @@ mod tests {
     #[test]
     fn keyboard_traits_keep_their_guest_visible_state() {
         let mut env = Environment::new_fake_for_test_with_thread();
-        let text_view: id = msg_class![&mut env; UITextView alloc];
-        let text_view: id = msg![&mut env; text_view initWithFrame:CGRectZero];
-        () = msg![&mut env; text_view setKeyboardType:7i32];
-        () = msg![&mut env; text_view setKeyboardAppearance:1i32];
-        let keyboard_type: NSInteger = msg![&mut env; text_view keyboardType];
-        let keyboard_appearance: NSInteger = msg![&mut env; text_view keyboardAppearance];
+        let env = &mut env;
+        let text_view: id = msg_class![env; UITextView alloc];
+        let text_view: id = msg![env; text_view initWithFrame:CGRectZero];
+        () = msg![env; text_view setKeyboardType:7i32];
+        () = msg![env; text_view setKeyboardAppearance:1i32];
+        let keyboard_type: NSInteger = msg![env; text_view keyboardType];
+        let keyboard_appearance: NSInteger = msg![env; text_view keyboardAppearance];
         assert_eq!(keyboard_type, 7);
         assert_eq!(keyboard_appearance, 1);
-        release(&mut env, text_view);
+        release(env, text_view);
     }
 }

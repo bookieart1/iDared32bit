@@ -490,31 +490,6 @@ fn all_objects(env: &mut Environment, set: id) -> id {
     autorelease(env, array)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::frameworks::foundation::ns_string;
-    use crate::objc::release;
-
-    #[test]
-    fn counted_set_tracks_multiplicity_and_distinct_count() {
-        let mut env = Environment::new_fake_for_test_with_thread();
-        let object = ns_string::from_rust_string(&mut env, "rolando".to_owned());
-        let set: id = msg_class![&mut env; NSCountedSet new];
-        () = msg![&mut env; set addObject:object];
-        () = msg![&mut env; set addObject:object];
-        let distinct: NSUInteger = msg![&mut env; set count];
-        let multiplicity: NSUInteger = msg![&mut env; set countForObject:object];
-        assert_eq!(distinct, 1);
-        assert_eq!(multiplicity, 2);
-        () = msg![&mut env; set removeObject:object];
-        let multiplicity: NSUInteger = msg![&mut env; set countForObject:object];
-        assert_eq!(multiplicity, 1);
-        release(&mut env, object);
-        release(&mut env, set);
-    }
-}
-
 /// Helper method shared between `initWithObjects:` of `_touchHLE_NSSet` and
 /// `_touchHLE_NSMutableSet`
 fn set_from_objects(env: &mut Environment, first_obj: id, args: DotDotDot) -> DictionaryHostObject {
@@ -550,7 +525,27 @@ fn set_from_array(env: &mut Environment, array: id) -> DictionaryHostObject {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::frameworks::foundation::ns_string;
     use crate::objc::{release, Class};
+
+    #[test]
+    fn counted_set_tracks_multiplicity_and_distinct_count() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let object = ns_string::from_rust_string(env, "rolando".to_owned());
+        let set: id = msg_class![env; NSCountedSet new];
+        () = msg![env; set addObject:object];
+        () = msg![env; set addObject:object];
+        let distinct: NSUInteger = msg![env; set count];
+        let multiplicity: NSUInteger = msg![env; set countForObject:object];
+        assert_eq!(distinct, 1);
+        assert_eq!(multiplicity, 2);
+        () = msg![env; set removeObject:object];
+        let multiplicity: NSUInteger = msg![env; set countForObject:object];
+        assert_eq!(multiplicity, 1);
+        release(env, object);
+        release(env, set);
+    }
 
     #[test]
     fn copies_preserve_element_identity_and_independent_membership() {
