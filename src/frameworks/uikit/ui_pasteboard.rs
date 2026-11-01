@@ -36,6 +36,8 @@ pub struct State {
 struct PasteboardHostObject {
     name: id,
     string: id,
+    /// Retained NSData values keyed by their pasteboard type string.
+    data: HashMap<String, id>,
     persistent: bool,
     change_count: NSUInteger,
 }
@@ -53,6 +55,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         Box::new(PasteboardHostObject {
             name: nil,
             string: nil,
+            data: HashMap::new(),
             persistent: false,
             change_count: 0,
         }),
@@ -166,16 +169,47 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setString:first];
 }
 
+- (id)dataForPasteboardType:(id)pasteboard_type {
+    if pasteboard_type == nil {
+        return nil;
+    }
+    let key = ns_string::to_rust_string(env, pasteboard_type).into_owned();
+    env.objc
+        .borrow::<PasteboardHostObject>(this)
+        .data
+        .get(&key)
+        .copied()
+        .unwrap_or(nil)
+}
+
+- (())setData:(id)data forPasteboardType:(id)pasteboard_type {
+    assert_ne!(pasteboard_type, nil, "UIPasteboard type must not be nil");
+    assert_ne!(data, nil, "UIPasteboard data must not be nil");
+    let key = ns_string::to_rust_string(env, pasteboard_type).into_owned();
+    retain(env, data);
+    let old = {
+        let host = env.objc.borrow_mut::<PasteboardHostObject>(this);
+        host.change_count = host.change_count.wrapping_add(1);
+        host.data.insert(key, data)
+    };
+    if let Some(old) = old {
+        release(env, old);
+    }
+}
+
 - (())dealloc {
-    let (name, string) = {
-        let host = env.objc.borrow::<PasteboardHostObject>(this);
-        (host.name, host.string)
+    let (name, string, data) = {
+        let host = env.objc.borrow_mut::<PasteboardHostObject>(this);
+        (host.name, host.string, std::mem::take(&mut host.data))
     };
     if name != nil {
         release(env, name);
     }
     if string != nil {
         release(env, string);
+    }
+    for value in data.into_values() {
+        release(env, value);
     }
     env.objc.dealloc_object(this, &mut env.mem)
 }
@@ -212,5 +246,20 @@ mod tests {
         assert_eq!(missing_again, nil);
         release(env, value);
         release(env, name);
+    }
+
+    #[test]
+    fn typed_data_round_trips_and_increments_change_count() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let env = &mut env;
+        let board: id = msg_class![env; UIPasteboard pasteboardWithUniqueName];
+        let data: id = msg_class![env; NSData data];
+        let pasteboard_type = ns_string::from_rust_string(env, "com.example.test".to_owned());
+        () = msg![env; board setData:data forPasteboardType:pasteboard_type];
+        let actual: id = msg![env; board dataForPasteboardType:pasteboard_type];
+        assert_eq!(actual, data);
+        let change_count: NSInteger = msg![env; board changeCount];
+        assert_eq!(change_count, 1);
+        release(env, pasteboard_type);
     }
 }

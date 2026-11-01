@@ -40,22 +40,7 @@ impl State {
     fn get_font_by_kind(&mut self, font_kind: FontKind) -> &Font {
         self.fonts
             .entry(font_kind)
-            .or_insert_with(|| match font_kind {
-                FontKind::MonoRegular => Font::mono_regular(),
-                FontKind::MonoBold => Font::mono_bold(),
-                FontKind::MonoBoldItalic => Font::mono_bold_italic(),
-                FontKind::MonoItalic => Font::mono_italic(),
-                FontKind::SansRegular => Font::sans_regular(),
-                FontKind::SansBold => Font::sans_bold(),
-                FontKind::SansBoldItalic => Font::sans_bold_italic(),
-                FontKind::SansItalic => Font::sans_italic(),
-                FontKind::SerifRegular => Font::serif_regular(),
-                FontKind::SerifBold => Font::serif_bold(),
-                FontKind::SerifBoldItalic => Font::serif_bold_italic(),
-                FontKind::SerifItalic => Font::serif_italic(),
-                FontKind::MarkerFelt => Font::marker_felt(),
-                FontKind::App(_) => unreachable!(),
-            })
+            .or_insert_with(|| new_system_font(font_kind))
     }
 }
 
@@ -277,11 +262,7 @@ fn cached_font(
     let font = env
         .objc
         .alloc_object(class, Box::new(host_object), &mut env.mem);
-    env.framework_state
-        .uikit
-        .ui_font
-        .ui_fonts
-        .insert(key, font);
+    env.framework_state.uikit.ui_font.ui_fonts.insert(key, font);
     let returned = retain(env, font);
     autorelease(env, returned)
 }
@@ -311,6 +292,42 @@ fn get_app_font(env: &mut Environment, name: &str) -> Option<FontKind> {
         .iter()
         .position(|names| names.iter().any(|n| n == name))
         .map(FontKind::App)
+}
+
+/// Create an independent Core Graphics font for a public font name. Core
+/// Graphics fonts own their font data, unlike UIFont's cached rendering
+/// objects, so this deliberately constructs a fresh Font.
+pub(crate) fn new_font_for_name(env: &mut Environment, name: &str) -> Option<Font> {
+    for file in env.bundle.app_fonts() {
+        let path = env.bundle.bundle_path().join(file);
+        let Some((font, names)) = env.fs.read(&path).ok().and_then(Font::from_app_file) else {
+            continue;
+        };
+        if names.iter().any(|candidate| candidate == name) {
+            return Some(font);
+        }
+    }
+
+    get_equivalent_font(name).map(new_system_font)
+}
+
+fn new_system_font(kind: FontKind) -> Font {
+    match kind {
+        FontKind::MonoRegular => Font::mono_regular(),
+        FontKind::MonoBold => Font::mono_bold(),
+        FontKind::MonoBoldItalic => Font::mono_bold_italic(),
+        FontKind::MonoItalic => Font::mono_italic(),
+        FontKind::SansRegular => Font::sans_regular(),
+        FontKind::SansBold => Font::sans_bold(),
+        FontKind::SansBoldItalic => Font::sans_bold_italic(),
+        FontKind::SansItalic => Font::sans_italic(),
+        FontKind::SerifRegular => Font::serif_regular(),
+        FontKind::SerifBold => Font::serif_bold(),
+        FontKind::SerifBoldItalic => Font::serif_bold_italic(),
+        FontKind::SerifItalic => Font::serif_italic(),
+        FontKind::MarkerFelt => Font::marker_felt(),
+        FontKind::App(_) => unreachable!("app fonts are loaded from their bundle data"),
+    }
 }
 
 fn convert_line_break_mode(ui_mode: UILineBreakMode) -> WrapMode {
@@ -409,11 +426,7 @@ pub fn size_with_font(
 ) -> CGSize {
     let (kind, size) = font_properties(env, font);
 
-    let font = get_font(
-        &mut env.framework_state.uikit.ui_font,
-        kind,
-        text,
-    );
+    let font = get_font(&mut env.framework_state.uikit.ui_font, kind, text);
 
     let wrap = constrained.map(|(size, ui_mode)| (size.width, convert_line_break_mode(ui_mode)));
 
@@ -431,11 +444,7 @@ pub fn break_lines_with_font<'a>(
 ) -> Vec<(f32, &'a str)> {
     let (kind, size) = font_properties(env, font);
 
-    let font = get_font(
-        &mut env.framework_state.uikit.ui_font,
-        kind,
-        text,
-    );
+    let font = get_font(&mut env.framework_state.uikit.ui_font, kind, text);
 
     let wrap = constrained.map(|(size, ui_mode)| (size.width, convert_line_break_mode(ui_mode)));
 
@@ -506,11 +515,7 @@ pub fn draw_at_point(
 
     let (kind, size) = font_properties(env, font);
 
-    let font = get_font(
-        &mut env.framework_state.uikit.ui_font,
-        kind,
-        text,
-    );
+    let font = get_font(&mut env.framework_state.uikit.ui_font, kind, text);
 
     let width_and_line_break_mode =
         width_and_line_break_mode.map(|(width, ui_mode)| (width, convert_line_break_mode(ui_mode)));
@@ -557,11 +562,7 @@ pub fn draw_in_rect(
 
     let (kind, size) = font_properties(env, font);
 
-    let font = get_font(
-        &mut env.framework_state.uikit.ui_font,
-        kind,
-        text,
-    );
+    let font = get_font(&mut env.framework_state.uikit.ui_font, kind, text);
 
     let mut drawer = CGBitmapContextDrawer::new(&env.objc, &mut env.mem, context);
     let fill_color = drawer.rgb_fill_color();

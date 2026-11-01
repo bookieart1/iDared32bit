@@ -9,7 +9,7 @@ use crate::frameworks::core_graphics::cg_context::CGContextSetRGBFillColor;
 use crate::frameworks::core_graphics::cg_geometry::CGPointZero;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string::to_rust_string;
-use crate::frameworks::foundation::{NSRange, NSUInteger};
+use crate::frameworks::foundation::{NSInteger, NSRange, NSUInteger};
 use crate::frameworks::uikit::ui_color;
 use crate::frameworks::uikit::ui_font::{
     break_lines_with_font, UILineBreakModeTailTruncation, UILineBreakModeWordWrap, UITextAlignment,
@@ -35,6 +35,7 @@ pub struct UITextViewHostObject {
     /// `UIColor*`
     text_color: id,
     text_alignment: UITextAlignment,
+    keyboard_type: NSInteger,
 }
 impl_HostObject_with_superclass!(UITextViewHostObject);
 impl Default for UITextViewHostObject {
@@ -46,6 +47,7 @@ impl Default for UITextViewHostObject {
             text: nil,
             text_color: nil,
             text_alignment: UITextAlignmentLeft,
+            keyboard_type: 0,
         }
     }
 }
@@ -106,7 +108,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         font,
         text,
         text_color,
-        text_alignment: _
+        text_alignment: _,
+        keyboard_type: _,
     } = std::mem::take(env.objc.borrow_mut(this));
 
     release(env, font);
@@ -244,6 +247,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     todo_objc_setter!(this, type_);
 }
 
+- (NSInteger)keyboardType {
+    env.objc.borrow::<UITextViewHostObject>(this).keyboard_type
+}
+
+- (())setKeyboardType:(NSInteger)keyboard_type {
+    env.objc.borrow_mut::<UITextViewHostObject>(this).keyboard_type = keyboard_type;
+}
+
 - (())setDataDetectorTypes:(UIDataDetectorTypes)types {
     todo_objc_setter!(this, types);
 }
@@ -258,7 +269,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         font,
         text,
         text_color,
-        text_alignment
+        text_alignment,
+        keyboard_type: _,
     } = env.objc.borrow_mut(this);
 
     let (r, g, b, a) = ui_color::get_rgba(&env.objc, text_color);

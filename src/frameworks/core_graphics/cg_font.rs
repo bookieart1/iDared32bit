@@ -11,9 +11,10 @@ use super::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::font::Font;
 use crate::frameworks::core_foundation::cf_data::CFDataRef;
+use crate::frameworks::core_foundation::cf_string::CFStringRef;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::core_graphics::cg_geometry::CGRectZero;
-use crate::frameworks::foundation::unichar;
+use crate::frameworks::foundation::{ns_string, unichar};
 use crate::mem::{ConstPtr, GuestUSize, MutPtr};
 use crate::objc::{id, msg, msg_class, objc_classes, ClassExports, HostObject};
 use crate::Environment;
@@ -41,6 +42,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 fn CGFontCreateWithDataProvider(env: &mut Environment, provider: CGDataProviderRef) -> CGFontRef {
     let bytes = cg_data_provider::borrow_bytes(env, provider);
     let font = Font::from_vec(bytes.to_vec());
+    let host_obj = Box::new(CGFontHostObject { font });
+    let class = env.objc.get_known_class("_touchHLE_CGFont", &mut env.mem);
+    env.objc.alloc_object(class, host_obj, &mut env.mem)
+}
+
+fn CGFontCreateWithFontName(env: &mut Environment, name: CFStringRef) -> CGFontRef {
+    if name.is_null() {
+        return name;
+    }
+    let name = ns_string::to_rust_string(env, name).into_owned();
+    let Some(font) = crate::frameworks::uikit::ui_font::new_font_for_name(env, &name) else {
+        log!("CGFontCreateWithFontName: no font named {name:?}");
+        return CFTypeRef::null();
+    };
     let host_obj = Box::new(CGFontHostObject { font });
     let class = env.objc.get_known_class("_touchHLE_CGFont", &mut env.mem);
     env.objc.alloc_object(class, host_obj, &mut env.mem)
@@ -186,6 +201,7 @@ fn CGFontGetNumberOfGlyphs(env: &mut Environment, font: CGFontRef) -> GuestUSize
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGFontCreateWithDataProvider(_)),
+    export_c_func!(CGFontCreateWithFontName(_)),
     export_c_func!(CGFontRetain(_)),
     export_c_func!(CGFontRelease(_)),
     export_c_func!(CGFontGetGlyphsForUnichars(_, _, _, _)),
@@ -200,3 +216,21 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGFontCopyTableForTag(_, _)),
     export_c_func!(CGFontGetNumberOfGlyphs(_)),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frameworks::foundation::ns_string;
+    use crate::objc::release;
+
+    #[test]
+    fn font_name_constructor_resolves_system_font_and_owns_result() {
+        let mut env = Environment::new_fake_for_test_with_thread();
+        let name = ns_string::from_rust_string(&mut env, "Helvetica".to_owned());
+        let font = CGFontCreateWithFontName(&mut env, name);
+        assert!(!font.is_null());
+        assert!(CGFontGetNumberOfGlyphs(&mut env, font) > 0);
+        CGFontRelease(&mut env, font);
+        release(&mut env, name);
+    }
+}

@@ -71,6 +71,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_view::ui_scroll_view::CLASSES,
         ui_view::ui_scroll_view::ui_table_view::CLASSES,
         ui_view::ui_scroll_view::ui_text_view::CLASSES,
+        ui_view::ui_table_view_cell::CLASSES,
         ui_view::ui_toolbar::CLASSES,
         ui_view::ui_web_view::CLASSES,
         ui_view::ui_window::CLASSES,
@@ -133,9 +134,8 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
                 // alive so it can observe foregrounding or real termination.
                 log!("Handling app-will-resign-active event: pausing guest.");
                 ui_application::notify_will_resign_active(env);
-                let result = env.on_parent_stack_in_coroutine(|window, _| {
-                    window.wait_until_foreground()
-                });
+                let result =
+                    env.on_parent_stack_in_coroutine(|window, _| window.wait_until_foreground());
                 match result {
                     crate::window::ForegroundWaitResult::Resumed => {
                         log!("Host became active: resuming guest.");

@@ -65,6 +65,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @implementation NSBundle: NSObject
 
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = NSBundleHostObject {
+        bundle: None,
+        bundle_path: nil,
+        bundle_identifier: nil,
+        bundle_url: None,
+        info_dictionary: None,
+    };
+    env.objc.alloc_object(this, Box::new(host_object), &mut env.mem)
+}
+
 + (id)mainBundle {
     if let Some(bundle) = env.framework_state.foundation.ns_bundle.main_bundle {
         bundle
@@ -106,14 +117,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)bundleWithPath:(id)path { // NSString*
+    let bundle: id = msg![env; this alloc];
+    let bundle: id = msg![env; bundle initWithPath:path];
+    autorelease(env, bundle)
+}
+
+- (id)initWithPath:(id)path { // NSString*
     if path == nil {
+        release(env, this);
         return nil;
     }
 
-    let main_bundle: id = msg![env; this mainBundle];
+    let main_bundle: id = msg_class![env; NSBundle mainBundle];
     let main_path: id = msg![env; main_bundle bundlePath];
     if msg![env; path isEqualToString:main_path] {
-        return main_bundle;
+        release(env, this);
+        return retain(env, main_bundle);
     }
 
     let info_name = ns_string::get_static_str(env, "Info.plist");
@@ -121,9 +140,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let info: id = msg_class![env; NSDictionary dictionaryWithContentsOfFile:info_path];
     if info == nil {
         log!(
-            "Warning: [NSBundle bundleWithPath:{:?}] could not find a valid Info.plist",
+            "Warning: [(NSBundle*) {:?} initWithPath:{:?}] could not find a valid Info.plist",
+            this,
             ns_string::to_rust_string(env, path)
         );
+        release(env, this);
         return nil;
     }
 
@@ -132,17 +153,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, path);
     retain(env, identifier);
     retain(env, info);
-    let host_object = NSBundleHostObject {
-        bundle: None,
-        bundle_path: path,
-        bundle_identifier: identifier,
-        bundle_url: None,
-        info_dictionary: Some(info),
+    let (old_path, old_identifier, old_url, old_info) = {
+        let host = env.objc.borrow_mut::<NSBundleHostObject>(this);
+        let old_path = std::mem::replace(&mut host.bundle_path, path);
+        let old_identifier = std::mem::replace(&mut host.bundle_identifier, identifier);
+        let old_url = host.bundle_url.take();
+        let old_info = host.info_dictionary.replace(info);
+        host.bundle = None;
+        (old_path, old_identifier, old_url, old_info)
     };
-    let bundle = env
-        .objc
-        .alloc_object(this, Box::new(host_object), &mut env.mem);
-    autorelease(env, bundle)
+    release(env, old_path);
+    release(env, old_identifier);
+    if let Some(old_url) = old_url {
+        release(env, old_url);
+    }
+    if let Some(old_info) = old_info {
+        release(env, old_info);
+    }
+    this
 }
 
 + (id)preferredLocalizationsFromArray:(id)localizations_array { // NSArray<NSString *> *
@@ -573,14 +601,7 @@ fn path_for_device_resource_helper(
         format!("{name_str}{suffix}")
     };
     let specialized_name = ns_string::from_rust_string(env, specialized_name);
-    let path = path_for_resource_helper(
-        env,
-        bundle,
-        specialized_name,
-        lproj,
-        directory,
-        extension,
-    );
+    let path = path_for_resource_helper(env, bundle, specialized_name, lproj, directory, extension);
     if path != nil {
         log!(
             "Selected device-specific bundle resource {:?}",
