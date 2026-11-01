@@ -182,7 +182,8 @@ const CLASSES: ClassExports = objc_classes! {
 
 - (())setAccelerometerUpdateInterval:(NSTimeInterval)interval {
     // A zero interval is documented as requesting the platform default. Clamp
-    // invalid/high-frequency requests to the same 60 Hz floor as UIAccelerometer.
+    // invalid/high-frequency requests to the same 60 Hz floor as
+    // UIAccelerometer.
     let interval = if interval <= 0.0 {
         DEFAULT_UPDATE_INTERVAL
     } else {
