@@ -92,7 +92,48 @@ compatibility accommodation. Existing saves must not be deleted.
   the new decoded-context marker and the universal-flight default. The package
   is unsigned under `com.bookieart1.idared32bit.dev` / `iDared Dev` and has no
   embedded provisioning profile or `_CodeSignature` directory.
-- This remains diagnostic-only. **Physical-device validation is pending.**
-  Test existing-save Hook World and then Mage Gauntlet without deleting saves.
+- This remains diagnostic-only. Physical-device validation is recorded below.
 
 Verification record: `outputs/iDared-Dev-1.76.verification.json`.
+
+## Physical-device result
+
+The November 1 focused test used the delivered source `c5005dd4` from workflow
+`41267274701` and launched existing-save Hook World followed by Mage Gauntlet.
+The exact 117,729-byte log is retained as
+`outputs/device-logs/iDared-Dev-1.76-device-results.txt`, SHA-256
+`38d5a42c3093e9e000f7d7204511b6e9e0527dd69c21e78e94a012553a95e9b4`.
+
+The diagnostic succeeded and neither title changed behavior:
+
+- Hook World received immutable dictionary `0x3647e150` directly from
+  application-domain `NSUserDefaults objectForKey:` for `qh/items`. It then
+  attempted `setObject:forKey:` on that exact receiver with an `NSNumber`
+  value and key `player/zelle` (guest caller LR `0x74460`).
+- Mage Gauntlet received immutable dictionary `0x3646d700` directly from
+  application-domain `NSUserDefaults objectForKey:` for `trpg/stats`. It then
+  attempted `setObject:forKey:` on that exact receiver with an `NSString`
+  value and key `firstPlay` (guest caller LR `0x1504d`).
+
+This rejects the narrow hypothesis that both failures are one identical saved
+key or one corrupt shared object. It supports a shared Rocketcat Settings
+pattern: two independently named preference dictionaries are both mutated
+directly after being restored as immutable property-list values. The concrete
+receivers did not originate from an intervening mutable copy.
+
+The result does not justify making all `NSUserDefaults` dictionaries mutable.
+Apple's historical CFPreferences contract says returned property-list values
+must be assumed immutable, and the contemporary implementation deep-copies
+preference values as immutable. The emulator also has a separate general
+correctness issue: its current `setObject:forKey:` stores the supplied object
+by reference, so a newly created mutable nested dictionary can remain mutable
+within its creation session; serialization and relaunch then expose the strict
+immutable form. Correcting that snapshot behavior would improve Foundation
+semantics but would not make these direct post-relaunch mutations valid and
+could expose them earlier.
+
+No further logging is needed to identify this boundary. Before a compatibility
+change, inspect the shared Rocketcat Settings call sites and early-iOS behavior
+for evidence of an app-side mutable-copy expectation. If a compatibility
+accommodation is ultimately necessary, keep it explicit and narrowly scoped
+rather than weakening the global preferences contract.

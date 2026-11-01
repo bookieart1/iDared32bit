@@ -1,9 +1,9 @@
 # iDared 32-bit tested-app compatibility ledger
 
-Last reconciled: October 31, 2026
-Latest device-tested checkpoint: **iDared Dev 1.75** (`cdcaf3d`; focused diagnostic test; Dev 1.71 remains the latest full-catalog survey)
-Latest built checkpoint: **iDared Dev 1.76** (`c5005dd4`; verified diagnostic package; physical-device test pending)
-Current activity: **Dev 1.76 adds only bounded, non-mutating decoded context to the universal recorder: restored preference key/domain and the attempted immutable-dictionary mutation's key/value classes. It is intended to discriminate a shared Rocketcat saved-structure behavior from a broader persistence issue. No compatibility behavior or save data changes.**
+Last reconciled: November 1, 2026
+Latest device-tested checkpoint: **iDared Dev 1.76** (`c5005dd4`; focused diagnostic test; Dev 1.71 remains the latest full-catalog survey)
+Latest built checkpoint: **iDared Dev 1.76** (`c5005dd4`; verified diagnostic package and focused device result)
+Current activity: **Dev 1.76 identified two distinct restored application-preference dictionaries behind the Rocketcat failures: Hook World `qh/items` mutated at `player/zelle`, and Mage Gauntlet `trpg/stats` mutated at `firstPlay`. This supports a shared legacy Settings pattern, not one identical corrupt save. A global mutable-defaults change would violate the historical preferences contract; inspect the shared call sites before choosing a narrowly justified accommodation. No compatibility behavior or save data changed.**
 
 The maintainer review at the end of this ledger qualifies earlier implementation claims. In particular, Dev 1.47's font fallback is provisional, its arc implementation is approximate, and its date formatter is not locale/time-zone complete. Earlier sections are historical checkpoints, not a claim that all listed work is currently complete.
 
@@ -3315,7 +3315,38 @@ is required for a non-mutating diagnostic change. Engineering detail:
   source `c5005dd4`, workflow `41267274701`, the decoded-context marker and the
   universal-flight default. It is unsigned under the separate development
   identity and contains no provisioning profile or `_CodeSignature` directory.
-- No compatibility behavior or save data changed. **Physical-device testing is
-  pending.** Test only existing-save Hook World followed by Mage Gauntlet and
-  preserve the complete log. Verification:
+- No compatibility behavior or save data changed. Physical-device testing is
+  recorded below. Verification:
   `outputs/iDared-Dev-1.76.verification.json`.
+
+### Dev 1.76 physical-device result
+
+The focused November 1 test ran the delivered `c5005dd4` build and launched
+existing-save Hook World followed by Mage Gauntlet. The exact 117,729-byte log
+is preserved as `outputs/device-logs/iDared-Dev-1.76-device-results.txt`,
+SHA-256
+`38d5a42c3093e9e000f7d7204511b6e9e0527dd69c21e78e94a012553a95e9b4`.
+
+- Hook World: application-domain `NSUserDefaults objectForKey:` returned the
+  terminal immutable receiver for `qh/items`; the app then tried to store an
+  `NSNumber` under `player/zelle` in that exact dictionary.
+- Mage Gauntlet: application-domain `NSUserDefaults objectForKey:` returned the
+  terminal immutable receiver for `trpg/stats`; the app then tried to store an
+  `NSString` under `firstPlay` in that exact dictionary.
+
+Both remain blocked at their strict immutable-dictionary checks. The decoded
+context succeeded and rejects the single-identical-key/shared-corrupt-object
+hypothesis. The stronger model is a shared Rocketcat Settings behavior applied
+to different saved structures. This is an origin and call-shape result, not a
+verified API-contract fix or compatibility improvement.
+
+Do not make preferences dictionaries globally mutable: historical
+CFPreferences requires callers to assume returned property-list values are
+immutable. Separately, the emulator currently retains values supplied to
+`NSUserDefaults setObject:forKey:` by reference, which explains why a mutable
+nested dictionary may work during its creation session and fail only after
+serialization/relaunch. Fixing that snapshot semantic is general correctness,
+but it will not legitimize the Rocketcat direct mutation and may expose it
+earlier. Next inspect the shared Rocketcat Settings call sites and historical
+wrapper behavior. Any compatibility accommodation must be explicit, narrow and
+provisional rather than a global weakening of the preferences contract.
