@@ -78,9 +78,6 @@ fn write_to_file(
     options: NSUInteger,
     out_error: MutPtr<id>,
 ) -> bool {
-    if !out_error.is_null() {
-        env.mem.write(out_error, nil);
-    }
     if path == nil {
         populate_file_write_error(env, path, out_error, NSFileWriteUnknownError);
         return false;

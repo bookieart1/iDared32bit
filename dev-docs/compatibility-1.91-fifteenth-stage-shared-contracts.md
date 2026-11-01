@@ -49,7 +49,8 @@ refinement:
    invalidate later ranges.
 2. Implement `NSData`'s options/error write API. Atomic writes use a sibling
    auxiliary file and final filesystem rename; without-overwriting is honored;
-   success clears a supplied error pointer; failure returns a Cocoa error with
+   success leaves a supplied error pointer untouched, matching native
+   Foundation; failure returns a Cocoa error with
    the historical file-path metadata. The older `writeToFile:atomically:` API
    reuses the same implementation instead of claiming atomicity while writing
    directly.
@@ -87,7 +88,7 @@ checks, save resets or universal-recorder changes.
 Focused guest tests cover UTF-16 occurrence replacement, replacement counts,
 case-insensitive matching, backwards overlap selection and write-failure path
 metadata. The native Foundation fixture covers replacement and successful
-atomic write/error clearing. A bounded audio-format test verifies the new WAV
+atomic write/success-error preservation. A bounded audio-format test verifies the new WAV
 metadata line.
 
 Device predictions:

@@ -120,8 +120,9 @@ int main(void) {
         [@"touchhle-nsdata-" stringByAppendingString:[[NSUUID UUID] UUIDString]]];
     NSData *atomicPayload = [@"toybot-save" dataUsingEncoding:NSUTF8StringEncoding];
     NSError *writeError = [NSError errorWithDomain:@"sentinel" code:1 userInfo:nil];
+    NSError *sentinelWriteError = writeError;
     assert([atomicPayload writeToFile:atomicPath options:NSDataWritingAtomic error:&writeError]);
-    assert(writeError == nil);
+    assert(writeError == sentinelWriteError);
     assert([[NSData dataWithContentsOfFile:atomicPath] isEqualToData:atomicPayload]);
     [[NSFileManager defaultManager] removeItemAtPath:atomicPath error:NULL];
 
